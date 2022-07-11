@@ -10,6 +10,7 @@ use hex::{decode, encode};
 use libflate::zlib::{Decoder, Encoder};
 use simple_error::bail;
 use std::io::Read;
+use ring::digest::{Context, SHA256};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Machine {
@@ -22,6 +23,14 @@ pub struct Machine {
 }
 
 impl Machine {
+    pub fn name(&self) -> String {
+        let mut context = Context::new(&SHA256);
+        context.update(self.serialize().as_bytes());
+        let d = context.finish();
+        let s = encode(d);
+        s[0..32].to_string()
+    }
+
     pub fn serialize(&self) -> String {
         let mut wtr = vec![];
 
