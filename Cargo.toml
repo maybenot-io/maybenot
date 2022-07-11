@@ -6,3 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+rand="0.8.5"
+byteorder="1.4.3"
+simple-error = "0.2.3"
+hex = "0.4.3"
+libflate = "1.2.0"
