@@ -8,9 +8,9 @@ use std::io::Write;
 extern crate simple_error;
 use hex::{decode, encode};
 use libflate::zlib::{Decoder, Encoder};
+use ring::digest::{Context, SHA256};
 use simple_error::bail;
 use std::io::Read;
-use ring::digest::{Context, SHA256};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Machine {
@@ -29,6 +29,58 @@ impl Machine {
         let d = context.finish();
         let s = encode(d);
         s[0..32].to_string()
+    }
+
+    pub fn validate(&self) -> Result<(), Box<dyn Error>> {
+        if self.max_padding_frac < 0.0 || self.max_padding_frac > 1.0 {
+            bail!(
+                "max_padding_frac has to be [0.0, 1.0], got {}",
+                self.max_padding_frac
+            )
+        }
+
+        if self.states.len() == 0 {
+            bail!("a machine must have at least one state")
+        }
+        if self.states.len() > STATEMAX {
+            bail!(
+                "too many states, max is {}, found {}",
+                STATEMAX,
+                self.states.len()
+            )
+        }
+
+        for state in &self.states {
+            for next in &state.next_state {
+                if next.1.len() != self.states.len() + 2 {
+                    bail!(
+                        "found too small next_state vector, expected {}, got {}",
+                        self.states.len() + 2,
+                        next.1.len()
+                    )
+                }
+
+                let mut p_total = 0.0;
+                for p in next.1 {
+                    if p < &0.0 || p > &1.0 {
+                        bail!("found probability {}, has to be [0.0, 1.0]", &p)
+                    }
+                    p_total += p;
+                }
+
+                // we are (0.0, 1.0] here, because:
+                // - if pTotal <= 0.0, then we shouldn't have an entry in NextState
+                // - pTotal < 1.0 is OK, to support a "nop" transition (self
+                // transition has implications in the framework, i.e., involving
+                // limits on padding sent in he state)
+                if p_total <= 0.0 || p_total >= 1.0005 {
+                    // 1.0005 due to rounding
+                    bail!("found invalid total probability vector {}, must be (0.0, 1.0]")
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn serialize(&self) -> String {
@@ -65,6 +117,13 @@ impl Machine {
         // return hex encoded string
         encode(compressed)
     }
+}
+
+pub fn validate_machines(machines: Vec<Machine>) -> Result<(), Box<dyn Error>> {
+    for m in machines {
+        m.validate()?;
+    }
+    Ok(())
 }
 
 pub fn parse_machine(m: String) -> Result<Machine, Box<dyn Error>> {
