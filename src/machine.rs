@@ -14,12 +14,12 @@ use std::io::Read;
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Machine {
-    allowed_padding_bytes: u64,
-    max_padding_frac: f64,
-    allowed_blocked_microsec: u64,
-    max_blocking_frac: f64,
-    states: Vec<State>,
-    include_small_packets: bool,
+    pub allowed_padding_bytes: u64,
+    pub max_padding_frac: f64,
+    pub allowed_blocked_microsec: u64,
+    pub max_blocking_frac: f64,
+    pub states: Vec<State>,
+    pub include_small_packets: bool,
 }
 
 impl Machine {

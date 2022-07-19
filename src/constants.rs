@@ -28,3 +28,7 @@ pub const STATEEND: usize = STATENOP - 1;
 pub const STATECANCEL: usize = STATEEND - 1;
 // STATEMAX is the maximum number of states a Machine can have.
 pub const STATEMAX: usize = STATECANCEL - 1;
+
+// MAXSMALLPACKETSIZE is the max size of packets considered as a small packet
+// (e.g., TCP ACKs, WireGuard keepalive)
+pub const MAXSMALLPACKETSIZE: u64 = 52;
