@@ -38,6 +38,12 @@ impl Machine {
                 self.max_padding_frac
             )
         }
+        if self.max_blocking_frac < 0.0 || self.max_blocking_frac > 1.0 {
+            bail!(
+                "max_blocking_frac has to be [0.0, 1.0], got {}",
+                self.max_blocking_frac
+            )
+        }
 
         if self.states.len() == 0 {
             bail!("a machine must have at least one state")
@@ -75,7 +81,10 @@ impl Machine {
                 // limits on padding sent in he state)
                 if p_total <= 0.0 || p_total >= 1.0005 {
                     // 1.0005 due to rounding
-                    bail!("found invalid total probability vector {}, must be (0.0, 1.0]")
+                    bail!(
+                        "found invalid total probability vector {}, must be (0.0, 1.0]",
+                        p_total
+                    )
                 }
             }
         }

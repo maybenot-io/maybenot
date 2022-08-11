@@ -469,27 +469,9 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            size: Dist {
-                dist: DistType::None,
-                param1: 0.0,
-                param2: 0.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            limit: Dist {
-                dist: DistType::None,
-                param1: 0.0,
-                param2: 0.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            block: Dist {
-                dist: DistType::None,
-                param1: 0.0,
-                param2: 0.0,
-                start: 0.0,
-                max: 0.0,
-            },
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: NONEDIST.clone(),
             block_overwrite: false,
             limit_includes_nonpadding: false,
             next_state: make_next_state(t, num_states),
@@ -508,27 +490,9 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            size: Dist {
-                dist: DistType::None,
-                param1: 0.0,
-                param2: 0.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            limit: Dist {
-                dist: DistType::None,
-                param1: 0.0,
-                param2: 0.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            block: Dist {
-                dist: DistType::None,
-                param1: 0.0,
-                param2: 0.0,
-                start: 0.0,
-                max: 0.0,
-            },
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: NONEDIST.clone(),
             block_overwrite: false,
             limit_includes_nonpadding: false,
             next_state: make_next_state(t, num_states),
@@ -714,5 +678,847 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn validate_machine() {
+        let num_states = 1;
+
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        // invalid state transition
+        e.insert(1, 1.0);
+        t.insert(Event::PaddingSent, e);
+        let mut s0 = State {
+            timeout: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: NONEDIST.clone(),
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+
+        // machine with broken state
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0.clone()],
+            include_small_packets: true,
+        };
+        // while we get an error here, as intended, the error is not the
+        // expected one, because make_next_state() actually ignores the
+        // transition to the non-existing state as it makes the probability
+        // matrix based on num_states
+        let r = m.validate();
+        print!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // repair state
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::PaddingSent, e);
+        s0.next_state = make_next_state(t, num_states);
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0.clone()],
+            include_small_packets: true,
+        };
+
+        let r = m.validate();
+        print!("{:?}", r.as_ref().err());
+        assert!(r.is_ok());
+
+        // invalid machine lacking state
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![],
+            include_small_packets: true,
+        };
+        let r = m.validate();
+        print!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // bad padding and blocking fractions
+        let mut m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0.clone()],
+            include_small_packets: true,
+        };
+
+        m.max_padding_frac = -0.1;
+        let r = m.validate();
+        print!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+        m.max_padding_frac = 1.1;
+        let r = m.validate();
+        print!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+        m.max_padding_frac = 0.5;
+
+        m.max_blocking_frac = -0.1;
+        let r = m.validate();
+        print!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+        m.max_blocking_frac = 1.1;
+        let r = m.validate();
+        print!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+        m.max_blocking_frac = 0.5;
+    }
+
+    #[test]
+    fn blocking_machine() {
+        // a machine that blocks for 10us, 1us after EventNonPaddingSent
+        let num_states = 2;
+
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::NonPaddingSent, e);
+        let s0 = State {
+            timeout: Dist {
+                dist: DistType::Uniform,
+                param1: 0.0,
+                param2: 0.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: NONEDIST.clone(),
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::NonPaddingSent, e);
+        let s1 = State {
+            timeout: Dist {
+                dist: DistType::Uniform,
+                param1: 1.0,
+                param2: 1.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1],
+            include_small_packets: true,
+        };
+
+        let mut current_time = Instant::now();
+        let mtu = 150;
+        let mut f = Framework::new(vec![m], 0.0, 0.0, mtu, current_time).unwrap();
+
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingSent,
+                n: 0,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Action::BlockOutgoing {
+                timeout: Duration::from_micros(1),
+                duration: Duration::from_micros(10),
+                overwrite: false
+            }
+        );
+
+        current_time = current_time.add(Duration::from_micros(20));
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::BlockingBegin,
+                n: 0,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+        assert_eq!(f.actions[0], Action::None);
+
+        for _ in 0..10 {
+            current_time = current_time.add(Duration::from_micros(1));
+            f.trigger_events(
+                [TriggerEvent {
+                    event: Event::NonPaddingSent,
+                    n: 0,
+                    mi: 0,
+                }]
+                .to_vec(),
+                current_time,
+            );
+            assert_eq!(
+                f.actions[0],
+                Action::BlockOutgoing {
+                    timeout: Duration::from_micros(1),
+                    duration: Duration::from_micros(10),
+                    overwrite: false
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn machine_max_padding_frac() {
+        // We create a machine that should be allowed to send 100*MTU padding
+        // bytes before machine padding limits are applied, then the machine
+        // should be limited from sending any padding until at least 100*MTU
+        // nonpadding bytes have been sent, given the set max padding fraction
+        // of 0.5.
+        let mtu = 1000;
+
+        let num_states = 2;
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::NonPaddingRecv, e);
+        let s0 = State {
+            timeout: NONEDIST.clone(),
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: NONEDIST.clone(),
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        // we use sent for checking limits
+        t.insert(Event::PaddingSent, e.clone());
+        t.insert(Event::NonPaddingSent, e.clone());
+        // recv as an event to check without adding bytes sent
+        t.insert(Event::NonPaddingRecv, e.clone());
+        let s1 = State {
+            timeout: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: NONEDIST.clone(),
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+
+        let m = Machine {
+            allowed_padding_bytes: 100 * mtu,
+            max_padding_frac: 0.5,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1],
+            include_small_packets: true,
+        };
+        let current_time = Instant::now();
+        let mut f = Framework::new(vec![m], 0.0, 0.0, mtu, current_time).unwrap();
+
+        // transition to get the loop going
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingRecv,
+                n: 0,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+
+        // we expect 100 padding actions
+        for _ in 0..100 {
+            assert_eq!(
+                f.actions[0],
+                Action::InjectPadding {
+                    timeout: Duration::from_micros(2),
+                    size: mtu as u16
+                }
+            );
+
+            f.trigger_events(
+                [TriggerEvent {
+                    event: Event::PaddingSent,
+                    n: mtu,
+                    mi: 0,
+                }]
+                .to_vec(),
+                current_time,
+            );
+        }
+
+        // limit hit, last event should prevent the action
+        assert_eq!(f.actions[0], Action::None);
+
+        // trigger and check limit again
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingRecv,
+                n: mtu,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+        assert_eq!(f.actions[0], Action::None);
+
+        // verify that no padding is scheduled until we've sent the same amount
+        // of bytes
+        for _ in 0..100 {
+            f.trigger_events(
+                [TriggerEvent {
+                    event: Event::NonPaddingSent,
+                    n: mtu,
+                    mi: 0,
+                }]
+                .to_vec(),
+                current_time,
+            );
+            assert_eq!(f.actions[0], Action::None);
+        }
+
+        // send one byte of nonpadding, putting us just over the limit
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingSent,
+                n: 1,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Action::InjectPadding {
+                timeout: Duration::from_micros(2),
+                size: mtu as u16
+            }
+        );
+    }
+
+    #[test]
+    fn framework_max_padding_frac() {
+        // to test the global limits of the framework we create two machines with
+        // the same allowed padding, where both machines pad in parallel
+        let mtu = 1000;
+
+        let num_states = 2;
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::NonPaddingRecv, e);
+        let s0 = State {
+            timeout: NONEDIST.clone(),
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: NONEDIST.clone(),
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        // we use sent for checking limits
+        t.insert(Event::PaddingSent, e.clone());
+        t.insert(Event::NonPaddingSent, e.clone());
+        // recv as an event to check without adding bytes sent
+        t.insert(Event::NonPaddingRecv, e.clone());
+        let s1 = State {
+            timeout: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: NONEDIST.clone(),
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+
+        let m1 = Machine {
+            allowed_padding_bytes: 100 * mtu,
+            max_padding_frac: 0.0, // NOTE
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1],
+            include_small_packets: true,
+        };
+        let m2 = m1.clone();
+
+        // NOTE 0.5 max_padding_frac below
+        let current_time = Instant::now();
+        let mut f = Framework::new(vec![m1, m2], 0.5, 0.0, mtu, current_time).unwrap();
+
+        // we have two machines that each can send 100 * mtu before their own or
+        // any framework limits are applied (by design, see AllowedPaddingBytes)
+        // trigger transition to get the loop going
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingRecv,
+                n: 0,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+        // we expect 100 padding actions per machine
+        for _ in 0..100 {
+            assert_eq!(
+                f.actions[0],
+                Action::InjectPadding {
+                    timeout: Duration::from_micros(2),
+                    size: mtu as u16
+                }
+            );
+            assert_eq!(
+                f.actions[1],
+                Action::InjectPadding {
+                    timeout: Duration::from_micros(2),
+                    size: mtu as u16
+                }
+            );
+            f.trigger_events(
+                [
+                    TriggerEvent {
+                        event: Event::PaddingSent,
+                        n: mtu,
+                        mi: 0,
+                    },
+                    TriggerEvent {
+                        event: Event::PaddingSent,
+                        n: mtu,
+                        mi: 1,
+                    },
+                ]
+                .to_vec(),
+                current_time,
+            );
+        }
+
+        // limit hit, last event should prevent the action and future actions
+        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[1], Action::None);
+        f.trigger_events(
+            [
+                TriggerEvent {
+                    event: Event::NonPaddingRecv,
+                    n: mtu,
+                    mi: 0,
+                },
+                TriggerEvent {
+                    event: Event::NonPaddingRecv,
+                    n: mtu,
+                    mi: 1,
+                },
+            ]
+            .to_vec(),
+            current_time,
+        );
+        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[1], Action::None);
+
+        // in sync?
+        assert_eq!(f.runtime[0].padding_sent, f.runtime[1].padding_sent);
+        assert_eq!(f.runtime[0].padding_sent, 100 * mtu);
+
+        // OK, so we've sent in total 2*100*mtu of padding using two machines. This
+        // means that we should need to send at least 2*100*mtu + 1 bytes before
+        // padding is scheduled again
+        for _ in 0..200 {
+            assert_eq!(f.actions[0], Action::None);
+            assert_eq!(f.actions[1], Action::None);
+            f.trigger_events(
+                [TriggerEvent {
+                    event: Event::NonPaddingSent,
+                    n: mtu,
+                    mi: 0,
+                }]
+                .to_vec(),
+                current_time,
+            );
+        }
+
+        // the last byte should tip it over
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingSent,
+                n: 1,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Action::InjectPadding {
+                timeout: Duration::from_micros(2),
+                size: mtu as u16
+            }
+        );
+        assert_eq!(
+            f.actions[1],
+            Action::InjectPadding {
+                timeout: Duration::from_micros(2),
+                size: mtu as u16
+            }
+        );
+    }
+
+    #[test]
+    fn machine_max_blocking_frac() {
+        // We create a machine that should be allowed to block for 10us before
+        // machine limits are applied, then the machine should be limited from
+        // blocking until after 10us, given the set max blocking fraction of
+        // 0.5.
+        let num_states = 2;
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::NonPaddingRecv, e);
+        let s0 = State {
+            timeout: NONEDIST.clone(),
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: NONEDIST.clone(),
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::BlockingBegin, e.clone());
+        t.insert(Event::BlockingEnd, e.clone());
+        t.insert(Event::NonPaddingRecv, e.clone());
+        let s1 = State {
+            // block every 2us for 2us
+            timeout: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+
+        let m = Machine {
+            allowed_padding_bytes: 0,
+            max_padding_frac: 0.0,
+            allowed_blocked_microsec: 10, // NOTE
+            max_blocking_frac: 0.5,       // NOTE
+            states: vec![s0, s1],
+            include_small_packets: false,
+        };
+
+        let mut current_time = Instant::now();
+        let mut f = Framework::new(vec![m], 0.0, 0.0, 1500, current_time).unwrap();
+
+        // trigger self to start the blocking (triggers action)
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingRecv,
+                n: 0,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+
+        // verify that we can block for 5*2=10us
+        for _ in 0..5 {
+            assert_eq!(
+                f.actions[0],
+                Action::BlockOutgoing {
+                    timeout: Duration::from_micros(2),
+                    duration: Duration::from_micros(2),
+                    overwrite: false
+                }
+            );
+
+            f.trigger_events(
+                [TriggerEvent {
+                    event: Event::BlockingBegin,
+                    n: 0,
+                    mi: 0,
+                }]
+                .to_vec(),
+                current_time,
+            );
+            assert_eq!(
+                f.actions[0],
+                Action::BlockOutgoing {
+                    timeout: Duration::from_micros(2),
+                    duration: Duration::from_micros(2),
+                    overwrite: false
+                }
+            );
+            current_time = current_time.add(Duration::from_micros(2));
+            f.trigger_events(
+                [TriggerEvent {
+                    event: Event::BlockingEnd,
+                    n: 0,
+                    mi: 0,
+                }]
+                .to_vec(),
+                current_time,
+            );
+        }
+        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
+
+        // now we burn our allowed padding budget, should be blocked for 10us
+        for _ in 0..5 {
+            current_time = current_time.add(Duration::from_micros(2));
+            f.trigger_events(
+                [TriggerEvent {
+                    event: Event::NonPaddingRecv,
+                    n: 1000,
+                    mi: 0,
+                }]
+                .to_vec(),
+                current_time,
+            );
+            assert_eq!(f.actions[0], Action::None);
+        }
+        assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
+        assert_eq!(
+            current_time.duration_since(f.runtime[0].machine_start),
+            Duration::from_micros(20)
+        );
+
+        // push over the limit, should be allowed
+        current_time = current_time.add(Duration::from_micros(2));
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingRecv,
+                n: 1000,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Action::BlockOutgoing {
+                timeout: Duration::from_micros(2),
+                duration: Duration::from_micros(2),
+                overwrite: false
+            }
+        );
+    }
+
+    #[test]
+    fn framework_max_blocking_frac() {
+        // We create a machine that should be allowed to block for 10us before
+        // machine limits are applied, then the machine should be limited from
+        // blocking until after 10us, given the set max blocking fraction of
+        // 0.5 in the framework.
+        let num_states = 2;
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::NonPaddingRecv, e);
+        let s0 = State {
+            timeout: NONEDIST.clone(),
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: NONEDIST.clone(),
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::BlockingBegin, e.clone());
+        t.insert(Event::BlockingEnd, e.clone());
+        t.insert(Event::NonPaddingRecv, e.clone());
+        let s1 = State {
+            // block every 2us for 2us
+            timeout: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            size: NONEDIST.clone(),
+            limit: NONEDIST.clone(),
+            block: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+
+        let m = Machine {
+            allowed_padding_bytes: 0,
+            max_padding_frac: 0.0,
+            allowed_blocked_microsec: 10, // NOTE
+            max_blocking_frac: 0.0,       // NOTE, 0.0 here, 0.5 in framework below
+            states: vec![s0, s1],
+            include_small_packets: false,
+        };
+
+        let mut current_time = Instant::now();
+        let mut f = Framework::new(vec![m], 0.0, 0.5, 1500, current_time).unwrap();
+
+        // trigger self to start the blocking (triggers action)
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingRecv,
+                n: 0,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+
+        // verify that we can block for 5*2=10us
+        for _ in 0..5 {
+            assert_eq!(
+                f.actions[0],
+                Action::BlockOutgoing {
+                    timeout: Duration::from_micros(2),
+                    duration: Duration::from_micros(2),
+                    overwrite: false
+                }
+            );
+
+            f.trigger_events(
+                [TriggerEvent {
+                    event: Event::BlockingBegin,
+                    n: 0,
+                    mi: 0,
+                }]
+                .to_vec(),
+                current_time,
+            );
+            assert_eq!(
+                f.actions[0],
+                Action::BlockOutgoing {
+                    timeout: Duration::from_micros(2),
+                    duration: Duration::from_micros(2),
+                    overwrite: false
+                }
+            );
+            current_time = current_time.add(Duration::from_micros(2));
+            f.trigger_events(
+                [TriggerEvent {
+                    event: Event::BlockingEnd,
+                    n: 0,
+                    mi: 0,
+                }]
+                .to_vec(),
+                current_time,
+            );
+        }
+        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
+
+        // now we burn our allowed padding budget, should be blocked for 10us
+        for _ in 0..5 {
+            current_time = current_time.add(Duration::from_micros(2));
+            f.trigger_events(
+                [TriggerEvent {
+                    event: Event::NonPaddingRecv,
+                    n: 1000,
+                    mi: 0,
+                }]
+                .to_vec(),
+                current_time,
+            );
+            assert_eq!(f.actions[0], Action::None);
+        }
+        assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
+        assert_eq!(
+            current_time.duration_since(f.runtime[0].machine_start),
+            Duration::from_micros(20)
+        );
+
+        // push over the limit, should be allowed
+        current_time = current_time.add(Duration::from_micros(2));
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingRecv,
+                n: 1000,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Action::BlockOutgoing {
+                timeout: Duration::from_micros(2),
+                duration: Duration::from_micros(2),
+                overwrite: false
+            }
+        );
     }
 }

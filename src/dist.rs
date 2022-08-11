@@ -66,6 +66,15 @@ pub struct Dist {
     pub max: f64,
 }
 
+// helper, none dist common in machines
+pub const NONEDIST: Dist = Dist {
+    dist: DistType::None,
+    param1: 0.0,
+    param2: 0.0,
+    start: 0.0,
+    max: 0.0,
+};
+
 impl fmt::Display for Dist {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut clamp = String::new();
@@ -214,41 +223,42 @@ pub fn parse_dist(buf: Vec<u8>) -> Result<Dist, Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::parse_dist;
+    use crate::dist::*;
 
     const TESTN: i32 = 1000;
     const TESTERR: f64 = 1.5;
 
     #[test]
     fn formatting() {
-        let mut d = crate::dist::Dist {
-            dist: crate::dist::DistType::None,
+        let mut d = Dist {
+            dist: DistType::None,
             param1: 1.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
         assert_eq!(d.to_string(), "none");
-        d.dist = crate::dist::DistType::Uniform;
+        d.dist = DistType::Uniform;
         assert_eq!(d.to_string(), "Uniform [1.0, 2.0]");
-        d.dist = crate::dist::DistType::Logistic;
+        d.dist = DistType::Logistic;
         assert_eq!(d.to_string(), "Logistic mu 1.0 sigma 2.0");
-        d.dist = crate::dist::DistType::LogLogistic;
+        d.dist = DistType::LogLogistic;
         assert_eq!(d.to_string(), "LogLogistic alpha 1.0 1/beta 2.0");
-        d.dist = crate::dist::DistType::Geometric;
+        d.dist = DistType::Geometric;
         assert_eq!(d.to_string(), "Geometric p 1.0");
-        d.dist = crate::dist::DistType::Weibull;
+        d.dist = DistType::Weibull;
         assert_eq!(d.to_string(), "Weibull k 1.0 lambda 2.0");
-        d.dist = crate::dist::DistType::GenPareto;
+        d.dist = DistType::GenPareto;
         assert_eq!(d.to_string(), "GenPareto sigma 1.0 xi 2.0");
-        d.dist = crate::dist::DistType::Poisson;
+        d.dist = DistType::Poisson;
         assert_eq!(d.to_string(), "Poisson lambda 1.0");
     }
 
     #[test]
     fn geometric() {
         let p = 0.33;
-        let d = crate::dist::Dist {
-            dist: crate::dist::DistType::Geometric,
+        let d = Dist {
+            dist: DistType::Geometric,
             param1: p,
             param2: 0.0,
             start: 0.0,
@@ -268,8 +278,8 @@ mod tests {
     #[test]
     fn loglogistic() {
         let alpha = 0.5;
-        let d = crate::dist::Dist {
-            dist: crate::dist::DistType::LogLogistic,
+        let d = Dist {
+            dist: DistType::LogLogistic,
             param1: alpha,
             param2: 1.0 / 4.0,
             start: 0.0,
@@ -290,8 +300,8 @@ mod tests {
     #[test]
     fn logistic() {
         let mu: f64 = 5.0;
-        let d = crate::dist::Dist {
-            dist: crate::dist::DistType::Logistic,
+        let d = Dist {
+            dist: DistType::Logistic,
             param1: mu,
             param2: 1.0,
             start: 0.0,
@@ -310,8 +320,8 @@ mod tests {
 
     #[test]
     fn none() {
-        let d = crate::dist::Dist {
-            dist: crate::dist::DistType::None,
+        let d = Dist {
+            dist: DistType::None,
             param1: 200.0,
             param2: 1.0,
             start: 0.0,
@@ -325,8 +335,8 @@ mod tests {
     fn genpareto() {
         let sigma = 3.0;
         let xi = 2.0;
-        let d = crate::dist::Dist {
-            dist: crate::dist::DistType::GenPareto,
+        let d = Dist {
+            dist: DistType::GenPareto,
             param1: sigma,
             param2: xi,
             start: 0.0,
@@ -348,8 +358,8 @@ mod tests {
 
     #[test]
     fn uniform() {
-        let d = crate::dist::Dist {
-            dist: crate::dist::DistType::Uniform,
+        let d = Dist {
+            dist: DistType::Uniform,
             param1: 1.0,
             param2: 2.0,
             start: 0.0,
@@ -367,8 +377,8 @@ mod tests {
     fn weibull() {
         let k = 3.0;
         let lambda = 2.0;
-        let d = crate::dist::Dist {
-            dist: crate::dist::DistType::Weibull,
+        let d = Dist {
+            dist: DistType::Weibull,
             param1: k,
             param2: lambda,
             start: 0.0,
@@ -389,8 +399,8 @@ mod tests {
 
     #[test]
     fn serialization() {
-        let d = crate::dist::Dist {
-            dist: crate::dist::DistType::LogLogistic,
+        let d = Dist {
+            dist: DistType::LogLogistic,
             param1: 123.45,
             param2: 67.89,
             start: 2.1,
