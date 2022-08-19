@@ -1,4 +1,4 @@
-use maybenot_rs::{
+use maybenot::{
     event::Event,
     framework::{Action, Framework, TriggerEvent},
     machine::parse_machine,

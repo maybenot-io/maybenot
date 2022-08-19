@@ -66,15 +66,6 @@ pub struct Dist {
     pub max: f64,
 }
 
-// helper, none dist common in machines
-pub const NONEDIST: Dist = Dist {
-    dist: DistType::None,
-    param1: 0.0,
-    param2: 0.0,
-    start: 0.0,
-    max: 0.0,
-};
-
 impl fmt::Display for Dist {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut clamp = String::new();
@@ -122,6 +113,16 @@ impl fmt::Display for Dist {
 }
 
 impl Dist {
+    pub fn new() -> Self {
+        Dist {
+            dist: DistType::None,
+            param1: 0.0,
+            param2: 0.0,
+            start: 0.0,
+            max: 0.0,
+        }
+    }
+
     pub fn sample(self) -> f64 {
         let mut r: f64 = 0.0;
         r = r.max(self.distsample() + self.start);
