@@ -292,8 +292,8 @@ impl Framework {
         if self.runtime[mi].state_limit == 0
             && self.machines[mi].states[cs].limit.dist != DistType::None
         {
-            // cancel any pending timers, and trigger limit reached
-            self.actions[mi] = Action::Cancel;
+            // take no action and trigger limit reached
+            self.actions[mi] = Action::None;
             // next, we trigger internally event LimitReached
             self.process_event(&TriggerEvent {
                 event: Event::LimitReached,
@@ -1520,5 +1520,103 @@ mod tests {
                 overwrite: false
             }
         );
+    }
+
+    #[test]
+    fn framework_machine_sampled_limit() {
+        // we create a machine that samples a padding limit of 4 padding sent,
+        // then should be prevented from padding further by transitioning to
+        // self
+        let num_states = 2;
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::NonPaddingSent, e);
+        let s0 = State {
+            timeout: Dist::new(),
+            size: Dist::new(),
+            limit: Dist::new(),
+            block: Dist::new(),
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::PaddingSent, e);
+        let s1 = State {
+            timeout: Dist {
+                dist: DistType::Uniform,
+                param1: 1.0,
+                param2: 1.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            size: Dist::new(),
+            limit: Dist {
+                dist: DistType::Uniform,
+                param1: 4.0,
+                param2: 4.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            block: Dist::new(),
+            block_overwrite: false,
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        };
+
+        let m = Machine {
+            allowed_padding_bytes: 100000, // NOTE, will not apply
+            max_padding_frac: 1.0, // NOTE, will not apply
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1],
+            include_small_packets: false,
+        };
+
+        let mut current_time = Instant::now();
+        let mtu = 1500;
+        let mut f = Framework::new(vec![m], 1.0, 0.0, mtu, current_time).unwrap();
+
+        // trigger self to start the padding
+        f.trigger_events(
+            [TriggerEvent {
+                event: Event::NonPaddingSent,
+                n: 100,
+                mi: 0,
+            }]
+            .to_vec(),
+            current_time,
+        );
+
+        assert_eq!(f.runtime[0].state_limit, 4);
+
+        // verify that we can send 4 padding
+        for _ in 0..4 {
+            assert_eq!(
+                f.actions[0],
+                Action::InjectPadding{
+                    timeout: Duration::from_micros(1),
+                    size: mtu as u16,
+                }
+            );
+            current_time = current_time.add(Duration::from_micros(1));
+            f.trigger_events([TriggerEvent {
+                event: Event::PaddingSent,
+                n: mtu,
+                mi: 0,
+            }].to_vec(), current_time)
+        }
+
+        // padding accounting correct
+        assert_eq!(f.runtime[0].padding_sent, mtu*4);
+        assert_eq!(f.runtime[0].nonpadding_sent, 100);
+
+        // limit should be reached after 4 padding, blocking next action
+        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.runtime[0].state_limit, 0);
+
     }
 }

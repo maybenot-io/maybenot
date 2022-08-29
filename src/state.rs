@@ -26,10 +26,10 @@ impl State {
     }
 
     pub fn sample_limit(&self) -> u64 {
-        if self.size.dist == DistType::None {
+        if self.limit.dist == DistType::None {
             return STATELIMITMAX;
         }
-        self.size.sample().round() as u64
+        self.limit.sample().round() as u64
     }
 
     pub fn sample_size(&self, mtu: u64) -> u64 {
