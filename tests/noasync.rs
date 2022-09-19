@@ -53,12 +53,12 @@ fn example_usage() {
         // you wait and collect events is likely going to be a bottleneck. If
         // you have to consider dropping events, it is better to drop older
         // events than newer.
-        let events = vec![TriggerEvent::NonPaddingSent { bytes_sent: 1420 }];
+        let events = [TriggerEvent::NonPaddingSent { bytes_sent: 1420 }];
 
         // Trigger the events in the framework. This takes linear time with the
         // number of events but is very fast (time should be dominated by at
         // most two calls to sample randomness per event).
-        f.trigger_events(events, Instant::now());
+        f.trigger_events(&events, Instant::now());
 
         // After triggering all the events, the framework will provide up to one
         // action per machine. It is your responsibility to perform those

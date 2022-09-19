@@ -159,7 +159,7 @@ impl Framework {
         self.machines.len()
     }
 
-    pub fn trigger_events(&mut self, events: Vec<TriggerEvent>, current_time: Instant) {
+    pub fn trigger_events(&mut self, events: &[TriggerEvent], current_time: Instant) {
         for mi in 0..self.actions.len() {
             self.actions[mi] = Action::None;
         }
@@ -580,10 +580,9 @@ mod tests {
 
         // start triggering
         f.trigger_events(
-            [TriggerEvent::BlockingBegin {
+            &[TriggerEvent::BlockingBegin {
                 machine: MachineId(0),
-            }]
-            .to_vec(),
+            }],
             current_time,
         );
         assert_eq!(f.actions[0], Action::None);
@@ -591,21 +590,19 @@ mod tests {
         // move time forward, trigger again to make sure no scheduled timer
         current_time = current_time.add(Duration::from_micros(20));
         f.trigger_events(
-            [TriggerEvent::BlockingBegin {
+            &[TriggerEvent::BlockingBegin {
                 machine: MachineId(0),
-            }]
-            .to_vec(),
+            }],
             current_time,
         );
         assert_eq!(f.actions[0], Action::None);
 
         // trigger transition to next state
         f.trigger_events(
-            [TriggerEvent::PaddingSent {
+            &[TriggerEvent::PaddingSent {
                 bytes_sent: 0,
                 machine: MachineId(0),
-            }]
-            .to_vec(),
+            }],
             current_time,
         );
         assert_eq!(
@@ -620,18 +617,17 @@ mod tests {
         // increase time, trigger event, make sure no further action
         current_time = current_time.add(Duration::from_micros(20));
         f.trigger_events(
-            [TriggerEvent::PaddingSent {
+            &[TriggerEvent::PaddingSent {
                 bytes_sent: 0,
                 machine: MachineId(0),
-            }]
-            .to_vec(),
+            }],
             current_time,
         );
         assert_eq!(f.actions[0], Action::None);
 
         // go back to state 0
         f.trigger_events(
-            [TriggerEvent::PaddingRecv { bytes_recv: 0 }].to_vec(),
+            &[TriggerEvent::PaddingRecv { bytes_recv: 0 }],
             current_time,
         );
         assert_eq!(
@@ -646,14 +642,13 @@ mod tests {
         // test multiple triggers overwriting actions
         for _ in 0..10 {
             f.trigger_events(
-                [
+                &[
                     TriggerEvent::PaddingSent {
                         bytes_sent: 0,
                         machine: MachineId(0),
                     },
                     TriggerEvent::PaddingRecv { bytes_recv: 0 },
-                ]
-                .to_vec(),
+                ],
                 current_time,
             );
             assert_eq!(
@@ -670,16 +665,14 @@ mod tests {
         for i in 0..10 {
             if i % 2 == 0 {
                 f.trigger_events(
-                    [
+                    &[
                         TriggerEvent::PaddingRecv { bytes_recv: 0 },
                         TriggerEvent::PaddingSent {
                             bytes_sent: 0,
                             machine: MachineId(0),
                         },
                         TriggerEvent::PaddingRecv { bytes_recv: 0 },
-                    ]
-                    .to_vec(),
-                    current_time,
+                    ], current_time,
                 );
                 assert_eq!(
                     f.actions[0],
@@ -691,7 +684,7 @@ mod tests {
                 );
             } else {
                 f.trigger_events(
-                    [
+                    &[
                         TriggerEvent::PaddingSent {
                             bytes_sent: 0,
                             machine: MachineId(0),
@@ -701,8 +694,7 @@ mod tests {
                             bytes_sent: 0,
                             machine: MachineId(0),
                         },
-                    ]
-                    .to_vec(),
+                    ],
                     current_time,
                 );
                 assert_eq!(
@@ -886,7 +878,7 @@ mod tests {
         let mut f = Framework::new(vec![m], 0.0, 0.0, mtu, current_time).unwrap();
 
         f.trigger_events(
-            [TriggerEvent::NonPaddingSent { bytes_sent: 0 }].to_vec(),
+            &[TriggerEvent::NonPaddingSent { bytes_sent: 0 }],
             current_time,
         );
         assert_eq!(
@@ -901,10 +893,9 @@ mod tests {
 
         current_time = current_time.add(Duration::from_micros(20));
         f.trigger_events(
-            [TriggerEvent::BlockingBegin {
+            &[TriggerEvent::BlockingBegin {
                 machine: MachineId(0),
-            }]
-            .to_vec(),
+            }],
             current_time,
         );
         assert_eq!(f.actions[0], Action::None);
@@ -912,7 +903,7 @@ mod tests {
         for _ in 0..10 {
             current_time = current_time.add(Duration::from_micros(1));
             f.trigger_events(
-                [TriggerEvent::NonPaddingSent { bytes_sent: 0 }].to_vec(),
+                &[TriggerEvent::NonPaddingSent { bytes_sent: 0 }],
                 current_time,
             );
             assert_eq!(
@@ -987,7 +978,7 @@ mod tests {
 
         // transition to get the loop going
         f.trigger_events(
-            [TriggerEvent::NonPaddingRecv { bytes_recv: 0 }].to_vec(),
+            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
             current_time,
         );
 
@@ -1003,11 +994,10 @@ mod tests {
             );
 
             f.trigger_events(
-                [TriggerEvent::PaddingSent {
+                &[TriggerEvent::PaddingSent {
                     bytes_sent: mtu as u16,
                     machine: MachineId(0),
-                }]
-                .to_vec(),
+                }],
                 current_time,
             );
         }
@@ -1017,10 +1007,9 @@ mod tests {
 
         // trigger and check limit again
         f.trigger_events(
-            [TriggerEvent::NonPaddingRecv {
+            &[TriggerEvent::NonPaddingRecv {
                 bytes_recv: mtu as u16,
-            }]
-            .to_vec(),
+            }],
             current_time,
         );
         assert_eq!(f.actions[0], Action::None);
@@ -1029,10 +1018,9 @@ mod tests {
         // of bytes
         for _ in 0..100 {
             f.trigger_events(
-                [TriggerEvent::NonPaddingSent {
+                &[TriggerEvent::NonPaddingSent {
                     bytes_sent: mtu as u16,
-                }]
-                .to_vec(),
+                }],
                 current_time,
             );
             assert_eq!(f.actions[0], Action::None);
@@ -1040,7 +1028,7 @@ mod tests {
 
         // send one byte of nonpadding, putting us just over the limit
         f.trigger_events(
-            [TriggerEvent::NonPaddingSent { bytes_sent: 1 }].to_vec(),
+            &[TriggerEvent::NonPaddingSent { bytes_sent: 1 }],
             current_time,
         );
         assert_eq!(
@@ -1115,7 +1103,7 @@ mod tests {
         // any framework limits are applied (by design, see AllowedPaddingBytes)
         // trigger transition to get the loop going
         f.trigger_events(
-            [TriggerEvent::NonPaddingRecv { bytes_recv: 0 }].to_vec(),
+            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
             current_time,
         );
         // we expect 100 padding actions per machine
@@ -1137,7 +1125,7 @@ mod tests {
                 }
             );
             f.trigger_events(
-                [
+                &[
                     TriggerEvent::PaddingSent {
                         bytes_sent: mtu as u16,
                         machine: MachineId(0),
@@ -1146,8 +1134,7 @@ mod tests {
                         bytes_sent: mtu as u16,
                         machine: MachineId(1),
                     },
-                ]
-                .to_vec(),
+                ],
                 current_time,
             );
         }
@@ -1156,15 +1143,14 @@ mod tests {
         assert_eq!(f.actions[0], Action::None);
         assert_eq!(f.actions[1], Action::None);
         f.trigger_events(
-            [
+            &[
                 TriggerEvent::NonPaddingRecv {
                     bytes_recv: mtu as u16,
                 },
                 TriggerEvent::NonPaddingRecv {
                     bytes_recv: mtu as u16,
                 },
-            ]
-            .to_vec(),
+            ],
             current_time,
         );
         assert_eq!(f.actions[0], Action::None);
@@ -1181,17 +1167,16 @@ mod tests {
             assert_eq!(f.actions[0], Action::None);
             assert_eq!(f.actions[1], Action::None);
             f.trigger_events(
-                [TriggerEvent::NonPaddingSent {
+                &[TriggerEvent::NonPaddingSent {
                     bytes_sent: mtu as u16,
-                }]
-                .to_vec(),
+                }],
                 current_time,
             );
         }
 
         // the last byte should tip it over
         f.trigger_events(
-            [TriggerEvent::NonPaddingSent { bytes_sent: 1 }].to_vec(),
+            &[TriggerEvent::NonPaddingSent { bytes_sent: 1 }],
             current_time,
         );
         assert_eq!(
@@ -1275,7 +1260,7 @@ mod tests {
 
         // trigger self to start the blocking (triggers action)
         f.trigger_events(
-            [TriggerEvent::NonPaddingRecv { bytes_recv: 0 }].to_vec(),
+            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
             current_time,
         );
 
@@ -1292,10 +1277,9 @@ mod tests {
             );
 
             f.trigger_events(
-                [TriggerEvent::BlockingBegin {
+                &[TriggerEvent::BlockingBegin {
                     machine: MachineId(0),
-                }]
-                .to_vec(),
+                }],
                 current_time,
             );
             assert_eq!(
@@ -1308,7 +1292,7 @@ mod tests {
                 }
             );
             current_time = current_time.add(Duration::from_micros(2));
-            f.trigger_events([TriggerEvent::BlockingEnd].to_vec(), current_time);
+            f.trigger_events(&[TriggerEvent::BlockingEnd], current_time);
         }
         assert_eq!(f.actions[0], Action::None);
         assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
@@ -1317,7 +1301,7 @@ mod tests {
         for _ in 0..5 {
             current_time = current_time.add(Duration::from_micros(2));
             f.trigger_events(
-                [TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }].to_vec(),
+                &[TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }],
                 current_time,
             );
             assert_eq!(f.actions[0], Action::None);
@@ -1331,7 +1315,7 @@ mod tests {
         // push over the limit, should be allowed
         current_time = current_time.add(Duration::from_micros(2));
         f.trigger_events(
-            [TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }].to_vec(),
+            &[TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }],
             current_time,
         );
         assert_eq!(
@@ -1408,7 +1392,7 @@ mod tests {
 
         // trigger self to start the blocking (triggers action)
         f.trigger_events(
-            [TriggerEvent::NonPaddingRecv { bytes_recv: 0 }].to_vec(),
+            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
             current_time,
         );
 
@@ -1425,10 +1409,10 @@ mod tests {
             );
 
             f.trigger_events(
-                [TriggerEvent::BlockingBegin {
+                &[TriggerEvent::BlockingBegin {
                     machine: MachineId(0),
                 }]
-                .to_vec(),
+                ,
                 current_time,
             );
             assert_eq!(
@@ -1441,7 +1425,7 @@ mod tests {
                 }
             );
             current_time = current_time.add(Duration::from_micros(2));
-            f.trigger_events([TriggerEvent::BlockingEnd].to_vec(), current_time);
+            f.trigger_events(&[TriggerEvent::BlockingEnd], current_time);
         }
         assert_eq!(f.actions[0], Action::None);
         assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
@@ -1450,7 +1434,7 @@ mod tests {
         for _ in 0..5 {
             current_time = current_time.add(Duration::from_micros(2));
             f.trigger_events(
-                [TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }].to_vec(),
+                &[TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }],
                 current_time,
             );
             assert_eq!(f.actions[0], Action::None);
@@ -1464,7 +1448,7 @@ mod tests {
         // push over the limit, should be allowed
         current_time = current_time.add(Duration::from_micros(2));
         f.trigger_events(
-            [TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }].to_vec(),
+            &[TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }],
             current_time,
         );
         assert_eq!(
@@ -1538,7 +1522,7 @@ mod tests {
 
         // trigger self to start the padding
         f.trigger_events(
-            [TriggerEvent::NonPaddingSent { bytes_sent: 100 }].to_vec(),
+            &[TriggerEvent::NonPaddingSent { bytes_sent: 100 }],
             current_time,
         );
 
@@ -1556,11 +1540,10 @@ mod tests {
             );
             current_time = current_time.add(Duration::from_micros(1));
             f.trigger_events(
-                [TriggerEvent::PaddingSent {
+                &[TriggerEvent::PaddingSent {
                     bytes_sent: mtu as u16,
                     machine: MachineId(0),
-                }]
-                .to_vec(),
+                }],
                 current_time,
             )
         }
