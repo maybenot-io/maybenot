@@ -1,8 +1,8 @@
 use maybenot::{
     framework::{Action, Framework, TriggerEvent},
-    machine::parse_machine,
+    machine::Machine,
 };
-use std::time::Instant;
+use std::{time::Instant, str::FromStr};
 
 #[test]
 fn create_empty() {
@@ -25,7 +25,7 @@ fn example_usage() {
     // mutating the machines.
     let s = "789c62642008885032c4c007fb81b219100000ffff94510132".to_string();
     // machines will error if invalid
-    let m = parse_machine(s).unwrap();
+    let m = Machine::from_str(&s).unwrap();
 
     // Create the framework, a lightweight operation, with the following
     // parameters:

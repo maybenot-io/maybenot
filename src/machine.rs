@@ -5,6 +5,7 @@ use byteorder::ByteOrder;
 use byteorder::{LittleEndian, WriteBytesExt};
 use std::error::Error;
 use std::io::Write;
+use std::str::FromStr;
 extern crate simple_error;
 use hex::{decode, encode};
 use libflate::zlib::{Decoder, Encoder};
@@ -20,6 +21,28 @@ pub struct Machine {
     pub max_blocking_frac: f64,
     pub states: Vec<State>,
     pub include_small_packets: bool,
+}
+
+impl FromStr for Machine {
+    type Err = Box<dyn Error>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // hex -> zlib -> vec
+        let compressed = decode(s).expect("failed to decode hex");
+
+        let mut decoder = Decoder::new(&compressed[..]).unwrap();
+        let mut buf = Vec::new();
+        decoder.read_to_end(&mut buf).unwrap();
+
+        if buf.len() < 2 {
+            bail!("cannot read version")
+        }
+
+        match LittleEndian::read_u16(&buf[0..2]) {
+            1 => parse_v1_machine(buf[2..].to_vec()),
+            _ => bail!("unsupported version"),
+        }
+    }
 }
 
 impl Machine {
@@ -133,24 +156,6 @@ pub fn validate_machines(machines: Vec<Machine>) -> Result<(), Box<dyn Error>> {
         m.validate()?;
     }
     Ok(())
-}
-
-pub fn parse_machine(m: String) -> Result<Machine, Box<dyn Error>> {
-    // hex -> zlib -> vec
-    let compressed = decode(m).expect("failed to decode hex");
-
-    let mut decoder = Decoder::new(&compressed[..]).unwrap();
-    let mut buf = Vec::new();
-    decoder.read_to_end(&mut buf).unwrap();
-
-    if buf.len() < 2 {
-        bail!("cannot read version")
-    }
-
-    match LittleEndian::read_u16(&buf[0..2]) {
-        1 => parse_v1_machine(buf[2..].to_vec()),
-        _ => bail!("unsupported version"),
-    }
 }
 
 fn parse_v1_machine(buf: Vec<u8>) -> Result<Machine, Box<dyn Error>> {
@@ -314,7 +319,7 @@ mod tests {
 
         // serialize, parse, eq
         let s = m.serialize();
-        let m_parsed = parse_machine(s).unwrap();
+        let m_parsed = Machine::from_str(&s).unwrap();
         assert_eq!(m, m_parsed);
     }
 
@@ -322,7 +327,7 @@ mod tests {
     fn parse_v1_machine_nop() {
         // attempt to parse a "no-op" machine from the go implementation
         let s = "789c62642008885032c4c007fb81b219100000ffff94510132".to_string();
-        let m = parse_machine(s).unwrap();
+        let m = Machine::from_str(&s).unwrap();
 
         assert_eq!(m.allowed_blocked_microsec, 0);
         assert_eq!(m.allowed_padding_bytes, 0);
@@ -348,7 +353,7 @@ mod tests {
         // attempt to parse a much larger machine, based on an early
         // constant-rate client prototype (not documented here)
         let s = "789c62642008d8092b1920f0c17ea05d800a069b7b46013a2022b9d3cc9686163d473a3b64d881d11c36d400b5626c34e647c1e000a3297a140c2f309aa247012a80354f61314a9b9825c29641de4e1ee9297ef0fb9f1a2919cd8c82e90e5472dc2002a375c0600780000000ffff67d71a77".to_string();
-        let m = parse_machine(s).unwrap();
+        let m = Machine::from_str(&s).unwrap();
 
         assert_eq!(m.allowed_blocked_microsec, 0);
         assert_eq!(m.allowed_padding_bytes, 0);
