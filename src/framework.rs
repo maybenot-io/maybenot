@@ -6,11 +6,74 @@ use std::error::Error;
 use std::time::Duration;
 use std::time::Instant;
 
-#[derive(Clone)]
-pub struct TriggerEvent {
-    pub event: Event,
-    pub n: u64,
-    pub mi: usize,
+/// An opaque token representing one padding machine running inside a maybenot framework.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub struct MachineId(usize);
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub enum TriggerEvent {
+    // NonPaddingRecv is when we received non-padding
+    NonPaddingRecv{
+        bytes_recv: u16,
+    },
+    // PaddingRecv is when we received padding
+    PaddingRecv{
+        bytes_recv: u16,
+    },
+    // NonPaddingSent is when we sent non-padding
+    NonPaddingSent{
+        bytes_sent: u16,
+    },
+    // PaddingSent is when we sent padding
+    PaddingSent{
+        bytes_sent: u16,
+        machine: MachineId,
+    },
+    // BlockingBegin is when blocking started
+    BlockingBegin{
+        machine: MachineId,
+    },
+    // BlockingEnd is when blocking ended
+    BlockingEnd,
+    // LimitReached an internal event for when a state has used up its limit
+    LimitReached{
+        machine: MachineId,
+    },
+    // UpdateMTU is when the MTU of the protected connection was updated
+    UpdateMTU{
+        new_mtu: u16,
+    },
+}
+
+impl TriggerEvent {
+    pub fn is_event(&self, e :Event) -> bool {
+        match self {
+            TriggerEvent::NonPaddingRecv { ..} => e == Event::NonPaddingRecv,
+            TriggerEvent::PaddingRecv { .. } => e == Event::PaddingRecv,
+            TriggerEvent::NonPaddingSent { .. } => e == Event::NonPaddingSent,
+            TriggerEvent::PaddingSent { .. } => e == Event::PaddingSent,
+            TriggerEvent::BlockingBegin { .. } => e == Event::BlockingBegin,
+            TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
+            TriggerEvent::LimitReached { .. } => e == Event::LimitReached,
+            TriggerEvent::UpdateMTU { .. } => e == Event::UpdateMTU,
+        }
+    }
+}
+
+impl ToString for TriggerEvent {
+    // note that we don't share the private MachineId
+    fn to_string(&self) -> String {
+        match self {
+            TriggerEvent::NonPaddingRecv { bytes_recv } => format!("rn,{}", bytes_recv),
+            TriggerEvent::PaddingRecv { bytes_recv } => format!("rp,{}", bytes_recv),
+            TriggerEvent::NonPaddingSent { bytes_sent } => format!("sn,{}", bytes_sent),
+            TriggerEvent::PaddingSent { bytes_sent, .. } => format!("sp,{}", bytes_sent),
+            TriggerEvent::BlockingBegin { .. } => "bb".to_string(),
+            TriggerEvent::BlockingEnd => "be".to_string(),
+            TriggerEvent::LimitReached { .. } => "lr".to_string(),
+            TriggerEvent::UpdateMTU { new_mtu } => format!("um,{}", new_mtu),
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -20,11 +83,13 @@ pub enum Action {
     InjectPadding {
         timeout: Duration,
         size: u16,
+        machine: MachineId,
     },
     BlockOutgoing {
         timeout: Duration,
         duration: Duration,
         overwrite: bool,
+        machine: MachineId,
     },
 }
 
@@ -121,24 +186,30 @@ impl Framework {
     }
 
     fn process_event(&mut self, e: &TriggerEvent) {
-        match e.event {
-            Event::NonPaddingRecv | Event::PaddingRecv => {
-                // no special accounting needed on received (non)padding
+        match e {
+            TriggerEvent::NonPaddingRecv{bytes_recv} => {
+                // no special accounting needed
                 for mi in 0..self.runtime.len() {
-                    self.transition(mi, e.event, e.n);
+                    self.transition(mi, Event::NonPaddingRecv, *bytes_recv as u64);
                 }
             }
-            Event::NonPaddingSent => {
-                self.global_nonpadding_sent_bytes += e.n;
+            TriggerEvent::PaddingRecv{bytes_recv} => {
+                // no special accounting needed
+                for mi in 0..self.runtime.len() {
+                    self.transition(mi, Event::PaddingRecv, *bytes_recv as u64);
+                }
+            }
+            TriggerEvent::NonPaddingSent{bytes_sent} => {
+                self.global_nonpadding_sent_bytes += *bytes_sent as u64;
 
                 for mi in 0..self.runtime.len() {
-                    self.runtime[mi].nonpadding_sent += e.n;
+                    self.runtime[mi].nonpadding_sent += *bytes_sent as u64;
 
                     // If the transition leaves the state unchanged and the limit of
                     // the machine includes nonpadding sent packets, decrement the
                     // limit. If the state changed, a new limit was sampled and this
                     // packet shouldn't count.
-                    if self.transition(mi, e.event, e.n) == StateChange::Unchanged {
+                    if self.transition(mi, Event::NonPaddingSent, *bytes_sent as u64) == StateChange::Unchanged {
                         let cs = self.runtime[mi].current_state;
                         if cs != STATEEND {
                             if self.machines[mi].states[cs].limit_includes_nonpadding {
@@ -148,24 +219,24 @@ impl Framework {
                     }
                 }
             }
-            Event::PaddingSent => {
+            TriggerEvent::PaddingSent{bytes_sent, machine} => {
                 // accounting is global ...
-                self.global_paddingsent_bytes += e.n;
+                self.global_paddingsent_bytes += *bytes_sent as u64;
 
                 for mi in 0..self.runtime.len() {
                     // ... but the event is per-machine
                     // TODO: we probably want a PaddingQueued (self) and PaddingSent (global)
-                    if mi == e.mi {
-                        self.runtime[mi].padding_sent += e.n;
+                    if mi == machine.0 {
+                        self.runtime[mi].padding_sent += *bytes_sent as u64;
 
-                        if self.transition(mi, e.event, e.n) == StateChange::Unchanged {
+                        if self.transition(mi, Event::PaddingSent, *bytes_sent as u64) == StateChange::Unchanged {
                             // decrement only makes sense if we didn't change state
                             self.decrement_limit(mi)
                         }
                     }
                 }
             }
-            Event::BlockingBegin => {
+            TriggerEvent::BlockingBegin{machine} => {
                 // keep track of when we start blocking (for accounting in BlockingEnd)
                 if !self.global_blocking_active {
                     self.global_blocking_active = true;
@@ -174,8 +245,8 @@ impl Framework {
 
                 // blocking is a global event
                 for mi in 0..self.runtime.len() {
-                    if self.transition(mi, e.event, e.n) == StateChange::Unchanged {
-                        if mi == e.mi {
+                    if self.transition(mi, Event::BlockingBegin, 0) == StateChange::Unchanged {
+                        if mi == machine.0 {
                             // decrement only makes sense if we didn't
                             // change state and for the machine in question
                             self.decrement_limit(mi)
@@ -183,7 +254,7 @@ impl Framework {
                     }
                 }
             }
-            Event::BlockingEnd => {
+            TriggerEvent::BlockingEnd => {
                 let mut blocked: Duration = Duration::from_secs(0);
                 if self.global_blocking_active {
                     blocked = self
@@ -199,17 +270,17 @@ impl Framework {
                     if !blocked.is_zero() {
                         self.runtime[mi].blocking_duration += blocked;
                     }
-                    self.transition(mi, e.event, e.n);
+                    self.transition(mi, Event::BlockingEnd, 0);
                 }
             }
-            Event::LimitReached => {
+            TriggerEvent::LimitReached{machine} => {
                 // limit is an internal event
-                self.transition(e.mi, e.event, e.n);
+                self.transition(machine.0, Event::LimitReached, 0);
             }
-            Event::UpdateMTU => {
-                self.mtu = e.n;
+            TriggerEvent::UpdateMTU{new_mtu} => {
+                self.mtu = *new_mtu as u64;
                 for mi in 0..self.runtime.len() {
-                    self.transition(mi, e.event, e.n);
+                    self.transition(mi, Event::UpdateMTU, *new_mtu as u64);
                 }
             }
         };
@@ -274,11 +345,13 @@ impl Framework {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
                 duration: Duration::from_micros(current.sample_block() as u64),
                 overwrite: current.block_overwrite,
+                machine: MachineId(mi),
             };
         } else {
             self.actions[mi] = Action::InjectPadding {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
                 size: current.sample_size(self.mtu) as u16,
+                machine: MachineId(mi),
             };
         }
     }
@@ -295,10 +368,8 @@ impl Framework {
             // take no action and trigger limit reached
             self.actions[mi] = Action::None;
             // next, we trigger internally event LimitReached
-            self.process_event(&TriggerEvent {
-                event: Event::LimitReached,
-                mi: mi,
-                n: 0,
+            self.process_event(&TriggerEvent::LimitReached{
+                machine: MachineId(mi),
             })
         }
     }
@@ -517,12 +588,9 @@ mod tests {
 
         // start triggering
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::BlockingBegin,
-                n: 0,
-                mi: 0,
-            }]
-            .to_vec(),
+            [TriggerEvent::BlockingBegin{
+                machine: MachineId(0),
+            }].to_vec(),
             current_time,
         );
         assert_eq!(f.actions[0], Action::None);
@@ -530,54 +598,36 @@ mod tests {
         // move time forward, trigger again to make sure no scheduled timer
         current_time = current_time.add(Duration::from_micros(20));
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::BlockingBegin,
-                n: 0,
-                mi: 0,
-            }]
-            .to_vec(),
+            [TriggerEvent::BlockingBegin { machine: MachineId(0) }].to_vec(),
             current_time,
         );
         assert_eq!(f.actions[0], Action::None);
 
         // trigger transition to next state
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::PaddingSent,
-                n: 0,
-                mi: 0,
-            }]
-            .to_vec(),
+            [TriggerEvent::PaddingSent { bytes_sent: 0, machine: MachineId(0) }].to_vec(),
             current_time,
         );
         assert_eq!(
             f.actions[0],
             Action::InjectPadding {
                 timeout: Duration::from_micros(1),
-                size: mtu as u16
+                size: mtu as u16,
+                machine: MachineId(0),
             }
         );
 
         // increase time, trigger event, make sure no further action
         current_time = current_time.add(Duration::from_micros(20));
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::PaddingSent,
-                n: 0,
-                mi: 0,
-            }]
-            .to_vec(),
+            [TriggerEvent::PaddingSent { bytes_sent: 0, machine: MachineId(0) }].to_vec(),
             current_time,
         );
         assert_eq!(f.actions[0], Action::None);
 
         // go back to state 0
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::PaddingRecv,
-                n: 0,
-                mi: 0,
-            }]
+            [TriggerEvent::PaddingRecv { bytes_recv: 0 }]
             .to_vec(),
             current_time,
         );
@@ -585,7 +635,8 @@ mod tests {
             f.actions[0],
             Action::InjectPadding {
                 timeout: Duration::from_micros(10),
-                size: mtu as u16
+                size: mtu as u16,
+                machine: MachineId(0),
             }
         );
 
@@ -593,16 +644,8 @@ mod tests {
         for _ in 0..10 {
             f.trigger_events(
                 [
-                    TriggerEvent {
-                        event: Event::PaddingSent,
-                        n: 0,
-                        mi: 0,
-                    },
-                    TriggerEvent {
-                        event: Event::PaddingRecv,
-                        n: 0,
-                        mi: 0,
-                    },
+                    TriggerEvent::PaddingSent { bytes_sent: 0, machine: MachineId(0) },
+                    TriggerEvent::PaddingRecv { bytes_recv: 0 },
                 ]
                 .to_vec(),
                 current_time,
@@ -611,7 +654,8 @@ mod tests {
                 f.actions[0],
                 Action::InjectPadding {
                     timeout: Duration::from_micros(10),
-                    size: mtu as u16
+                    size: mtu as u16,
+                    machine: MachineId(0),
                 }
             );
         }
@@ -621,21 +665,9 @@ mod tests {
             if i % 2 == 0 {
                 f.trigger_events(
                     [
-                        TriggerEvent {
-                            event: Event::PaddingRecv,
-                            n: 0,
-                            mi: 0,
-                        },
-                        TriggerEvent {
-                            event: Event::PaddingSent,
-                            n: 0,
-                            mi: 0,
-                        },
-                        TriggerEvent {
-                            event: Event::PaddingRecv,
-                            n: 0,
-                            mi: 0,
-                        },
+                        TriggerEvent::PaddingRecv { bytes_recv: 0 },
+                        TriggerEvent::PaddingSent { bytes_sent: 0, machine: MachineId(0) },
+                        TriggerEvent::PaddingRecv { bytes_recv: 0 },
                     ]
                     .to_vec(),
                     current_time,
@@ -644,27 +676,16 @@ mod tests {
                     f.actions[0],
                     Action::InjectPadding {
                         timeout: Duration::from_micros(10),
-                        size: mtu as u16
+                        size: mtu as u16,
+                        machine: MachineId(0),
                     }
                 );
             } else {
                 f.trigger_events(
                     [
-                        TriggerEvent {
-                            event: Event::PaddingSent,
-                            n: 0,
-                            mi: 0,
-                        },
-                        TriggerEvent {
-                            event: Event::PaddingRecv,
-                            n: 0,
-                            mi: 0,
-                        },
-                        TriggerEvent {
-                            event: Event::PaddingSent,
-                            n: 0,
-                            mi: 0,
-                        },
+                        TriggerEvent::PaddingSent { bytes_sent: 0, machine: MachineId(0) },
+                        TriggerEvent::PaddingRecv { bytes_recv: 0 },
+                        TriggerEvent::PaddingSent { bytes_sent: 0, machine: MachineId(0) },
                     ]
                     .to_vec(),
                     current_time,
@@ -673,7 +694,8 @@ mod tests {
                     f.actions[0],
                     Action::InjectPadding {
                         timeout: Duration::from_micros(1),
-                        size: mtu as u16
+                        size: mtu as u16,
+                        machine: MachineId(0),
                     }
                 );
             }
@@ -849,11 +871,7 @@ mod tests {
         let mut f = Framework::new(vec![m], 0.0, 0.0, mtu, current_time).unwrap();
 
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingSent,
-                n: 0,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingSent { bytes_sent: 0 }]
             .to_vec(),
             current_time,
         );
@@ -862,17 +880,14 @@ mod tests {
             Action::BlockOutgoing {
                 timeout: Duration::from_micros(1),
                 duration: Duration::from_micros(10),
-                overwrite: false
+                overwrite: false,
+                machine: MachineId(0),
             }
         );
 
         current_time = current_time.add(Duration::from_micros(20));
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::BlockingBegin,
-                n: 0,
-                mi: 0,
-            }]
+            [TriggerEvent::BlockingBegin { machine: MachineId(0) }]
             .to_vec(),
             current_time,
         );
@@ -881,11 +896,7 @@ mod tests {
         for _ in 0..10 {
             current_time = current_time.add(Duration::from_micros(1));
             f.trigger_events(
-                [TriggerEvent {
-                    event: Event::NonPaddingSent,
-                    n: 0,
-                    mi: 0,
-                }]
+                [TriggerEvent::NonPaddingSent { bytes_sent: 0 }]
                 .to_vec(),
                 current_time,
             );
@@ -894,7 +905,8 @@ mod tests {
                 Action::BlockOutgoing {
                     timeout: Duration::from_micros(1),
                     duration: Duration::from_micros(10),
-                    overwrite: false
+                    overwrite: false,
+                    machine: MachineId(0),
                 }
             );
         }
@@ -960,11 +972,7 @@ mod tests {
 
         // transition to get the loop going
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingRecv,
-                n: 0,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingRecv { bytes_recv: 0 }]
             .to_vec(),
             current_time,
         );
@@ -975,16 +983,13 @@ mod tests {
                 f.actions[0],
                 Action::InjectPadding {
                     timeout: Duration::from_micros(2),
-                    size: mtu as u16
+                    size: mtu as u16,
+                    machine: MachineId(0),
                 }
             );
 
             f.trigger_events(
-                [TriggerEvent {
-                    event: Event::PaddingSent,
-                    n: mtu,
-                    mi: 0,
-                }]
+                [TriggerEvent::PaddingSent { bytes_sent: mtu as u16, machine: MachineId(0) }]
                 .to_vec(),
                 current_time,
             );
@@ -995,11 +1000,7 @@ mod tests {
 
         // trigger and check limit again
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingRecv,
-                n: mtu,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingRecv { bytes_recv: mtu as u16 }]
             .to_vec(),
             current_time,
         );
@@ -1009,11 +1010,7 @@ mod tests {
         // of bytes
         for _ in 0..100 {
             f.trigger_events(
-                [TriggerEvent {
-                    event: Event::NonPaddingSent,
-                    n: mtu,
-                    mi: 0,
-                }]
+                [TriggerEvent::NonPaddingSent { bytes_sent: mtu as u16 }]
                 .to_vec(),
                 current_time,
             );
@@ -1022,11 +1019,7 @@ mod tests {
 
         // send one byte of nonpadding, putting us just over the limit
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingSent,
-                n: 1,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingSent { bytes_sent: 1 }]
             .to_vec(),
             current_time,
         );
@@ -1034,7 +1027,8 @@ mod tests {
             f.actions[0],
             Action::InjectPadding {
                 timeout: Duration::from_micros(2),
-                size: mtu as u16
+                size: mtu as u16,
+                machine: MachineId(0),
             }
         );
     }
@@ -1101,11 +1095,7 @@ mod tests {
         // any framework limits are applied (by design, see AllowedPaddingBytes)
         // trigger transition to get the loop going
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingRecv,
-                n: 0,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingRecv { bytes_recv: 0 }]
             .to_vec(),
             current_time,
         );
@@ -1115,28 +1105,22 @@ mod tests {
                 f.actions[0],
                 Action::InjectPadding {
                     timeout: Duration::from_micros(2),
-                    size: mtu as u16
+                    size: mtu as u16,
+                    machine: MachineId(0),
                 }
             );
             assert_eq!(
                 f.actions[1],
                 Action::InjectPadding {
                     timeout: Duration::from_micros(2),
-                    size: mtu as u16
+                    size: mtu as u16,
+                    machine: MachineId(1),
                 }
             );
             f.trigger_events(
                 [
-                    TriggerEvent {
-                        event: Event::PaddingSent,
-                        n: mtu,
-                        mi: 0,
-                    },
-                    TriggerEvent {
-                        event: Event::PaddingSent,
-                        n: mtu,
-                        mi: 1,
-                    },
+                    TriggerEvent::PaddingSent { bytes_sent: mtu as u16, machine: MachineId(0) },
+                    TriggerEvent::PaddingSent { bytes_sent: mtu as u16, machine: MachineId(1) },
                 ]
                 .to_vec(),
                 current_time,
@@ -1148,16 +1132,8 @@ mod tests {
         assert_eq!(f.actions[1], Action::None);
         f.trigger_events(
             [
-                TriggerEvent {
-                    event: Event::NonPaddingRecv,
-                    n: mtu,
-                    mi: 0,
-                },
-                TriggerEvent {
-                    event: Event::NonPaddingRecv,
-                    n: mtu,
-                    mi: 1,
-                },
+                TriggerEvent::NonPaddingRecv { bytes_recv: mtu as u16 },
+                TriggerEvent::NonPaddingRecv { bytes_recv: mtu as u16 },
             ]
             .to_vec(),
             current_time,
@@ -1176,11 +1152,7 @@ mod tests {
             assert_eq!(f.actions[0], Action::None);
             assert_eq!(f.actions[1], Action::None);
             f.trigger_events(
-                [TriggerEvent {
-                    event: Event::NonPaddingSent,
-                    n: mtu,
-                    mi: 0,
-                }]
+                [TriggerEvent::NonPaddingSent { bytes_sent: mtu as u16 }]
                 .to_vec(),
                 current_time,
             );
@@ -1188,11 +1160,7 @@ mod tests {
 
         // the last byte should tip it over
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingSent,
-                n: 1,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingSent { bytes_sent: 1 }]
             .to_vec(),
             current_time,
         );
@@ -1200,14 +1168,16 @@ mod tests {
             f.actions[0],
             Action::InjectPadding {
                 timeout: Duration::from_micros(2),
-                size: mtu as u16
+                size: mtu as u16,
+                machine: MachineId(0),
             }
         );
         assert_eq!(
             f.actions[1],
             Action::InjectPadding {
                 timeout: Duration::from_micros(2),
-                size: mtu as u16
+                size: mtu as u16,
+                machine: MachineId(1),
             }
         );
     }
@@ -1275,11 +1245,7 @@ mod tests {
 
         // trigger self to start the blocking (triggers action)
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingRecv,
-                n: 0,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingRecv { bytes_recv: 0 }]
             .to_vec(),
             current_time,
         );
@@ -1291,16 +1257,13 @@ mod tests {
                 Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
-                    overwrite: false
+                    overwrite: false,
+                    machine: MachineId(0),
                 }
             );
 
             f.trigger_events(
-                [TriggerEvent {
-                    event: Event::BlockingBegin,
-                    n: 0,
-                    mi: 0,
-                }]
+                [TriggerEvent::BlockingBegin { machine: MachineId(0) }]
                 .to_vec(),
                 current_time,
             );
@@ -1309,16 +1272,13 @@ mod tests {
                 Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
-                    overwrite: false
+                    overwrite: false,
+                    machine: MachineId(0),
                 }
             );
             current_time = current_time.add(Duration::from_micros(2));
             f.trigger_events(
-                [TriggerEvent {
-                    event: Event::BlockingEnd,
-                    n: 0,
-                    mi: 0,
-                }]
+                [TriggerEvent::BlockingEnd]
                 .to_vec(),
                 current_time,
             );
@@ -1330,11 +1290,7 @@ mod tests {
         for _ in 0..5 {
             current_time = current_time.add(Duration::from_micros(2));
             f.trigger_events(
-                [TriggerEvent {
-                    event: Event::NonPaddingRecv,
-                    n: 1000,
-                    mi: 0,
-                }]
+                [TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }]
                 .to_vec(),
                 current_time,
             );
@@ -1349,11 +1305,7 @@ mod tests {
         // push over the limit, should be allowed
         current_time = current_time.add(Duration::from_micros(2));
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingRecv,
-                n: 1000,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }]
             .to_vec(),
             current_time,
         );
@@ -1362,7 +1314,8 @@ mod tests {
             Action::BlockOutgoing {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
-                overwrite: false
+                overwrite: false,
+                machine: MachineId(0),
             }
         );
     }
@@ -1430,11 +1383,7 @@ mod tests {
 
         // trigger self to start the blocking (triggers action)
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingRecv,
-                n: 0,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingRecv { bytes_recv: 0 }]
             .to_vec(),
             current_time,
         );
@@ -1446,16 +1395,13 @@ mod tests {
                 Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
-                    overwrite: false
+                    overwrite: false,
+                    machine: MachineId(0),
                 }
             );
 
             f.trigger_events(
-                [TriggerEvent {
-                    event: Event::BlockingBegin,
-                    n: 0,
-                    mi: 0,
-                }]
+                [TriggerEvent::BlockingBegin { machine: MachineId(0) }]
                 .to_vec(),
                 current_time,
             );
@@ -1464,16 +1410,13 @@ mod tests {
                 Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
-                    overwrite: false
+                    overwrite: false,
+                    machine: MachineId(0),
                 }
             );
             current_time = current_time.add(Duration::from_micros(2));
             f.trigger_events(
-                [TriggerEvent {
-                    event: Event::BlockingEnd,
-                    n: 0,
-                    mi: 0,
-                }]
+                [TriggerEvent::BlockingEnd]
                 .to_vec(),
                 current_time,
             );
@@ -1485,11 +1428,7 @@ mod tests {
         for _ in 0..5 {
             current_time = current_time.add(Duration::from_micros(2));
             f.trigger_events(
-                [TriggerEvent {
-                    event: Event::NonPaddingRecv,
-                    n: 1000,
-                    mi: 0,
-                }]
+                [TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }]
                 .to_vec(),
                 current_time,
             );
@@ -1504,11 +1443,7 @@ mod tests {
         // push over the limit, should be allowed
         current_time = current_time.add(Duration::from_micros(2));
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingRecv,
-                n: 1000,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }]
             .to_vec(),
             current_time,
         );
@@ -1517,7 +1452,8 @@ mod tests {
             Action::BlockOutgoing {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
-                overwrite: false
+                overwrite: false,
+                machine: MachineId(0),
             }
         );
     }
@@ -1582,11 +1518,7 @@ mod tests {
 
         // trigger self to start the padding
         f.trigger_events(
-            [TriggerEvent {
-                event: Event::NonPaddingSent,
-                n: 100,
-                mi: 0,
-            }]
+            [TriggerEvent::NonPaddingSent { bytes_sent: 100 }]
             .to_vec(),
             current_time,
         );
@@ -1600,14 +1532,11 @@ mod tests {
                 Action::InjectPadding{
                     timeout: Duration::from_micros(1),
                     size: mtu as u16,
+                    machine: MachineId(0),
                 }
             );
             current_time = current_time.add(Duration::from_micros(1));
-            f.trigger_events([TriggerEvent {
-                event: Event::PaddingSent,
-                n: mtu,
-                mi: 0,
-            }].to_vec(), current_time)
+            f.trigger_events([TriggerEvent::PaddingSent { bytes_sent: mtu as u16, machine: MachineId(0) }].to_vec(), current_time)
         }
 
         // padding accounting correct

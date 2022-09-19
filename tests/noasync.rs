@@ -1,5 +1,4 @@
 use maybenot::{
-    event::Event,
     framework::{Action, Framework, TriggerEvent},
     machine::parse_machine,
 };
@@ -54,11 +53,7 @@ fn example_usage() {
         // you wait and collect events is likely going to be a bottleneck. If
         // you have to consider dropping events, it is better to drop older
         // events than newer.
-        let events = vec![TriggerEvent {
-            event: Event::NonPaddingSent,
-            mi: 0,
-            n: 1420,
-        }];
+        let events = vec![TriggerEvent::NonPaddingSent { bytes_sent: 1420 }];
 
         // Trigger the events in the framework. This takes linear time with the
         // number of events but is very fast (time should be dominated by at
@@ -81,6 +76,7 @@ fn example_usage() {
                 Action::InjectPadding {
                     timeout: _,
                     size: _,
+                    machine: _,
                 } => {
                     // Set the timer with the specified timeout. On expiry, do
                     // the following (all of nothing):
@@ -100,6 +96,7 @@ fn example_usage() {
                     timeout: _,
                     duration: _,
                     overwrite: _,
+                    machine: _,
                 } => {
                     // Set the timer with the specified timeout, overwriting any
                     // existing timer for the machine index (be it to block or
