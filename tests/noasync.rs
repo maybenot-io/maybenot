@@ -66,59 +66,63 @@ fn example_usage() {
         // one timer per machine. The index of an action corresponds to the
         // index of the machine that generated it.
         for mi in 0..f.actions.len() {
-            match f.actions[mi] {
-                Action::None => {
+            match &f.actions[mi] {
+                None => {
                     // Do nothing. The most common action.
                 }
-                Action::Cancel => {
-                    // If any active timer for this machine index, cancel it.
-                }
-                Action::InjectPadding {
-                    timeout: _,
-                    size: _,
-                    machine: _,
-                } => {
-                    // Set the timer with the specified timeout. On expiry, do
-                    // the following (all of nothing):
-                    // 1. Send size padding.
-                    // 2. Add a TriggerEvent to be triggered next loop iteration
-                    //    with event = Event::PaddingSent, mi = mi, and n =
-                    //    size.
-                    //
-                    // Above, "send" should mimic as close as possible real
-                    // application data being added for transport. Also, note
-                    // that if there already is a timer for an earlier action
-                    // for the machine index in question, replace it. This will
-                    // happen very frequently so make effort to make it
-                    // efficient.
-                }
-                Action::BlockOutgoing {
-                    timeout: _,
-                    duration: _,
-                    overwrite: _,
-                    machine: _,
-                } => {
-                    // Set the timer with the specified timeout, overwriting any
-                    // existing timer for the machine index (be it to block or
-                    // inject). On expiry, do the following:
-                    // 1. If no blocking is currently taking place (globally
-                    //    across all machines), start blocking all outgoing
-                    //    traffic for the specified duration. If blocking is
-                    //    already taking place (due to any machine), there are
-                    //    two cases. If overwrite is true, replace the existing
-                    //    blocking duration with the specified duration in this
-                    //    action. If overwrite is false, pick the longest
-                    //    duration of the specified duration and the *remaining*
-                    //    duration to block already in place.
-                    // 2. Add a TriggerEvent to be triggered next loop iteration
-                    //    with event = Event::BlockingBegin, mi = mi, and n = 0.
-                    //
-                    // Note that blocking is global across all machines, since
-                    // the intent is to block all outgoing traffic. Further, you
-                    // MUST ensure that when blocking ends, you add a
-                    // TriggerEvent with event = Event::BlockingEnd, mi = 0, and
-                    // n = 0.
-                }
+                Some(action) => {
+                    match action {
+                        Action::Cancel {machine: _} => {
+                            // If any active timer for this machine index, cancel it.
+                        }
+                        Action::InjectPadding {
+                            timeout: _,
+                            size: _,
+                            machine: _,
+                        } => {
+                            // Set the timer with the specified timeout. On expiry, do
+                            // the following (all of nothing):
+                            // 1. Send size padding.
+                            // 2. Add a TriggerEvent to be triggered next loop iteration
+                            //    with event = Event::PaddingSent, mi = mi, and n =
+                            //    size.
+                            //
+                            // Above, "send" should mimic as close as possible real
+                            // application data being added for transport. Also, note
+                            // that if there already is a timer for an earlier action
+                            // for the machine index in question, replace it. This will
+                            // happen very frequently so make effort to make it
+                            // efficient.
+                        }
+                        Action::BlockOutgoing {
+                            timeout: _,
+                            duration: _,
+                            overwrite: _,
+                            machine: _,
+                        } => {
+                            // Set the timer with the specified timeout, overwriting any
+                            // existing timer for the machine index (be it to block or
+                            // inject). On expiry, do the following:
+                            // 1. If no blocking is currently taking place (globally
+                            //    across all machines), start blocking all outgoing
+                            //    traffic for the specified duration. If blocking is
+                            //    already taking place (due to any machine), there are
+                            //    two cases. If overwrite is true, replace the existing
+                            //    blocking duration with the specified duration in this
+                            //    action. If overwrite is false, pick the longest
+                            //    duration of the specified duration and the *remaining*
+                            //    duration to block already in place.
+                            // 2. Add a TriggerEvent to be triggered next loop iteration
+                            //    with event = Event::BlockingBegin, mi = mi, and n = 0.
+                            //
+                            // Note that blocking is global across all machines, since
+                            // the intent is to block all outgoing traffic. Further, you
+                            // MUST ensure that when blocking ends, you add a
+                            // TriggerEvent with event = Event::BlockingEnd, mi = 0, and
+                            // n = 0.
+                        }
+                    }
+                },
             }
         }
 

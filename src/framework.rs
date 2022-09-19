@@ -63,8 +63,9 @@ impl ToString for TriggerEvent {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Action {
-    None,
-    Cancel,
+    Cancel {
+        machine: MachineId,
+    },
     InjectPadding {
         timeout: Duration,
         size: u16,
@@ -78,6 +79,7 @@ pub enum Action {
     },
 }
 
+#[derive(Debug, Clone)]
 struct MachineRuntime {
     current_state: usize,
     state_limit: u64,
@@ -94,7 +96,7 @@ enum StateChange {
 }
 
 pub struct Framework {
-    pub actions: Vec<Action>,
+    pub actions: Vec<Option<Action>>,
     current_time: Instant,
     machines: Vec<Machine>,
     runtime: Vec<MachineRuntime>,
@@ -121,22 +123,16 @@ impl Framework {
             m.validate()?;
         }
 
-        let mut runtime = vec![];
-        for _ in 0..machines.len() {
-            runtime.push(MachineRuntime {
-                current_state: 0,
-                state_limit: 0,
-                padding_sent: 0,
-                nonpadding_sent: 0,
-                blocking_duration: Duration::from_secs(0),
-                machine_start: current_time.clone(),
-            });
-        }
+        let runtime = vec![MachineRuntime {
+            current_state: 0,
+            state_limit: 0,
+            padding_sent: 0,
+            nonpadding_sent: 0,
+            blocking_duration: Duration::from_secs(0),
+            machine_start: current_time.clone(),
+        }; machines.len()];
 
-        let mut actions = vec![];
-        for _ in 0..machines.len() {
-            actions.push(Action::None);
-        }
+        let actions = vec![None; machines.len()];
 
         Ok(Self {
             actions,
@@ -160,9 +156,7 @@ impl Framework {
     }
 
     pub fn trigger_events(&mut self, events: &[TriggerEvent], current_time: Instant) {
-        for mi in 0..self.actions.len() {
-            self.actions[mi] = Action::None;
-        }
+        self.actions.fill(None);
 
         self.current_time = current_time;
         for e in events {
@@ -301,7 +295,7 @@ impl Framework {
         match next_state {
             STATECANCEL => {
                 // cancel any pending action, but doesn't count as a state change
-                self.actions[mi] = Action::Cancel;
+                self.actions[mi] = Some(Action::Cancel { machine: MachineId(mi)});
                 return StateChange::Unchanged;
             }
             STATEEND => {
@@ -333,18 +327,18 @@ impl Framework {
         let current = &self.machines[mi].states[self.runtime[mi].current_state];
 
         if current.block.dist != DistType::None {
-            self.actions[mi] = Action::BlockOutgoing {
+            self.actions[mi] = Some(Action::BlockOutgoing {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
                 duration: Duration::from_micros(current.sample_block() as u64),
                 overwrite: current.block_overwrite,
                 machine: MachineId(mi),
-            };
+            });
         } else {
-            self.actions[mi] = Action::InjectPadding {
+            self.actions[mi] = Some(Action::InjectPadding {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
                 size: current.sample_size(self.mtu) as u16,
                 machine: MachineId(mi),
-            };
+            });
         }
     }
 
@@ -358,7 +352,7 @@ impl Framework {
             && self.machines[mi].states[cs].limit.dist != DistType::None
         {
             // take no action and trigger limit reached
-            self.actions[mi] = Action::None;
+            self.actions[mi] = None;
             // next, we trigger internally event LimitReached
             self.process_event(&TriggerEvent::LimitReached {
                 machine: MachineId(mi),
@@ -585,7 +579,7 @@ mod tests {
             }],
             current_time,
         );
-        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[0], None);
 
         // move time forward, trigger again to make sure no scheduled timer
         current_time = current_time.add(Duration::from_micros(20));
@@ -595,7 +589,7 @@ mod tests {
             }],
             current_time,
         );
-        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[0], None);
 
         // trigger transition to next state
         f.trigger_events(
@@ -607,11 +601,11 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Action::InjectPadding {
+            Some(Action::InjectPadding {
                 timeout: Duration::from_micros(1),
                 size: mtu as u16,
                 machine: MachineId(0),
-            }
+            })
         );
 
         // increase time, trigger event, make sure no further action
@@ -623,7 +617,7 @@ mod tests {
             }],
             current_time,
         );
-        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[0], None);
 
         // go back to state 0
         f.trigger_events(
@@ -632,11 +626,11 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Action::InjectPadding {
+            Some(Action::InjectPadding {
                 timeout: Duration::from_micros(10),
                 size: mtu as u16,
                 machine: MachineId(0),
-            }
+            })
         );
 
         // test multiple triggers overwriting actions
@@ -653,11 +647,11 @@ mod tests {
             );
             assert_eq!(
                 f.actions[0],
-                Action::InjectPadding {
+                Some(Action::InjectPadding {
                     timeout: Duration::from_micros(10),
                     size: mtu as u16,
                     machine: MachineId(0),
-                }
+                })
             );
         }
 
@@ -676,11 +670,11 @@ mod tests {
                 );
                 assert_eq!(
                     f.actions[0],
-                    Action::InjectPadding {
+                    Some(Action::InjectPadding {
                         timeout: Duration::from_micros(10),
                         size: mtu as u16,
                         machine: MachineId(0),
-                    }
+                    })
                 );
             } else {
                 f.trigger_events(
@@ -699,11 +693,11 @@ mod tests {
                 );
                 assert_eq!(
                     f.actions[0],
-                    Action::InjectPadding {
+                    Some(Action::InjectPadding {
                         timeout: Duration::from_micros(1),
                         size: mtu as u16,
                         machine: MachineId(0),
-                    }
+                    })
                 );
             }
         }
@@ -883,12 +877,12 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Action::BlockOutgoing {
+            Some(Action::BlockOutgoing {
                 timeout: Duration::from_micros(1),
                 duration: Duration::from_micros(10),
                 overwrite: false,
                 machine: MachineId(0),
-            }
+            })
         );
 
         current_time = current_time.add(Duration::from_micros(20));
@@ -898,7 +892,7 @@ mod tests {
             }],
             current_time,
         );
-        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[0], None);
 
         for _ in 0..10 {
             current_time = current_time.add(Duration::from_micros(1));
@@ -908,12 +902,12 @@ mod tests {
             );
             assert_eq!(
                 f.actions[0],
-                Action::BlockOutgoing {
+                Some(Action::BlockOutgoing {
                     timeout: Duration::from_micros(1),
                     duration: Duration::from_micros(10),
                     overwrite: false,
                     machine: MachineId(0),
-                }
+                })
             );
         }
     }
@@ -986,11 +980,11 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(
                 f.actions[0],
-                Action::InjectPadding {
+                Some(Action::InjectPadding {
                     timeout: Duration::from_micros(2),
                     size: mtu as u16,
                     machine: MachineId(0),
-                }
+                })
             );
 
             f.trigger_events(
@@ -1003,7 +997,7 @@ mod tests {
         }
 
         // limit hit, last event should prevent the action
-        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[0], None);
 
         // trigger and check limit again
         f.trigger_events(
@@ -1012,7 +1006,7 @@ mod tests {
             }],
             current_time,
         );
-        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[0], None);
 
         // verify that no padding is scheduled until we've sent the same amount
         // of bytes
@@ -1023,7 +1017,7 @@ mod tests {
                 }],
                 current_time,
             );
-            assert_eq!(f.actions[0], Action::None);
+            assert_eq!(f.actions[0], None);
         }
 
         // send one byte of nonpadding, putting us just over the limit
@@ -1033,11 +1027,11 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Action::InjectPadding {
+            Some(Action::InjectPadding {
                 timeout: Duration::from_micros(2),
                 size: mtu as u16,
                 machine: MachineId(0),
-            }
+            })
         );
     }
 
@@ -1110,19 +1104,19 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(
                 f.actions[0],
-                Action::InjectPadding {
+                Some(Action::InjectPadding {
                     timeout: Duration::from_micros(2),
                     size: mtu as u16,
                     machine: MachineId(0),
-                }
+                })
             );
             assert_eq!(
                 f.actions[1],
-                Action::InjectPadding {
+                Some(Action::InjectPadding {
                     timeout: Duration::from_micros(2),
                     size: mtu as u16,
                     machine: MachineId(1),
-                }
+                })
             );
             f.trigger_events(
                 &[
@@ -1140,8 +1134,8 @@ mod tests {
         }
 
         // limit hit, last event should prevent the action and future actions
-        assert_eq!(f.actions[0], Action::None);
-        assert_eq!(f.actions[1], Action::None);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.actions[1], None);
         f.trigger_events(
             &[
                 TriggerEvent::NonPaddingRecv {
@@ -1153,8 +1147,8 @@ mod tests {
             ],
             current_time,
         );
-        assert_eq!(f.actions[0], Action::None);
-        assert_eq!(f.actions[1], Action::None);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.actions[1], None);
 
         // in sync?
         assert_eq!(f.runtime[0].padding_sent, f.runtime[1].padding_sent);
@@ -1164,8 +1158,8 @@ mod tests {
         // means that we should need to send at least 2*100*mtu + 1 bytes before
         // padding is scheduled again
         for _ in 0..200 {
-            assert_eq!(f.actions[0], Action::None);
-            assert_eq!(f.actions[1], Action::None);
+            assert_eq!(f.actions[0], None);
+            assert_eq!(f.actions[1], None);
             f.trigger_events(
                 &[TriggerEvent::NonPaddingSent {
                     bytes_sent: mtu as u16,
@@ -1181,19 +1175,19 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Action::InjectPadding {
+            Some(Action::InjectPadding {
                 timeout: Duration::from_micros(2),
                 size: mtu as u16,
                 machine: MachineId(0),
-            }
+            })
         );
         assert_eq!(
             f.actions[1],
-            Action::InjectPadding {
+            Some(Action::InjectPadding {
                 timeout: Duration::from_micros(2),
                 size: mtu as u16,
                 machine: MachineId(1),
-            }
+            })
         );
     }
 
@@ -1268,12 +1262,12 @@ mod tests {
         for _ in 0..5 {
             assert_eq!(
                 f.actions[0],
-                Action::BlockOutgoing {
+                Some(Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     overwrite: false,
                     machine: MachineId(0),
-                }
+                })
             );
 
             f.trigger_events(
@@ -1284,17 +1278,17 @@ mod tests {
             );
             assert_eq!(
                 f.actions[0],
-                Action::BlockOutgoing {
+                Some(Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     overwrite: false,
                     machine: MachineId(0),
-                }
+                })
             );
             current_time = current_time.add(Duration::from_micros(2));
             f.trigger_events(&[TriggerEvent::BlockingEnd], current_time);
         }
-        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
 
         // now we burn our allowed padding budget, should be blocked for 10us
@@ -1304,7 +1298,7 @@ mod tests {
                 &[TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }],
                 current_time,
             );
-            assert_eq!(f.actions[0], Action::None);
+            assert_eq!(f.actions[0], None);
         }
         assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
         assert_eq!(
@@ -1320,12 +1314,12 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Action::BlockOutgoing {
+            Some(Action::BlockOutgoing {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
                 overwrite: false,
                 machine: MachineId(0),
-            }
+            })
         );
     }
 
@@ -1400,12 +1394,12 @@ mod tests {
         for _ in 0..5 {
             assert_eq!(
                 f.actions[0],
-                Action::BlockOutgoing {
+                Some(Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     overwrite: false,
                     machine: MachineId(0),
-                }
+                })
             );
 
             f.trigger_events(
@@ -1417,17 +1411,17 @@ mod tests {
             );
             assert_eq!(
                 f.actions[0],
-                Action::BlockOutgoing {
+                Some(Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     overwrite: false,
                     machine: MachineId(0),
-                }
+                })
             );
             current_time = current_time.add(Duration::from_micros(2));
             f.trigger_events(&[TriggerEvent::BlockingEnd], current_time);
         }
-        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
 
         // now we burn our allowed padding budget, should be blocked for 10us
@@ -1437,7 +1431,7 @@ mod tests {
                 &[TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }],
                 current_time,
             );
-            assert_eq!(f.actions[0], Action::None);
+            assert_eq!(f.actions[0], None);
         }
         assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
         assert_eq!(
@@ -1453,12 +1447,12 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Action::BlockOutgoing {
+            Some(Action::BlockOutgoing {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
                 overwrite: false,
                 machine: MachineId(0),
-            }
+            })
         );
     }
 
@@ -1532,11 +1526,11 @@ mod tests {
         for _ in 0..4 {
             assert_eq!(
                 f.actions[0],
-                Action::InjectPadding {
+                Some(Action::InjectPadding {
                     timeout: Duration::from_micros(1),
                     size: mtu as u16,
                     machine: MachineId(0),
-                }
+                })
             );
             current_time = current_time.add(Duration::from_micros(1));
             f.trigger_events(
@@ -1553,7 +1547,7 @@ mod tests {
         assert_eq!(f.runtime[0].nonpadding_sent, 100);
 
         // limit should be reached after 4 padding, blocking next action
-        assert_eq!(f.actions[0], Action::None);
+        assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].state_limit, 0);
     }
 }
