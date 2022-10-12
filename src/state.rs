@@ -214,7 +214,7 @@ mod tests {
                 max: 7.8,
             },
             limit: Dist {
-                dist: DistType::GenPareto,
+                dist: DistType::Pareto,
                 param1: 9.0,
                 param2: 1.2,
                 start: 3.4,
@@ -228,7 +228,7 @@ mod tests {
                 max: 3.4,
             },
             block: Dist {
-                dist: DistType::LogLogistic,
+                dist: DistType::LogNormal,
                 param1: 5.6,
                 param2: 7.8,
                 start: 9.0,

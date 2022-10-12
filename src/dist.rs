@@ -1,5 +1,8 @@
 use byteorder::ByteOrder;
 use byteorder::{LittleEndian, WriteBytesExt};
+use rand_distr::{
+    Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, Weibull,
+};
 use std::error::Error;
 use std::fmt;
 extern crate simple_error;
@@ -10,16 +13,23 @@ use crate::constants::*;
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u16)]
 pub enum DistType {
+    // standard
     None,
     Uniform,
-    Logistic,
-    LogLogistic,
+    // real-valued quantities
+    Normal,
+    LogNormal,
+    // selection for Bernoulli trials (yes/no events, with a given probability)
+    Binomial,
     Geometric,
-    Weibull,
-    GenPareto,
+    // selection for occurrence of independent events at a given rate
+    Pareto,
     Poisson,
+    Weibull,
+    // misc, broad options
+    Gamma,
+    Beta,
 }
-
 impl fmt::Display for DistType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -31,12 +41,15 @@ impl From<u16> for DistType {
         match buf {
             0 => DistType::None,
             1 => DistType::Uniform,
-            2 => DistType::Logistic,
-            3 => DistType::LogLogistic,
-            4 => DistType::Geometric,
-            5 => DistType::Weibull,
-            6 => DistType::GenPareto,
+            2 => DistType::Normal,
+            3 => DistType::LogNormal,
+            4 => DistType::Binomial,
+            5 => DistType::Geometric,
+            6 => DistType::Pareto,
             7 => DistType::Poisson,
+            8 => DistType::Weibull,
+            9 => DistType::Gamma,
+            10 => DistType::Beta,
             _ => DistType::None,
         }
     }
@@ -47,12 +60,15 @@ impl Into<u16> for DistType {
         match self {
             DistType::None => 0,
             DistType::Uniform => 1,
-            DistType::Logistic => 2,
-            DistType::LogLogistic => 3,
-            DistType::Geometric => 4,
-            DistType::Weibull => 5,
-            DistType::GenPareto => 6,
+            DistType::Normal => 2,
+            DistType::LogNormal => 3,
+            DistType::Binomial => 4,
+            DistType::Geometric => 5,
+            DistType::Pareto => 6,
             DistType::Poisson => 7,
+            DistType::Weibull => 8,
+            DistType::Gamma => 9,
+            DistType::Beta => 10,
         }
     }
 }
@@ -82,32 +98,61 @@ impl fmt::Display for Dist {
             DistType::Uniform => {
                 write!(f, "Uniform [{:?}, {:?}]{}", self.param1, self.param2, clamp)
             }
-            DistType::Logistic => {
+            DistType::Normal => {
                 write!(
                     f,
-                    "Logistic mu {:?} sigma {:?}{}",
+                    "Normal mean {:?} stdev {:?}{}",
                     self.param1, self.param2, clamp
                 )
             }
-            DistType::LogLogistic => write!(
-                f,
-                "LogLogistic alpha {:?} 1/beta {:?}{}",
-                self.param1, self.param2, clamp
-            ),
-            DistType::Geometric => write!(f, "Geometric p {:?}{}", self.param1, clamp),
-            DistType::Weibull => write!(
-                f,
-                "Weibull k {:?} lambda {:?}{}",
-                self.param1, self.param2, clamp
-            ),
-            DistType::GenPareto => {
+            DistType::LogNormal => {
                 write!(
                     f,
-                    "GenPareto sigma {:?} xi {:?}{}",
+                    "LogNormal mu {:?} sigma {:?}{}",
                     self.param1, self.param2, clamp
                 )
             }
-            DistType::Poisson => write!(f, "Poisson lambda {:?}{}", self.param1, clamp),
+            DistType::Binomial => {
+                write!(
+                    f,
+                    "Binomial trials {:?} probability {:?}{}",
+                    self.param1, self.param2, clamp
+                )
+            }
+            DistType::Geometric => {
+                write!(f, "Geometric probability {:?}{}", self.param1, clamp)
+            }
+            DistType::Pareto => {
+                write!(
+                    f,
+                    "Pareto scale {:?} shape {:?}{}",
+                    self.param1, self.param2, clamp
+                )
+            }
+            DistType::Poisson => {
+                write!(f, "Poisson lambda {:?}{}", self.param1, clamp)
+            }
+            DistType::Weibull => {
+                write!(
+                    f,
+                    "Weibull scale {:?} shape {:?}{}",
+                    self.param1, self.param2, clamp
+                )
+            }
+            DistType::Gamma => {
+                write!(
+                    f,
+                    "Gamma scale {:?} shape {:?}{}",
+                    self.param1, self.param2, clamp
+                )
+            }
+            DistType::Beta => {
+                write!(
+                    f,
+                    "Beta alpha {:?} beta {:?}{}",
+                    self.param1, self.param2, clamp
+                )
+            }
         }
     }
 }
@@ -140,50 +185,67 @@ impl Dist {
                 let max = self.param2;
                 min + rand::random::<f64>() * (max - min)
             }
-            DistType::Logistic => {
-                // FIXME: is below really correct?
+            DistType::Normal => {
+                let mean = self.param1;
+                let stdev = self.param2;
+                Normal::new(mean, stdev)
+                    .unwrap()
+                    .sample(&mut rand::thread_rng())
+            }
+            DistType::LogNormal => {
                 let mu = self.param1;
                 let sigma = self.param2;
-                mu + sigma * ((rand::random::<f64>() / (1.0 - rand::random::<f64>())).ln())
+                LogNormal::new(mu, sigma)
+                    .unwrap()
+                    .sample(&mut rand::thread_rng())
             }
-            DistType::LogLogistic => {
-                let alpha = self.param1;
-                let param2 = self.param2;
-                let x: f64 = rand::random::<f64>();
-                // HERE BE DRAGONS, really unsure about this one. Best effort of
-                // "InTeRnEt" and tor/src/lib/math/prob_dist.c.
-                if rand::random::<f64>() < 0.5 {
-                    return alpha * ((x / (1.0 - x)).powf(param2));
-                }
-                alpha * (((1.0 - x) / x).powf(param2))
+            DistType::Binomial => {
+                let trials = self.param1 as u64;
+                let probability = self.param2;
+                Binomial::new(trials, probability)
+                    .unwrap()
+                    .sample(&mut rand::thread_rng()) as f64
             }
             DistType::Geometric => {
-                let p = (self.param1.min(1.0)).max(0.0);
-                (rand::random::<f64>().ln() / (1.0 - p).ln()).floor()
+                let probability = self.param1;
+                Geometric::new(probability)
+                    .unwrap()
+                    .sample(&mut rand::thread_rng()) as f64
             }
-            DistType::Weibull => {
-                let k = self.param1;
-                let lambda = self.param2;
-                lambda * (-(1.0 - rand::random::<f64>()).ln()).powf(1.0 / k)
-            }
-            DistType::GenPareto => {
-                // FIXME: a best-effort, really needs to be audited
-                let mu = 0.0; // location
-                let sigma = self.param1; // scale
-                let xi = self.param2; // shape
-                mu + sigma * (rand::random::<f64>().powf(-xi) - 1.0) / xi
+            DistType::Pareto => {
+                let scale = self.param1;
+                let shape = self.param2;
+                Pareto::new(scale, shape)
+                    .unwrap()
+                    .sample(&mut rand::thread_rng())
             }
             DistType::Poisson => {
                 let lambda = self.param1;
-                let l = std::f64::consts::E.powf(-lambda);
-                let mut k: i64 = 0;
-                let mut p: f64 = 1.0;
-
-                while p > l {
-                    k += 1;
-                    p *= rand::random::<f64>();
-                }
-                (k as f64) - 1.0
+                Poisson::new(lambda)
+                    .unwrap()
+                    .sample(&mut rand::thread_rng())
+            }
+            DistType::Weibull => {
+                let scale = self.param1;
+                let shape = self.param2;
+                Weibull::new(scale, shape)
+                    .unwrap()
+                    .sample(&mut rand::thread_rng())
+            }
+            DistType::Gamma => {
+                let scale = self.param1;
+                let shape = self.param2;
+                // note order below in inversed from others for some reason in rand_distr
+                Gamma::new(scale, shape)
+                    .unwrap()
+                    .sample(&mut rand::thread_rng())
+            }
+            DistType::Beta => {
+                let alpha = self.param1;
+                let beta = self.param2;
+                Beta::new(alpha, beta)
+                    .unwrap()
+                    .sample(&mut rand::thread_rng())
             }
         }
     }
@@ -226,9 +288,6 @@ mod tests {
     use super::parse_dist;
     use crate::dist::*;
 
-    const TESTN: i32 = 1000;
-    const TESTERR: f64 = 1.5;
-
     #[test]
     fn formatting() {
         let mut d = Dist {
@@ -241,84 +300,25 @@ mod tests {
         assert_eq!(d.to_string(), "none");
         d.dist = DistType::Uniform;
         assert_eq!(d.to_string(), "Uniform [1.0, 2.0]");
-        d.dist = DistType::Logistic;
-        assert_eq!(d.to_string(), "Logistic mu 1.0 sigma 2.0");
-        d.dist = DistType::LogLogistic;
-        assert_eq!(d.to_string(), "LogLogistic alpha 1.0 1/beta 2.0");
+        d.dist = DistType::Normal;
+        assert_eq!(d.to_string(), "Normal mean 1.0 stdev 2.0");
+        d.dist = DistType::LogNormal;
+        assert_eq!(d.to_string(), "LogNormal mu 1.0 sigma 2.0");
+        d.dist = DistType::Binomial;
+        assert_eq!(d.to_string(), "Binomial trials 1.0 probability 2.0");
         d.dist = DistType::Geometric;
-        assert_eq!(d.to_string(), "Geometric p 1.0");
-        d.dist = DistType::Weibull;
-        assert_eq!(d.to_string(), "Weibull k 1.0 lambda 2.0");
-        d.dist = DistType::GenPareto;
-        assert_eq!(d.to_string(), "GenPareto sigma 1.0 xi 2.0");
+        assert_eq!(d.to_string(), "Geometric probability 1.0");
+        d.dist = DistType::Pareto;
+        assert_eq!(d.to_string(), "Pareto scale 1.0 shape 2.0");
         d.dist = DistType::Poisson;
         assert_eq!(d.to_string(), "Poisson lambda 1.0");
+        d.dist = DistType::Weibull;
+        assert_eq!(d.to_string(), "Weibull scale 1.0 shape 2.0");
+        d.dist = DistType::Gamma;
+        assert_eq!(d.to_string(), "Gamma scale 1.0 shape 2.0");
+        d.dist = DistType::Beta;
+        assert_eq!(d.to_string(), "Beta alpha 1.0 beta 2.0");
     }
-
-    #[test]
-    fn geometric() {
-        let p = 0.33;
-        let d = Dist {
-            dist: DistType::Geometric,
-            param1: p,
-            param2: 0.0,
-            start: 0.0,
-            max: 0.0,
-        };
-
-        let mut s = 0.0;
-        for _ in 1..TESTN {
-            s += d.sample()
-        }
-        let mean = s / (TESTN as f64);
-        let expect = (1.0 - p) / p;
-        assert!(mean * TESTERR > expect);
-        assert!(mean < expect * TESTERR);
-    }
-
-    #[test]
-    fn loglogistic() {
-        let alpha = 0.5;
-        let d = Dist {
-            dist: DistType::LogLogistic,
-            param1: alpha,
-            param2: 1.0 / 4.0,
-            start: 0.0,
-            max: 0.0,
-        };
-
-        let mut s = Vec::new();
-        for _ in 1..TESTN {
-            s.push(d.sample());
-        }
-        s.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let median = s[s.len() / 2];
-        let expect = alpha;
-        assert!(median * TESTERR > expect);
-        assert!(median < expect * TESTERR);
-    }
-
-    #[test]
-    fn logistic() {
-        let mu: f64 = 5.0;
-        let d = Dist {
-            dist: DistType::Logistic,
-            param1: mu,
-            param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
-
-        let mut s = 0.0;
-        for _ in 1..TESTN {
-            s += d.sample()
-        }
-        let mean = s / TESTN as f64;
-        let expect = mu;
-        assert!(mean * TESTERR > expect);
-        assert!(mean < expect * TESTERR);
-    }
-
     #[test]
     fn none() {
         let d = Dist {
@@ -333,75 +333,9 @@ mod tests {
     }
 
     #[test]
-    fn genpareto() {
-        let sigma = 3.0;
-        let xi = 2.0;
-        let d = Dist {
-            dist: DistType::GenPareto,
-            param1: sigma,
-            param2: xi,
-            start: 0.0,
-            max: 0.0,
-        };
-
-        let mut s = Vec::new();
-        for _ in 1..TESTN {
-            s.push(d.sample());
-        }
-        s.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let median = s[s.len() / 2];
-        let base: f64 = 2.0;
-        // expect = sigma * (2^xi -1) / xi
-        let expect = sigma * ((base.powf(xi) - 1.0) / xi);
-        assert!(median * TESTERR > expect);
-        assert!(median < expect * TESTERR);
-    }
-
-    #[test]
-    fn uniform() {
-        let d = Dist {
-            dist: DistType::Uniform,
-            param1: 1.0,
-            param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
-
-        for _ in 1..TESTN {
-            let s = d.sample();
-            assert!(s >= 1.0);
-            assert!(s < 2.0);
-        }
-    }
-
-    #[test]
-    fn weibull() {
-        let k = 3.0;
-        let lambda = 2.0;
-        let d = Dist {
-            dist: DistType::Weibull,
-            param1: k,
-            param2: lambda,
-            start: 0.0,
-            max: 0.0,
-        };
-
-        let mut s = Vec::new();
-        for _ in 1..TESTN {
-            s.push(d.sample());
-        }
-        s.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let median = s[s.len() / 2];
-        // expect = lambda * (ln(2)) ^ (1/k)
-        let expect = lambda * std::f64::consts::LN_2.powf(1.0 / k);
-        assert!(median * TESTERR > expect);
-        assert!(median < expect * TESTERR);
-    }
-
-    #[test]
-    fn serialization() {
-        let d = Dist {
-            dist: DistType::LogLogistic,
+    fn serialize_all_distributions() {
+        let mut d = Dist {
+            dist: DistType::Pareto,
             param1: 123.45,
             param2: 67.89,
             start: 2.1,
@@ -411,5 +345,18 @@ mod tests {
         let s = d.serialize();
         let r = parse_dist(s).unwrap();
         assert_eq!(d.dist, r.dist);
+
+        for i in 0..100 {
+            d.dist = DistType::from(i);
+            if i > 10 {
+                // NOTE: fragile, depends on number of dists
+                assert_eq!(d.dist, DistType::None);
+            } else if i > 0 {
+                assert_ne!(d.dist, DistType::None);
+            }
+            let s = d.serialize();
+            let r = parse_dist(s).unwrap();
+            assert_eq!(d.dist, r.dist);
+        }
     }
 }
