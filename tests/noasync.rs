@@ -60,7 +60,7 @@ fn example_usage() {
 
         // Trigger the events in the framework. This takes linear time with the
         // number of events but is very fast (time should be dominated by at
-        // most two calls to sample randomness per event per machine).
+        // most four calls to sample randomness per event per machine).
         for action in f.trigger_events(&events, Instant::now()) {
             // After triggering all the events, the framework will provide zero
             // or more actions to take, up to a maximum of one action per
