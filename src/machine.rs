@@ -153,13 +153,6 @@ impl Machine {
     }
 }
 
-pub fn validate_machines(machines: Vec<Machine>) -> Result<(), Box<dyn Error>> {
-    for m in machines {
-        m.validate()?;
-    }
-    Ok(())
-}
-
 fn parse_v1_machine(buf: &[u8]) -> Result<Machine, Box<dyn Error>> {
     // note that we already read 2 bytes of version in fn parse_machine()
     if buf.len() < 4 * 8 + 1 + 2 {
