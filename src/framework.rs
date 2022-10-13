@@ -3,6 +3,7 @@ use crate::dist::DistType;
 use crate::event::*;
 use crate::machine::*;
 use std::error::Error;
+use std::fmt;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -45,18 +46,18 @@ impl TriggerEvent {
     }
 }
 
-impl ToString for TriggerEvent {
+impl fmt::Display for TriggerEvent {
     // note that we don't share the private MachineId
-    fn to_string(&self) -> String {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TriggerEvent::NonPaddingRecv { bytes_recv } => format!("rn,{}", bytes_recv),
-            TriggerEvent::PaddingRecv { bytes_recv } => format!("rp,{}", bytes_recv),
-            TriggerEvent::NonPaddingSent { bytes_sent } => format!("sn,{}", bytes_sent),
-            TriggerEvent::PaddingSent { bytes_sent, .. } => format!("sp,{}", bytes_sent),
-            TriggerEvent::BlockingBegin { .. } => "bb".to_string(),
-            TriggerEvent::BlockingEnd => "be".to_string(),
-            TriggerEvent::LimitReached { .. } => "lr".to_string(),
-            TriggerEvent::UpdateMTU { new_mtu } => format!("um,{}", new_mtu),
+            TriggerEvent::NonPaddingRecv { bytes_recv } => write!(f, "rn,{}", bytes_recv),
+            TriggerEvent::PaddingRecv { bytes_recv } => write!(f, "rp,{}", bytes_recv),
+            TriggerEvent::NonPaddingSent { bytes_sent } => write!(f, "sn,{}", bytes_sent),
+            TriggerEvent::PaddingSent { bytes_sent, .. } => write!(f, "sp,{}", bytes_sent),
+            TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
+            TriggerEvent::BlockingEnd => write!(f, "be"),
+            TriggerEvent::LimitReached { .. } => write!(f, "lr"),
+            TriggerEvent::UpdateMTU { new_mtu } => write!(f, "um,{}", new_mtu),
         }
     }
 }
