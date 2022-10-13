@@ -236,7 +236,7 @@ impl Dist {
                 let scale = self.param1;
                 let shape = self.param2;
                 // note order below in inversed from others for some reason in rand_distr
-                Gamma::new(scale, shape)
+                Gamma::new(shape, scale)
                     .unwrap()
                     .sample(&mut rand::thread_rng())
             }
