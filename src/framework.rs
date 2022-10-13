@@ -771,7 +771,7 @@ mod tests {
         // transition to the non-existing state as it makes the probability
         // matrix based on num_states
         let r = m.validate();
-        print!("{:?}", r.as_ref().err());
+        println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
         // repair state
@@ -790,7 +790,7 @@ mod tests {
         };
 
         let r = m.validate();
-        print!("{:?}", r.as_ref().err());
+        println!("{:?}", r.as_ref().err());
         assert!(r.is_ok());
 
         // invalid machine lacking state
@@ -803,7 +803,7 @@ mod tests {
             include_small_packets: true,
         };
         let r = m.validate();
-        print!("{:?}", r.as_ref().err());
+        println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
         // bad padding and blocking fractions
@@ -818,21 +818,21 @@ mod tests {
 
         m.max_padding_frac = -0.1;
         let r = m.validate();
-        print!("{:?}", r.as_ref().err());
+        println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
         m.max_padding_frac = 1.1;
         let r = m.validate();
-        print!("{:?}", r.as_ref().err());
+        println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
         m.max_padding_frac = 0.5;
 
         m.max_blocking_frac = -0.1;
         let r = m.validate();
-        print!("{:?}", r.as_ref().err());
+        println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
         m.max_blocking_frac = 1.1;
         let r = m.validate();
-        print!("{:?}", r.as_ref().err());
+        println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
         m.max_blocking_frac = 0.5;
     }
