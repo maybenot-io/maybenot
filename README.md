@@ -1,9 +1,9 @@
 # Maybenot
 
 Maybenot is a framework for traffic analysis defenses that can be used to hide
-patterns in encrypted communication protocols.
+patterns in encrypted communication.
 
-Consider encrypted comminication protocols such as TLS, QUIC, WireGuard, or Tor.
+Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or Tor.
 While the connections are encrypted, *patterns* in the encrypted communication
 may still leak information about the underlying plaintext being communicated
 over encrypted. Maybenot is a framework for creating defenses that hide such
