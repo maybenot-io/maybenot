@@ -38,9 +38,11 @@ impl FromStr for Machine {
             bail!("cannot read version")
         }
 
-        match LittleEndian::read_u16(&buf[0..2]) {
-            1 => parse_v1_machine(buf[2..].to_vec()),
-            _ => bail!("unsupported version"),
+        let (version, payload) = buf.split_at(2);
+
+        match u16::from_le_bytes(version.try_into().unwrap()) {
+            1 => parse_v1_machine(payload),
+            v => bail!("unsupported version: {}", v),
         }
     }
 }
@@ -151,14 +153,7 @@ impl Machine {
     }
 }
 
-pub fn validate_machines(machines: Vec<Machine>) -> Result<(), Box<dyn Error>> {
-    for m in machines {
-        m.validate()?;
-    }
-    Ok(())
-}
-
-fn parse_v1_machine(buf: Vec<u8>) -> Result<Machine, Box<dyn Error>> {
+fn parse_v1_machine(buf: &[u8]) -> Result<Machine, Box<dyn Error>> {
     // note that we already read 2 bytes of version in fn parse_machine()
     if buf.len() < 4 * 8 + 1 + 2 {
         bail!("not enough data for version 1 machine")
