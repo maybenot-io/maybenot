@@ -354,7 +354,7 @@ impl Framework {
     ) -> Option<Action> {
         let current = &machine.states[runtime.current_state];
 
-        if current.block.dist != DistType::None {
+        if current.action_is_block {
             Some(Action::BlockOutgoing {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
                 duration: Duration::from_micros(current.sample_block() as u64),
@@ -424,7 +424,7 @@ impl Framework {
     fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
         // either blocking or padding limits apply
-        if current.block.dist != DistType::None {
+        if current.action_is_block {
             return self.below_limit_blocking(runtime, machine);
         }
         self.below_limit_padding(runtime, machine)
@@ -550,20 +550,13 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::PaddingSent, e);
-        let s0 = State {
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 10.0,
-                param2: 10.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s0 = State::new(t, num_states);
+        s0.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 10.0,
+            param2: 10.0,
+            start: 0.0,
+            max: 0.0,
         };
 
         // state 1: go to state 0 on PaddingRecv, pad after 1 usec
@@ -571,20 +564,13 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::PaddingRecv, e);
-        let s1 = State {
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 1.0,
-                param2: 1.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s1 = State::new(t, num_states);
+        s1.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 1.0,
+            param2: 1.0,
+            start: 0.0,
+            max: 0.0,
         };
 
         // create a simple machine
@@ -742,20 +728,13 @@ mod tests {
         // invalid state transition
         e.insert(1, 1.0);
         t.insert(Event::PaddingSent, e);
-        let mut s0 = State {
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 10.0,
-                param2: 10.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s0 = State::new(t, num_states);
+        s0.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 10.0,
+            param2: 10.0,
+            start: 0.0,
+            max: 0.0,
         };
 
         // machine with broken state
@@ -847,46 +826,34 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingSent, e);
-        let s0 = State {
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 0.0,
-                param2: 0.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s0 = State::new(t, num_states);
+        s0.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 0.0,
+            param2: 0.0,
+            start: 0.0,
+            max: 0.0,
         };
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingSent, e);
-        let s1 = State {
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 1.0,
-                param2: 1.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist {
-                dist: DistType::Uniform,
-                param1: 10.0,
-                param2: 10.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s1 = State::new(t, num_states);
+        s1.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 1.0,
+            param2: 1.0,
+            start: 0.0,
+            max: 0.0,
         };
+        s1.action = Dist {
+            dist: DistType::Uniform,
+            param1: 10.0,
+            param2: 10.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s1.action_is_block = true;
 
         let m = Machine {
             allowed_padding_bytes: 1000 * 1024,
@@ -956,15 +923,8 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingRecv, e);
-        let s0 = State {
-            timeout: Dist::new(),
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
-        };
+        let s0 = State::new(t, num_states);
+
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
@@ -973,20 +933,13 @@ mod tests {
         t.insert(Event::NonPaddingSent, e.clone());
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
-        let s1 = State {
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s1 = State::new(t, num_states);
+        s1.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 2.0,
+            param2: 2.0,
+            start: 0.0,
+            max: 0.0,
         };
 
         let m = Machine {
@@ -1076,15 +1029,7 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingRecv, e);
-        let s0 = State {
-            timeout: Dist::new(),
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
-        };
+        let s0 = State::new(t, num_states);
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
@@ -1093,20 +1038,13 @@ mod tests {
         t.insert(Event::NonPaddingSent, e.clone());
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
-        let s1 = State {
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s1 = State::new(t, num_states);
+        s1.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 2.0,
+            param2: 2.0,
+            start: 0.0,
+            max: 0.0,
         };
 
         let m1 = Machine {
@@ -1232,43 +1170,30 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingRecv, e);
-        let s0 = State {
-            timeout: Dist::new(),
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
-        };
+        let s0 = State::new(t, num_states);
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::BlockingBegin, e.clone());
         t.insert(Event::BlockingEnd, e.clone());
         t.insert(Event::NonPaddingRecv, e.clone());
-        let s1 = State {
-            // block every 2us for 2us
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s1 = State::new(t, num_states);
+        // block every 2us for 2us
+        s1.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 2.0,
+            param2: 2.0,
+            start: 0.0,
+            max: 0.0,
         };
+        s1.action = Dist {
+            dist: DistType::Uniform,
+            param1: 2.0,
+            param2: 2.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s1.action_is_block = true;
 
         let m = Machine {
             allowed_padding_bytes: 0,
@@ -1364,43 +1289,30 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingRecv, e);
-        let s0 = State {
-            timeout: Dist::new(),
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
-        };
+        let s0 = State::new(t, num_states);
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::BlockingBegin, e.clone());
         t.insert(Event::BlockingEnd, e.clone());
         t.insert(Event::NonPaddingRecv, e.clone());
-        let s1 = State {
-            // block every 2us for 2us
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s1 = State::new(t, num_states);
+        // block every 2us for 2us
+        s1.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 2.0,
+            param2: 2.0,
+            start: 0.0,
+            max: 0.0,
         };
+        s1.action = Dist {
+            dist: DistType::Uniform,
+            param1: 2.0,
+            param2: 2.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s1.action_is_block = true;
 
         let m = Machine {
             allowed_padding_bytes: 0,
@@ -1495,39 +1407,25 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingSent, e);
-        let s0 = State {
-            timeout: Dist::new(),
-            size: Dist::new(),
-            limit: Dist::new(),
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
-        };
+        let s0 = State::new(t, num_states);
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::PaddingSent, e);
-        let s1 = State {
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 1.0,
-                param2: 1.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            size: Dist::new(),
-            limit: Dist {
-                dist: DistType::Uniform,
-                param1: 4.0,
-                param2: 4.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            block: Dist::new(),
-            block_overwrite: false,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s1 = State::new(t, num_states);
+        s1.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 1.0,
+            param2: 1.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s1.limit = Dist {
+            dist: DistType::Uniform,
+            param1: 4.0,
+            param2: 4.0,
+            start: 0.0,
+            max: 0.0,
         };
 
         let m = Machine {

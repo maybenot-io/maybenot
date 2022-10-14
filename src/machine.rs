@@ -118,10 +118,9 @@ impl Machine {
             }
 
             // validate distribution parameters
-            state.timeout.validate()?;
+            state.action.validate()?;
             state.limit.validate()?;
-            state.block.validate()?;
-            state.size.validate()?;
+            state.timeout.validate()?;
         }
 
         Ok(())
@@ -188,9 +187,9 @@ fn parse_v1_machine(buf: &[u8]) -> Result<Machine, Box<dyn Error>> {
     let num_states: usize = LittleEndian::read_u16(&buf[r..r + 2]) as usize;
     r += 2;
 
-    // each state has 4 distributions + 2 flags + next_state matrix
+    // each state has 3 distributions + 3 flags + next_state matrix
     let expected_state_len: usize =
-        4 * SERIALIZEDDISTSIZE + 2 + (num_states + 2) * 8 * Event::iterator().len();
+        3 * SERIALIZEDDISTSIZE + 3 + (num_states + 2) * 8 * Event::iterator().len();
     if buf[r..].len() != expected_state_len * num_states {
         bail!(format!(
             "expected {} bytes for {} states, but got {} bytes",
@@ -228,7 +227,6 @@ mod tests {
     #[test]
     fn basic_serialization() {
         // plan: manually create a machine, serialize it, parse it, and then compare
-
         let num_states = 2;
 
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -239,38 +237,27 @@ mod tests {
         e1.insert(1, 1.0);
         t.insert(Event::PaddingRecv, e0);
         t.insert(Event::LimitReached, e1);
-        let state1 = State {
-            timeout: Dist {
-                dist: DistType::Poisson,
-                param1: 1.2,
-                param2: 3.4,
-                start: 5.6,
-                max: 7.8,
-            },
-            limit: Dist {
-                dist: DistType::Pareto,
-                param1: 9.0,
-                param2: 1.2,
-                start: 3.4,
-                max: 5.6,
-            },
-            size: Dist {
-                dist: DistType::Geometric,
-                param1: 0.8,
-                param2: 9.0,
-                start: 1.2,
-                max: 3.4,
-            },
-            block: Dist {
-                dist: DistType::LogNormal,
-                param1: 5.6,
-                param2: 7.8,
-                start: 9.0,
-                max: 1.2,
-            },
-            block_overwrite: true,
-            limit_includes_nonpadding: false,
-            next_state: make_next_state(t, num_states),
+        let mut s0 = State::new(t, num_states);
+        s0.timeout = Dist {
+            dist: DistType::Poisson,
+            param1: 1.2,
+            param2: 3.4,
+            start: 5.6,
+            max: 7.8,
+        };
+        s0.limit = Dist {
+            dist: DistType::Pareto,
+            param1: 9.0,
+            param2: 1.2,
+            start: 3.4,
+            max: 5.6,
+        };
+        s0.action = Dist {
+            dist: DistType::Geometric,
+            param1: 0.8,
+            param2: 9.0,
+            start: 1.2,
+            max: 3.4,
         };
 
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -281,46 +268,36 @@ mod tests {
         e1.insert(0, 1.0);
         t.insert(Event::NonPaddingRecv, e0);
         t.insert(Event::PaddingSent, e1);
-        let state2 = State {
-            timeout: Dist {
-                dist: DistType::Uniform,
-                param1: 0.1,
-                param2: 1.2,
-                start: 3.4,
-                max: 5.6,
-            },
-            limit: Dist {
-                dist: DistType::Weibull,
-                param1: 1.2,
-                param2: 3.4,
-                start: 5.6,
-                max: 7.8,
-            },
-            size: Dist {
-                dist: DistType::Beta,
-                param1: 5.6,
-                param2: 7.8,
-                start: 9.0,
-                max: 1.2,
-            },
-            block: Dist {
-                dist: DistType::Poisson,
-                param1: 7.8,
-                param2: 9.0,
-                start: 1.2,
-                max: 3.4,
-            },
-            block_overwrite: false,
-            limit_includes_nonpadding: true,
-            next_state: make_next_state(t, num_states),
+        let mut s1 = State::new(t, num_states);
+        s1.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 0.1,
+            param2: 1.2,
+            start: 3.4,
+            max: 5.6,
         };
+        s1.limit = Dist {
+            dist: DistType::Weibull,
+            param1: 1.2,
+            param2: 3.4,
+            start: 5.6,
+            max: 7.8,
+        };
+        s1.action = Dist {
+            dist: DistType::Beta,
+            param1: 5.6,
+            param2: 7.8,
+            start: 9.0,
+            max: 1.2,
+        };
+        s1.action_is_block = true;
 
         let m = Machine {
             allowed_padding_bytes: 1000,
             max_padding_frac: 0.123,
             allowed_blocked_microsec: 2000,
             max_blocking_frac: 0.456,
-            states: vec![state1, state2],
+            states: vec![s0, s1],
             include_small_packets: true,
         };
 
@@ -332,8 +309,8 @@ mod tests {
 
     #[test]
     fn parse_v1_machine_nop() {
-        // attempt to parse a "no-op" machine from the go implementation
-        let s = "789c62642008885032c4c007fb81b219100000ffff94510132".to_string();
+        // attempt to parse an empty no-op machine (does nothing)
+        let s = "789cedca31010000000141fa9736084080bff9ace928a80003c70003".to_string();
         let m = Machine::from_str(&s).unwrap();
 
         assert_eq!(m.allowed_blocked_microsec, 0);
@@ -343,179 +320,214 @@ mod tests {
         assert_eq!(m.include_small_packets, false);
 
         assert_eq!(m.states.len(), 1);
-        assert_empty_default_state(&m.states[0]);
+        assert_eq!(m.states[0].block_overwrite, false);
+        assert_eq!(m.states[0].limit_includes_nonpadding, false);
+        assert_eq!(m.states[0].action_is_block, false);
+        assert_eq!(m.states[0].action.dist, DistType::None);
+        assert_eq!(m.states[0].action.param1, 0.0);
+        assert_eq!(m.states[0].action.param2, 0.0);
+        assert_eq!(m.states[0].action.max, 0.0);
+        assert_eq!(m.states[0].action.start, 0.0);
+        assert_eq!(m.states[0].limit.dist, DistType::None);
+        assert_eq!(m.states[0].limit.param1, 0.0);
+        assert_eq!(m.states[0].limit.param2, 0.0);
+        assert_eq!(m.states[0].limit.max, 0.0);
+        assert_eq!(m.states[0].limit.start, 0.0);
+        assert_eq!(m.states[0].timeout.dist, DistType::None);
+        assert_eq!(m.states[0].timeout.param1, 0.0);
+        assert_eq!(m.states[0].timeout.param2, 0.0);
+        assert_eq!(m.states[0].timeout.max, 0.0);
+        assert_eq!(m.states[0].timeout.start, 0.0);
 
-        assert_eq!(m.states[0].next_state.len(), 1);
-        assert_eq!(m.states[0].next_state[&Event::NonPaddingSent].len(), 3);
-        // index 0 is transition to self (state 0)
-        assert_eq!(m.states[0].next_state[&Event::NonPaddingSent][0], 0.0);
-        // index 1 is transition to STATECANCEL (state 1 after fn make_next_state())
-        assert_eq!(m.states[0].next_state[&Event::NonPaddingSent][1], 0.0);
-        // index 2 is transition to STATEEND (state 2 after fn make_next_state())
-        assert_eq!(m.states[0].next_state[&Event::NonPaddingSent][2], 1.0);
+        assert_eq!(m.states[0].next_state.len(), 0);
     }
 
     #[test]
-    fn parse_v1_machine_larger() {
-        // attempt to parse a much larger machine, based on an early
-        // constant-rate client prototype (not documented here)
-        let s = "789c62642008d8092b1920f0c17ea05d800a069b7b46013a2022b9d3cc9686163d473a3b64d881d11c36d400b5626c34e647c1e000a3297a140c2f309aa247012a80354f61314a9b9825c29641de4e1ee9297ef0fb9f1a2919cd8c82e90e5472dc2002a375c0600780000000ffff67d71a77".to_string();
-        let m = Machine::from_str(&s).unwrap();
+    fn parse_v1_machine_padding() {
+        // make a 1-state padding machine, serialize, and compare
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::PaddingSent, e);
+        let mut s0 = State::new(t, 1);
+        s0.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 1.2,
+            param2: 3.4,
+            start: 5.6,
+            max: 7.8,
+        };
+        s0.action = Dist {
+            dist: DistType::Poisson,
+            param1: 0.5,
+            param2: 0.0,
+            start: 1.2,
+            max: 3.4,
+        };
+        let m = Machine {
+            allowed_padding_bytes: 1000,
+            max_padding_frac: 0.123,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0],
+            include_small_packets: false,
+        };
+        let s = m.serialize();
+        println!("{}", s);
+        let m_parsed = Machine::from_str(&s).unwrap();
+        assert_eq!(m, m_parsed);
 
-        assert_eq!(m.allowed_blocked_microsec, 0);
-        assert_eq!(m.allowed_padding_bytes, 0);
-        assert_eq!(m.max_blocking_frac, 0.0);
-        assert_eq!(m.max_padding_frac, 0.0);
-        assert_eq!(m.include_small_packets, false);
-        assert_eq!(m.states.len(), 7);
-
-        // the machine has 7 states
-        let num_states: usize = 7;
-
-        // state 0
-        assert_empty_default_state(&m.states[0]);
-        assert_eq!(m.states[0].next_state.len(), 2);
-        assert_eq!(
-            m.states[0].next_state[&Event::NonPaddingSent].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[0].next_state[&Event::NonPaddingSent][1], 1.0);
-        assert_eq!(
-            m.states[0].next_state[&Event::NonPaddingRecv].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[0].next_state[&Event::NonPaddingRecv][1], 1.0);
-
-        // state 1
-        assert_eq!(m.states[1].next_state.len(), 1);
-        assert_eq!(
-            m.states[1].next_state[&Event::BlockingBegin].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[1].next_state[&Event::BlockingBegin][2], 1.0);
-        assert_eq!(m.states[1].timeout.dist, DistType::Uniform);
-        assert_eq!(m.states[1].timeout.param1, 0.0);
-        assert_eq!(m.states[1].timeout.param2, 0.0);
-        assert_eq!(m.states[1].timeout.max, 0.0);
-        assert_eq!(m.states[1].timeout.start, 0.0);
-        assert_eq!(m.states[1].block.dist, DistType::Uniform);
-        assert_eq!(m.states[1].block.param1, 0.0);
-        assert_eq!(m.states[1].block.param2, 0.0);
-        assert_eq!(m.states[1].block.max, 0.0);
-        assert_eq!(m.states[1].block.start, 1000.0 * 1000.0);
-
-        // state 2
-        assert_empty_default_state(&m.states[2]);
-        assert_eq!(m.states[2].next_state.len(), 2);
-        assert_eq!(
-            m.states[2].next_state[&Event::NonPaddingRecv].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[2].next_state[&Event::NonPaddingRecv][3], 1.0);
-        assert_eq!(
-            m.states[2].next_state[&Event::PaddingRecv].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[2].next_state[&Event::PaddingRecv][3], 1.0);
-
-        // state 3
-        assert_empty_default_state(&m.states[3]);
-        assert_eq!(m.states[3].next_state.len(), 2);
-        assert_eq!(
-            m.states[3].next_state[&Event::NonPaddingRecv].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[3].next_state[&Event::NonPaddingRecv][4], 1.0);
-        assert_eq!(
-            m.states[3].next_state[&Event::PaddingRecv].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[3].next_state[&Event::PaddingRecv][4], 1.0);
-
-        // state 4
-        assert_empty_default_state(&m.states[4]);
-        assert_eq!(m.states[4].next_state.len(), 2);
-        assert_eq!(
-            m.states[4].next_state[&Event::NonPaddingRecv].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[4].next_state[&Event::NonPaddingRecv][5], 1.0);
-        assert_eq!(
-            m.states[4].next_state[&Event::PaddingRecv].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[4].next_state[&Event::PaddingRecv][5], 1.0);
-
-        // state 5
-        assert_eq!(m.states[5].next_state.len(), 2);
-        assert_eq!(
-            m.states[5].next_state[&Event::NonPaddingSent].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[5].next_state[&Event::NonPaddingSent][1], 1.0);
-        assert_eq!(
-            m.states[5].next_state[&Event::BlockingEnd].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[5].next_state[&Event::BlockingEnd][6], 1.0);
-        assert_eq!(m.states[5].timeout.dist, DistType::Uniform);
-        assert_eq!(m.states[5].timeout.param1, 1.0);
-        assert_eq!(m.states[5].timeout.param2, 1.0);
-        assert_eq!(m.states[5].timeout.max, 0.0);
-        assert_eq!(m.states[5].timeout.start, 0.0);
-        assert_eq!(m.states[5].block.dist, DistType::Uniform);
-        assert_eq!(m.states[5].block.param1, 1.0);
-        assert_eq!(m.states[5].block.param2, 1.0);
-        assert_eq!(m.states[5].block.max, 0.0);
-        assert_eq!(m.states[5].block.start, 0.0);
-        assert_eq!(m.states[5].block_overwrite, true);
-
-        // state 6
-        assert_eq!(m.states[6].next_state.len(), 2);
-        assert_eq!(
-            m.states[6].next_state[&Event::NonPaddingSent].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[6].next_state[&Event::NonPaddingSent][1], 1.0);
-        assert_eq!(
-            m.states[6].next_state[&Event::PaddingSent].len(),
-            num_states + 2
-        );
-        assert_eq!(m.states[6].next_state[&Event::PaddingSent][1], 1.0);
-        assert_eq!(m.states[6].timeout.dist, DistType::Uniform);
-        assert_eq!(m.states[6].timeout.param1, 1.0);
-        assert_eq!(m.states[6].timeout.param2, 1.0);
-        assert_eq!(m.states[6].timeout.max, 0.0);
-        assert_eq!(m.states[6].timeout.start, 0.0);
-        assert_eq!(m.states[6].size.dist, DistType::Uniform);
-        assert_eq!(m.states[6].size.param1, 1.0);
-        assert_eq!(m.states[6].size.param2, 1500.0);
-        assert_eq!(m.states[6].size.max, 0.0);
-        assert_eq!(m.states[6].size.start, 0.0);
+        // add hardcoded assert
+        let hardcoded = "789cbdcebb0d80201006e0bb5858d8db3a8403c034c6dada25dcc40d5cc59286848405f8b9828450000d5f71b947ee724c6622f15ee763ef4f21cd31cd88d19f86bbf00a01168d5605173b8758350ad81a6e7472e9dd5102920813d3".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
     }
 
-    fn assert_empty_default_state(s: &State) {
-        assert_eq!(s.block_overwrite, false);
-        assert_eq!(s.limit_includes_nonpadding, false);
-        assert_eq!(s.block.dist, DistType::None);
-        assert_eq!(s.block.param1, 0.0);
-        assert_eq!(s.block.param2, 0.0);
-        assert_eq!(s.block.max, 0.0);
-        assert_eq!(s.block.start, 0.0);
-        assert_eq!(s.limit.dist, DistType::None);
-        assert_eq!(s.limit.param1, 0.0);
-        assert_eq!(s.limit.param2, 0.0);
-        assert_eq!(s.limit.max, 0.0);
-        assert_eq!(s.limit.start, 0.0);
-        assert_eq!(s.timeout.dist, DistType::None);
-        assert_eq!(s.timeout.param1, 0.0);
-        assert_eq!(s.timeout.param2, 0.0);
-        assert_eq!(s.timeout.max, 0.0);
-        assert_eq!(s.timeout.start, 0.0);
-        assert_eq!(s.size.dist, DistType::None);
-        assert_eq!(s.size.param1, 0.0);
-        assert_eq!(s.size.param2, 0.0);
-        assert_eq!(s.size.max, 0.0);
-        assert_eq!(s.size.start, 0.0);
+    #[test]
+    fn parse_v1_machine_blocking() {
+        // make a 1-state blocking machine, serialize, and compare
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::BlockingEnd, e);
+        let mut s0 = State::new(t, 1);
+        s0.timeout = Dist {
+            dist: DistType::Pareto,
+            param1: 1.2,
+            param2: 3.4,
+            start: 5.6,
+            max: 7.8,
+        };
+        s0.action = Dist {
+            dist: DistType::Geometric,
+            param1: 0.3,
+            param2: 0.7,
+            start: 3.4,
+            max: 7.9,
+        };
+        s0.action_is_block = true;
+        let m = Machine {
+            allowed_padding_bytes: 0,
+            max_padding_frac: 0.0,
+            allowed_blocked_microsec: 100000,
+            max_blocking_frac: 0.9999,
+            states: vec![s0],
+            include_small_packets: true,
+        };
+        let s = m.serialize();
+        println!("{}", s);
+        let m_parsed = Machine::from_str(&s).unwrap();
+        assert_eq!(m, m_parsed);
+
+        // add hardcoded assert
+        let hardcoded = "789cc5cda11180300c05d04480c123e9061806482493300a3b80c231103b7038b86300f8b45c454d45459fc85d72c90f536819ddac598fbe7d4e61a6823a6b93c1da050d543a4f1fa3d88f28ff8cdbdf22086a450346dddb8c2e4149f202ecef1a22".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
+    }
+
+    #[test]
+    fn parse_v1_machine_mixed() {
+        // make a 2-state mixed machine, serialize, and compare
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::BlockingEnd, e);
+        let mut s0 = State::new(t, 2);
+        s0.timeout = Dist {
+            dist: DistType::Pareto,
+            param1: 1.2,
+            param2: 3.4,
+            start: 5.6,
+            max: 7.8,
+        };
+        s0.action = Dist {
+            dist: DistType::Geometric,
+            param1: 0.3,
+            param2: 0.7,
+            start: 3.4,
+            max: 7.9,
+        };
+        s0.action_is_block = true;
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::PaddingSent, e);
+        let mut s1 = State::new(t, 2);
+        s1.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 1.2,
+            param2: 3.4,
+            start: 5.6,
+            max: 7.8,
+        };
+        s1.action = Dist {
+            dist: DistType::Poisson,
+            param1: 0.5,
+            param2: 0.0,
+            start: 1.2,
+            max: 3.4,
+        };
+        let m = Machine {
+            allowed_padding_bytes: 0,
+            max_padding_frac: 0.0,
+            allowed_blocked_microsec: 100000,
+            max_blocking_frac: 0.9999,
+            states: vec![s0, s1],
+            include_small_packets: true,
+        };
+        let s = m.serialize();
+        println!("{}", s);
+        let m_parsed = Machine::from_str(&s).unwrap();
+        assert_eq!(m, m_parsed);
+
+        // add hardcoded assert
+        let hardcoded = "789cd5d0b10980301005d044500b7b4bb3818d03e44a27711477d0cace815cc04aec141c407f1249408b3441f0410239ee2ef0397b1a5a532bc6b52ecf4df288c5acd226d9688bc40332ea3b4510fa3d927bc76167b10872c20304996f7f6497b8824a7194d96e4632e04243c983bf669032b8a0d1f48df00185720150642886".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
+    }
+
+    #[test]
+    fn parse_v1_machine_100_states() {
+        // make a machine with 100 states, serialize, and compare
+        let num_states = 100;
+        let mut states: Vec<State> = vec![];
+        for i in 0..num_states {
+            let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+            let mut e: HashMap<usize, f64> = HashMap::new();
+            e.insert(i, 1.0);
+            t.insert(Event::PaddingSent, e);
+            let mut s = State::new(t,num_states);
+            s.timeout = Dist {
+                dist: DistType::Uniform,
+                param1: 1.2,
+                param2: 3.4,
+                start: 5.6,
+                max: 7.8,
+            };
+            s.action = Dist {
+                dist: DistType::Poisson,
+                param1: 0.5,
+                param2: 0.0,
+                start: 1.2,
+                max: 3.4,
+            };
+            states.push(s);
+        }
+        let m = Machine {
+            allowed_padding_bytes: 0,
+            max_padding_frac: 0.0,
+            allowed_blocked_microsec: 100000,
+            max_blocking_frac: 0.9999,
+            states,
+            include_small_packets: true,
+        };
+        let s = m.serialize();
+        println!("{}", s);
+        let m_parsed = Machine::from_str(&s).unwrap();
+        assert_eq!(m, m_parsed);
+
+        let hardcoded = "789cedd93b6e14411080613b222027841b90708075c8411047e11c645c8b900c240e00e33558f67a1fb3f3e8e9aafabea0a52aa93b6ee9bfbd39f4f5cbc3eeedb71f1fdffff9b9bbfd74f36a18ef7ddf0dc7de87bddfbbe118bcbe1b5617dcbeb8f379efcddd300cde8d78030080267e3d7efb00000080f8841e008092041f000000c840e80100284df001000080c8841e000006820f0000004424f40000f084e00300000091083d00001c21f80000004004420f000067083e000000d033a107008011041f000000e891d00300c015041f000000e889d00300c004820f000000f440e801006006c107000000b624f40000b000c107000000b620f40000b020c1070000005a127a00005881e0030000002d083d0000ac48f00100008035093d00003420f8000000c01a841e00001a127c0000006049420f00001b107c0000006009420f00001b127c000000600ea10700800e083e0000003085d003004047041f000000b886d003004087041f0000001843e80100a063820f0000009c23f400001080e003000000c7083d00000422f8000000c053420f000001093e000000704fe801002030c107000080da841e000012107c000000a849e801002011c1070000805a841e000012127c000000a841e801002031c107000080dc841e00000a107c000000c849e80100a010c1070000805c841e00000a127c000000c841e80100a030c107000080d8841e0000107c000000084ae801008047820f000000b1083d0000f082e0030000400c420f00009c24f8000000d037a10700002e127c000000e893d0030000a3093e000000f445e8010080ab093e000000f441e8010080c9041f000000b625f40000c06c820f000000db107a00006031820f0000006d093d0000b038c10700008036841e0000588de0030000c0ba841e0000589de0030000c03a841e00006846f00100006059420f00003427f8000000b00ca10700003623f8000000308fd00300009b137c0000009846e80100806e083e0000005c47e8010080ee083e0000008c23f4000040b7041f000000ce137a0000a07b820f000000c7093d00001086e0030000c073420f00008423f8000000f040e8010080b0041f000080ea841e0000084ff0010000a84ae801008034041f0000806a841e00004847f0010000a842e8010080b4041f000080ec841e0000484ff0010000c84ae801008032041f0000806c841e00002847f0010000c842e8010080b2041f000080e8841e0000284ff0010000884ae8010000fe117c000000a2117a00008003820f00004014420f00007082e0030000d03ba1070000b840f0010000e895d00300008c24f8000000f446e8010000ae24f8000000f442e801000026127c000000b626f400000033093e0000005b117a00008085083e000000ad093d0000c0c2041f00008056841e00006025820f0000c0da841e00006065820f0000c05a841e0000a011c10700006069420f0000d098e0030000b014a1070000d888e00300003097d00300006c4cf0010000984ae80100003a21f80000005c4be80100003a23f80000008c25f40000009d127c0000002e117a000080ce093e000000a7083d00004010820f0000c021a10700000846f0010000f84fe801000082127c000000841e00002038c1070000a84be801000092107c0000807a841e00002019c1070000a843e801000092127c000080fc841e00002039c1070000c84be80100008a107c0000807c841e0000a018c1070000c843e80100008a127c000080f8841e0000a038c107000088eb2fd70ea4d5".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
     }
 }

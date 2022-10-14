@@ -12,15 +12,28 @@ use simple_error::bail;
 #[derive(PartialEq, Debug, Clone)]
 pub struct State {
     pub timeout: Dist,
-    pub limit: Dist,
-    pub size: Dist,
-    pub block: Dist,
+    pub action: Dist,
+    pub action_is_block: bool,
     pub block_overwrite: bool,
+    pub limit: Dist,
     pub limit_includes_nonpadding: bool,
     pub next_state: HashMap<Event, Vec<f64>>,
 }
 
 impl State {
+    /// Create a new State
+    pub fn new(t: HashMap<Event, HashMap<usize, f64>>, num_states: usize) -> Self {
+        State {
+            timeout: Dist::new(),
+            action: Dist::new(),
+            action_is_block: false,
+            block_overwrite: false,
+            limit: Dist::new(),
+            limit_includes_nonpadding: false,
+            next_state: make_next_state(t, num_states),
+        }
+    }
+
     pub fn sample_timeout(&self) -> f64 {
         self.timeout.sample().min(MAXSAMPLEDTIMEOUT)
     }
@@ -33,11 +46,10 @@ impl State {
     }
 
     pub fn sample_size(&self, mtu: u64) -> u64 {
-        if self.size.dist == DistType::None {
+        if self.action.dist == DistType::None {
             return mtu;
         }
-
-        let s = self.size.sample().round() as u64;
+        let s = self.action.sample().round() as u64;
         if s > mtu {
             return mtu;
         }
@@ -49,25 +61,29 @@ impl State {
     }
 
     pub fn sample_block(&self) -> f64 {
-        self.block.sample().min(MAXSAMPLEDBLOCK)
+        self.action.sample().min(MAXSAMPLEDBLOCK)
     }
 
     pub fn serialize(&self, num_states: usize) -> Vec<u8> {
         let mut wtr = vec![];
 
         // distributions
-        wtr.write_all(&self.timeout.serialize()).unwrap();
+        wtr.write_all(&self.action.serialize()).unwrap();
         wtr.write_all(&self.limit.serialize()).unwrap();
-        wtr.write_all(&self.size.serialize()).unwrap();
-        wtr.write_all(&self.block.serialize()).unwrap();
+        wtr.write_all(&self.timeout.serialize()).unwrap();
 
         // flags
-        if self.limit_includes_nonpadding {
+        if self.action_is_block {
             wtr.write_u8(1).unwrap();
         } else {
             wtr.write_u8(0).unwrap();
         }
         if self.block_overwrite {
+            wtr.write_u8(1).unwrap();
+        } else {
+            wtr.write_u8(0).unwrap();
+        }
+        if self.limit_includes_nonpadding {
             wtr.write_u8(1).unwrap();
         } else {
             wtr.write_u8(0).unwrap();
@@ -91,26 +107,26 @@ impl State {
 }
 
 pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error>> {
-    // len: 4 distributions + 2 flag + next_state
-    if buf.len() < 4 * SERIALIZEDDISTSIZE + 2 + (num_states + 2) * 8 * Event::iterator().len() {
+    // len: 3 distributions + 3 flags + next_state
+    if buf.len() < 3 * SERIALIZEDDISTSIZE + 3 + (num_states + 2) * 8 * Event::iterator().len() {
         bail!("too small")
     }
 
     // distributions
     let mut r: usize = 0;
-    let timeout = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
+    let action = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
     r += SERIALIZEDDISTSIZE;
     let limit = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
     r += SERIALIZEDDISTSIZE;
-    let size = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
-    r += SERIALIZEDDISTSIZE;
-    let block = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
+    let timeout = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
     r += SERIALIZEDDISTSIZE;
 
     // flags
-    let limit_includes_nonpadding: bool = buf[r] == 1;
+    let action_is_block: bool = buf[r] == 1;
     r += 1;
     let block_overwrite: bool = buf[r] == 1;
+    r += 1;
+    let limit_includes_nonpadding: bool = buf[r] == 1;
     r += 1;
 
     // next state
@@ -133,13 +149,13 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     }
 
     Ok(State {
-        timeout: timeout,
-        limit: limit,
-        size: size,
-        block: block,
-        block_overwrite: block_overwrite,
-        limit_includes_nonpadding: limit_includes_nonpadding,
-        next_state: next_state,
+        timeout,
+        limit,
+        action,
+        action_is_block,
+        block_overwrite,
+        limit_includes_nonpadding,
+        next_state,
     })
 }
 
@@ -220,20 +236,14 @@ mod tests {
                 start: 3.4,
                 max: 5.6,
             },
-            size: Dist {
+            action: Dist {
                 dist: DistType::Geometric,
                 param1: 7.8,
                 param2: 9.0,
                 start: 1.2,
                 max: 3.4,
             },
-            block: Dist {
-                dist: DistType::LogNormal,
-                param1: 5.6,
-                param2: 7.8,
-                start: 9.0,
-                max: 1.2,
-            },
+            action_is_block: false,
             block_overwrite: true,
             limit_includes_nonpadding: false,
             next_state: make_next_state(t, num_states),

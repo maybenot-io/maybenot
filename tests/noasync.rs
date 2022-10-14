@@ -23,7 +23,7 @@ fn example_usage() {
     // the same machines, then share the same vector across framework instances.
     // All runtime information is allocated internally in the framework without
     // modifying the machines.
-    let s = "789c62642008885032c4c007fb81b219100000ffff94510132".to_string();
+    let s = "789cedca31010000000141fa9736084080bff9ace928a80003c70003".to_string();
     // machines will error if invalid
     let m = Machine::from_str(&s).unwrap();
 
