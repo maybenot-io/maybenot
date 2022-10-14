@@ -197,14 +197,16 @@ fn parse_v1_machine(buf: &[u8]) -> Result<Machine, Box<dyn Error>> {
         states.push(s);
     }
 
-    Ok(Machine {
+    let m = Machine {
         allowed_padding_bytes: allowed_padding_bytes,
         max_padding_frac: max_padding_frac,
         allowed_blocked_microsec: allowed_blocked_microsec,
         max_blocking_frac: max_blocking_frac,
         include_small_packets: include_small_packets,
         states: states,
-    })
+    };
+    m.validate()?;
+    Ok(m)
 }
 
 #[cfg(test)]
