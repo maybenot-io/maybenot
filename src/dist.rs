@@ -1,7 +1,8 @@
 use byteorder::ByteOrder;
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand_distr::{
-    Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, Weibull,
+    Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, Uniform,
+    Weibull,
 };
 use std::error::Error;
 use std::fmt;
@@ -10,6 +11,7 @@ use simple_error::bail;
 
 use crate::constants::*;
 
+/// DistType represents the type of a Dist
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u16)]
 pub enum DistType {
@@ -73,6 +75,7 @@ impl Into<u16> for DistType {
     }
 }
 
+/// A distribution used in a State
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Dist {
     pub dist: DistType,
@@ -158,6 +161,7 @@ impl fmt::Display for Dist {
 }
 
 impl Dist {
+    /// Create a new None dist
     pub fn new() -> Self {
         Dist {
             dist: DistType::None,
@@ -166,6 +170,64 @@ impl Dist {
             start: 0.0,
             max: 0.0,
         }
+    }
+
+    /// Validate that param1 and param2 of the given DistType is valid
+    pub fn validate(&self) -> Result<(), Box<dyn Error>> {
+        match &self.dist {
+            DistType::None => {}
+            DistType::Uniform => {
+                if self.param1 > self.param2 {
+                    bail!("for Uniform dist, got param2 > param1")
+                }
+            }
+            DistType::Normal => {
+                let mean = self.param1;
+                let stdev = self.param2;
+                Normal::new(mean, stdev)?;
+            }
+            DistType::LogNormal => {
+                let mu = self.param1;
+                let sigma = self.param2;
+                LogNormal::new(mu, sigma)?;
+            }
+            DistType::Binomial => {
+                let trials = self.param1 as u64;
+                let probability = self.param2;
+                Binomial::new(trials, probability)?;
+            }
+            DistType::Geometric => {
+                let probability = self.param1;
+                Geometric::new(probability)?;
+            }
+            DistType::Pareto => {
+                let scale = self.param1;
+                let shape = self.param2;
+                Pareto::new(scale, shape)?;
+            }
+            DistType::Poisson => {
+                let lambda = self.param1;
+                Poisson::new(lambda)?;
+            }
+            DistType::Weibull => {
+                let scale = self.param1;
+                let shape = self.param2;
+                Weibull::new(scale, shape)?;
+            }
+            DistType::Gamma => {
+                let scale = self.param1;
+                let shape = self.param2;
+                // note order below in inversed from others for some reason in rand_distr
+                Gamma::new(shape, scale)?;
+            }
+            DistType::Beta => {
+                let alpha = self.param1;
+                let beta = self.param2;
+                Beta::new(alpha, beta)?;
+            }
+        };
+
+        Ok(())
     }
 
     pub fn sample(self) -> f64 {
@@ -183,7 +245,12 @@ impl Dist {
             DistType::Uniform => {
                 let min = self.param1;
                 let max = self.param2;
-                min + rand::random::<f64>() * (max - min)
+                // special common case for handcrafted machines, also not
+                // supported by rand_dist::Uniform
+                if min == max {
+                    return min;
+                }
+                Uniform::new(min, max).sample(&mut rand::thread_rng())
             }
             DistType::Normal => {
                 let mean = self.param1;

@@ -57,6 +57,7 @@ impl Machine {
     }
 
     pub fn validate(&self) -> Result<(), Box<dyn Error>> {
+        // sane limits
         if self.max_padding_frac < 0.0 || self.max_padding_frac > 1.0 {
             bail!(
                 "max_padding_frac has to be [0.0, 1.0], got {}",
@@ -70,6 +71,7 @@ impl Machine {
             )
         }
 
+        // sane number of states
         if self.states.len() == 0 {
             bail!("a machine must have at least one state")
         }
@@ -81,7 +83,9 @@ impl Machine {
             )
         }
 
+        // check each state
         for state in &self.states {
+            // validate transitions
             for next in &state.next_state {
                 if next.1.len() != self.states.len() + 2 {
                     bail!(
@@ -112,6 +116,12 @@ impl Machine {
                     )
                 }
             }
+
+            // validate distribution parameters
+            state.timeout.validate()?;
+            state.limit.validate()?;
+            state.block.validate()?;
+            state.size.validate()?;
         }
 
         Ok(())
@@ -246,7 +256,7 @@ mod tests {
             },
             size: Dist {
                 dist: DistType::Geometric,
-                param1: 7.8,
+                param1: 0.8,
                 param2: 9.0,
                 start: 1.2,
                 max: 3.4,
@@ -274,7 +284,7 @@ mod tests {
         let state2 = State {
             timeout: Dist {
                 dist: DistType::Uniform,
-                param1: 9.0,
+                param1: 0.1,
                 param2: 1.2,
                 start: 3.4,
                 max: 5.6,
