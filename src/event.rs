@@ -1,26 +1,28 @@
+//! Events for [`State`](crate::state) transitions.
+
 use self::Event::*;
 use std::fmt;
 use std::hash::Hash;
 use std::slice::Iter;
 
-// Event is a framework event
+/// An Event may trigger a [`State`](crate::state) transition.
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
 pub enum Event {
-    // NonPaddingRecv is when we received non-padding
+    /// NonPaddingRecv is when we received non-padding.
     NonPaddingRecv,
-    // PaddingRecv is when we received padding
+    /// PaddingRecv is when we received padding.
     PaddingRecv,
-    // NonPaddingSent is when we sent non-padding
+    /// NonPaddingSent is when we sent non-padding.
     NonPaddingSent,
-    // PaddingSent is when we sent padding
+    /// PaddingSent is when we sent padding.
     PaddingSent,
-    // BlockingBegin is when blocking started
+    /// BlockingBegin is when blocking started.
     BlockingBegin,
-    // BlockingEnd is when blocking ended
+    /// BlockingEnd is when blocking ended.
     BlockingEnd,
-    // LimitReached is when a limit in a state is reached (internal)
+    /// LimitReached is when a limit in a state is reached (internal).
     LimitReached,
-    // UpdateMTU is when the MTU of the protected connection was updated
+    /// UpdateMTU is when the MTU of the protected connection was updated.
     UpdateMTU,
 }
 

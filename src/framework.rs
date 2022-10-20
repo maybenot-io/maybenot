@@ -1,3 +1,145 @@
+//! Maybenot is a framework for traffic analysis defenses that can be used to
+//! hide patterns in encrypted communication.
+//!
+//! Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or
+//! Tor. While the connections are encrypted, *patterns* in the encrypted
+//! communication may still leak information about the underlying plaintext
+//! being communicated over encrypted. Maybenot is a framework for creating
+//! defenses that hide such patterns.
+//!
+//!
+//! ## Example usage
+//! ```
+//! use maybenot::{
+//! framework::{Action, Framework, TriggerEvent},
+//! machine::Machine,
+//! };
+//! use std::{str::FromStr, time::Instant};
+//! // This is a large example usage of the maybenot framework. Some parts are a
+//! // bit odd due to avoiding everything async but should convey the general
+//! // idea.
+//!
+//! // Parse machine, this is a "no-op" machine that does nothing. Typically,
+//! // you should expect to get one or more serialized machines, not build them
+//! // from scratch. The framework takes a vector with zero or more machines as
+//! // input when created. To add or remove a machine, just recreate the
+//! // framework. If you expect to create many instances of the framework for
+//! // the same machines, then share the same vector across framework instances.
+//! // All runtime information is allocated internally in the framework without
+//! // modifying the machines.
+//! let s = "789cedca31010000000141fa9736084080bff9ace928a80003c70003".to_string();
+//! // machines will error if invalid
+//! let m = Machine::from_str(&s).unwrap();
+//!
+//! // Create the framework, a lightweight operation, with the following
+//! // parameters:
+//! // - A vector of zero or more machines.
+//! // - Max fractions prevent machines from causing too much overhead: note
+//! // that machines can be defined to be allowed a fixed amount of
+//! // padding/blocking, bypassing these limits until having used up their
+//! // allowed budgets. This means that it is possible to create machines that
+//! // trigger actions to block outgoing traffic indefinitely and/or send a lot
+//! // of outgoing traffic.
+//! // - The current MTU of the link being protected. It can be updated later by
+//! // triggering TriggerEvent::UpdateMTU { new_mtu: u16 }.
+//! // - The current time. For normal use, just provide the current time as
+//! // below. This is exposed mainly for testing purposes (can also be used to
+//! // make the creation of some odd types of machines easier).
+//! //
+//! // The framework validates all machines (like fn parse_machine() above) so
+//! // it can error out.
+//! let mut f = Framework::new(vec![m], 0.0, 0.0, 1420, Instant::now()).unwrap();
+//!
+//! // Below is the main loop for operating the framework. This should run for
+//! // as long as the underlying connection the framework is attached to can
+//! // communicate (user or protocol-specific data, depending on what is being
+//! // defended).
+//! loop {
+//!     // Wait for one or more new events (e.g., on a channel) that should be
+//!     // triggered in the framework. Below we just set one example event. How
+//!     // you wait and collect events is likely going to be a bottleneck. If
+//!     // you have to consider dropping events, it is better to drop older
+//!     // events than newer.
+//!     let events = [TriggerEvent::NonPaddingSent { bytes_sent: 1420 }];
+//!
+//!     // Trigger the events in the framework. This takes linear time with the
+//!     // number of events but is very fast (time should be dominated by at
+//!     // most four calls to sample randomness per event per machine).
+//!     for action in f.trigger_events(&events, Instant::now()) {
+//!         // After triggering all the events, the framework will provide zero
+//!         // or more actions to take, up to a maximum of one action per
+//!         // machine (regardless of the number of events). It is your
+//!         // responsibility to perform those actions according to the
+//!         // specification. To do so, you will need up to one timer per
+//!         // machine. The machine identifier (machine in each Action) uniquely
+//!         // and deterministically maps to a single machine running in the
+//!         // framework (so suitable as a key for a data structure storing your
+//!         // timers, e.g., a HashMap<MachineId, SomeTimerDataStructure>).
+//!         match action {
+//!             Action::Cancel { machine: _ } => {
+//!                 // If any active pending timer for this machine, cancel it.
+//!             }
+//!             Action::InjectPadding {
+//!                 timeout: _,
+//!                 size: _,
+//!                 machine: _,
+//!             } => {
+//!                 // Set the timer with the specified timeout. On expiry, do
+//!                 // the following (all of nothing):
+//!                 // 1. Send size padding.
+//!                 // 2. Add TriggerEvent::PaddingSent{ bytes_sent: size,
+//!                 //    machine: machine } to be triggered next loop
+//!                 //    iteration.
+//!                 //
+//!                 // Above, "send" should mimic as close as possible real
+//!                 // application data being added for transport. Also, note
+//!                 // that if there already is a timer for an earlier action
+//!                 // for the machine index in question, replace it. This will
+//!                 // happen very frequently so make effort to make it
+//!                 // efficient (typically, efficient machines will always have
+//!                 // something scheduled but try to minimize actual padding
+//!                 // sent, i.e., expired timers).
+//!             }
+//!             Action::BlockOutgoing {
+//!                 timeout: _,
+//!                 duration: _,
+//!                 overwrite: _,
+//!                 machine: _,
+//!             } => {
+//!                 // Set the timer with the specified timeout, overwriting any
+//!                 // existing action timer for the machine (be it to block or
+//!                 // inject). On expiry, do the following (all or nothing):
+//!                 // 1. If no blocking is currently taking place (globally
+//!                 //    across all machines, so for this instance of the
+//!                 //    framework), start blocking all outgoing traffic for
+//!                 //    the specified duration. If blocking is already taking
+//!                 //    place (due to any machine), there are two cases. If
+//!                 //    overwrite is true, replace the existing blocking
+//!                 //    duration with the specified duration in this action.
+//!                 //    If overwrite is false, pick the longest duration of
+//!                 //    the specified duration and the *remaining* duration to
+//!                 //    block already in place.
+//!                 // 2. Add TriggerEvent::BlockingBegin { machine: machine }
+//!                 //    to be triggered next loop iteration (regardless of
+//!                 //    logic outcome in 1, from the point of view of the
+//!                 //    machine, blocking is now taking place).
+//!                 //
+//!                 // Note that blocking is global across all machines, since
+//!                 // the intent is to block all outgoing traffic. Further, you
+//!                 // MUST ensure that when blocking ends, you add
+//!                 // TriggerEvent::BlockingEnd to be triggered next loop
+//!                 // iteration.
+//!             }
+//!         }
+//!     }
+//!
+//!     // All done, continue the loop. We break below for the example test to
+//!     // not get stuck.
+//!     break;
+//! }
+//! ```
+use simple_error::bail;
+
 use crate::constants::*;
 use crate::dist::DistType;
 use crate::event::*;
@@ -7,31 +149,34 @@ use std::fmt;
 use std::time::Duration;
 use std::time::Instant;
 
-/// An opaque token representing one padding machine running inside a maybenot framework.
+/// An opaque token representing one machine running inside the framework.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct MachineId(usize);
 
+/// Represents an event to be triggered in the framework.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TriggerEvent {
-    // NonPaddingRecv is when we received non-padding
+    /// Received non-padding bytes.
     NonPaddingRecv { bytes_recv: u16 },
-    // PaddingRecv is when we received padding
+    /// Received padding bytes.
     PaddingRecv { bytes_recv: u16 },
-    // NonPaddingSent is when we sent non-padding
+    /// Sent non-padding bytes.
     NonPaddingSent { bytes_sent: u16 },
-    // PaddingSent is when we sent padding
+    /// Sent padding bytes.
     PaddingSent { bytes_sent: u16, machine: MachineId },
-    // BlockingBegin is when blocking started
+    /// Blocking of outgoing traffic started by the action from a machine.
     BlockingBegin { machine: MachineId },
-    // BlockingEnd is when blocking ended
+    /// Blocking of outgoing traffic stopped.
     BlockingEnd,
-    // LimitReached an internal event for when a state has used up its limit
+    /// An event triggered internally by the framework when a state has used up
+    /// its limit.
     LimitReached { machine: MachineId },
-    // UpdateMTU is when the MTU of the protected connection was updated
+    /// The MTU of the protected connection was updated.
     UpdateMTU { new_mtu: u16 },
 }
 
 impl TriggerEvent {
+    /// Checks if the [`TriggerEvent`] is a particular [`Event`].
     pub fn is_event(&self, e: Event) -> bool {
         match self {
             TriggerEvent::NonPaddingRecv { .. } => e == Event::NonPaddingRecv,
@@ -62,16 +207,23 @@ impl fmt::Display for TriggerEvent {
     }
 }
 
+/// The action to be taken by the framework user.
 #[derive(PartialEq, Debug, Clone)]
 pub enum Action {
-    Cancel {
-        machine: MachineId,
-    },
+    /// Stop any currently scheduled action for the machine.
+    Cancel { machine: MachineId },
+    /// Schedule padding to be injected after the given timeout for the machine.
+    /// The size of the padding (in bytes) is specified. Will never be larger
+    /// than MTU.
     InjectPadding {
         timeout: Duration,
         size: u16,
         machine: MachineId,
     },
+    /// Schedule outgoing traffic to be blocked after the given timeout for the
+    /// machine. The duration of the block is specified as well as a flag
+    /// indicating of the duration should overwrite any other currently ongoing
+    /// blocking of outgoing traffic.
     BlockOutgoing {
         timeout: Duration,
         duration: Duration,
@@ -95,7 +247,13 @@ enum StateChange {
     Changed,
     Unchanged,
 }
-
+/// An instance of the Maybenot framework.
+///
+/// An instance of the [`Framework`] repeatedly takes as *input* one or more
+/// [`TriggerEvent`] describing the encrypted traffic going over an encrypted
+/// channel, and produces as *output* zero or more [`Action`], such as to inject
+/// *padding* traffic or *block* outgoing traffic. One or more [`Machine`]
+/// determine what [`Action`] to take based on [`TriggerEvent`].
 pub struct Framework {
     actions: Vec<Option<Action>>,
     current_time: Instant,
@@ -109,19 +267,36 @@ pub struct Framework {
     global_blocking_started: Instant,
     global_blocking_active: bool,
     global_framework_start: Instant,
-    mtu: u64,
+    mtu: u16,
 }
 
 impl Framework {
+    /// Create a new framework instance with zero or more [`Machine`]. The max
+    /// padding/blocking fractions are enforced as a total across all machines.
+    /// The only way those limits can be violated are through
+    /// [`Machine::allowed_padding_bytes`] and
+    /// [`Machine::allowed_blocked_microsec`], respectively. The MTU is the MTU
+    /// of the underlying connection (goodput). The current time is handed to
+    /// the framework here (and later in [`Self::trigger_events()`]) to make
+    /// some types of use-cases of the framework easier (weird machines and for
+    /// simulation). Returns an error on any invalid [`Machine`] or limits not
+    /// being fractions [0, 1.0].
     pub fn new(
         machines: Vec<Machine>,
         max_padding_frac: f64,
         max_blocking_frac: f64,
-        mtu: u64,
+        mtu: u16,
         current_time: Instant,
     ) -> Result<Self, Box<dyn Error>> {
         for m in &machines {
             m.validate()?;
+        }
+
+        if max_padding_frac < 0.0 || max_padding_frac > 1.0 {
+            bail!("max_padding_frac has to be beteen [0.0, 1.0]");
+        }
+        if max_blocking_frac < 0.0 || max_blocking_frac > 1.0 {
+            bail!("max_blocking_frac has to be beteen [0.0, 1.0]");
         }
 
         let runtime = vec![
@@ -155,10 +330,10 @@ impl Framework {
         })
     }
 
-    pub fn num_machines(&self) -> usize {
-        self.machines.len()
-    }
-
+    /// Trigger zero or more [`TriggerEvent`] for all machines running in the
+    /// framework. The current time SHOULD be the current time at time of
+    /// calling the method (e.g., [`Instant::now()`]). Returns an iterator of
+    /// zero or more [`Action`] that MUST be taken by the caller.
     pub fn trigger_events(
         &mut self,
         events: &[TriggerEvent],
@@ -280,7 +455,7 @@ impl Framework {
                 self.transition(machine.0, Event::LimitReached, 0);
             }
             TriggerEvent::UpdateMTU { new_mtu } => {
-                self.mtu = *new_mtu as u64;
+                self.mtu = *new_mtu;
                 for mi in 0..self.runtime.len() {
                     self.transition(mi, Event::UpdateMTU, *new_mtu as u64);
                 }
@@ -364,7 +539,7 @@ impl Framework {
         } else {
             Some(Action::InjectPadding {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
-                size: current.sample_size(self.mtu) as u16,
+                size: current.sample_size(self.mtu as u64) as u16,
                 machine: mi,
             })
         }
@@ -587,7 +762,6 @@ mod tests {
         let mtu = 150;
         let mut f = Framework::new(vec![m], 0.0, 0.0, mtu, current_time).unwrap();
 
-        assert_eq!(f.num_machines(), 1);
         assert_eq!(f.actions.len(), 1);
 
         // start triggering
@@ -916,7 +1090,7 @@ mod tests {
         // should be limited from sending any padding until at least 100*MTU
         // nonpadding bytes have been sent, given the set max padding fraction
         // of 0.5.
-        let mtu = 1000;
+        let mtu: u16 = 1000;
 
         let num_states = 2;
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -943,7 +1117,7 @@ mod tests {
         };
 
         let m = Machine {
-            allowed_padding_bytes: 100 * mtu,
+            allowed_padding_bytes: 100 * (mtu as u64),
             max_padding_frac: 0.5,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -1022,7 +1196,7 @@ mod tests {
     fn framework_max_padding_frac() {
         // to test the global limits of the framework we create two machines with
         // the same allowed padding, where both machines pad in parallel
-        let mtu = 1000;
+        let mtu: u16 = 1000;
 
         let num_states = 2;
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -1048,7 +1222,7 @@ mod tests {
         };
 
         let m1 = Machine {
-            allowed_padding_bytes: 100 * mtu,
+            allowed_padding_bytes: 100 * (mtu as u64),
             max_padding_frac: 0.0, // NOTE
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -1120,7 +1294,7 @@ mod tests {
 
         // in sync?
         assert_eq!(f.runtime[0].padding_sent, f.runtime[1].padding_sent);
-        assert_eq!(f.runtime[0].padding_sent, 100 * mtu);
+        assert_eq!(f.runtime[0].padding_sent, 100 * (mtu as u64));
 
         // OK, so we've sent in total 2*100*mtu of padding using two machines. This
         // means that we should need to send at least 2*100*mtu + 1 bytes before
@@ -1470,7 +1644,7 @@ mod tests {
         }
 
         // padding accounting correct
-        assert_eq!(f.runtime[0].padding_sent, mtu * 4);
+        assert_eq!(f.runtime[0].padding_sent, (mtu as u64) * 4);
         assert_eq!(f.runtime[0].nonpadding_sent, 100);
 
         // limit should be reached after 4 padding, blocking next action

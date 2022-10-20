@@ -1,3 +1,5 @@
+//! A state as part of a [`Machine`](crate::machine).
+
 use crate::constants::*;
 use crate::dist::*;
 use crate::event::*;
@@ -9,19 +11,37 @@ use std::io::Write;
 extern crate simple_error;
 use simple_error::bail;
 
+/// A state as part of a [`Machine`](crate::machine).
 #[derive(PartialEq, Debug, Clone)]
 pub struct State {
+    /// On transition to this state, sampled for a timeout duration until the
+    /// action is triggered.
     pub timeout: Dist,
+    /// A sampled duration for the action.
     pub action: Dist,
+    /// A flag that determines the action. If true, the action on timeout is to
+    /// block. If false, the action is to inject padding.
     pub action_is_block: bool,
+    /// If the action is to block, this flag determines if the action duration
+    /// should overwrite any existing blocking.
     pub block_overwrite: bool,
+    /// A sampled limit on the number of actions allowed on repeated transitions
+    /// to the same state.
     pub limit: Dist,
+    /// A flag that specifies if the sampled limit should also be decremented on
+    /// nonpadding (normal) traffic sent.
     pub limit_includes_nonpadding: bool,
+    /// A map of all possible events associated to a probability vector. This is
+    /// a transition matrix, so the length of the probability vector is a
+    /// function of the total number of states in a machine. The structure of
+    /// the map is created by [`make_next_state()`].
     pub next_state: HashMap<Event, Vec<f64>>,
 }
 
 impl State {
-    /// Create a new State
+    /// Create a new [`State`] with the given transition matrix (must be created
+    /// by [`make_next_state()`]) and number of total states in the
+    /// [`Machine`](crate::machine).
     pub fn new(t: HashMap<Event, HashMap<usize, f64>>, num_states: usize) -> Self {
         State {
             timeout: Dist::new(),
@@ -34,10 +54,12 @@ impl State {
         }
     }
 
+    /// Sample a timeout.
     pub fn sample_timeout(&self) -> f64 {
         self.timeout.sample().min(MAXSAMPLEDTIMEOUT)
     }
 
+    /// Sample a limit.
     pub fn sample_limit(&self) -> u64 {
         if self.limit.dist == DistType::None {
             return STATELIMITMAX;
@@ -45,6 +67,7 @@ impl State {
         self.limit.sample().round() as u64
     }
 
+    /// Sample a size for a padding action.
     pub fn sample_size(&self, mtu: u64) -> u64 {
         if self.action.dist == DistType::None {
             return mtu;
@@ -60,10 +83,12 @@ impl State {
         s
     }
 
+    /// Sample a block duration for a blocking action.
     pub fn sample_block(&self) -> f64 {
         self.action.sample().min(MAXSAMPLEDBLOCK)
     }
 
+    /// Serialize the state into a byte vector.
     pub fn serialize(&self, num_states: usize) -> Vec<u8> {
         let mut wtr = vec![];
 
@@ -106,6 +131,10 @@ impl State {
     }
 }
 
+/// Attempt to construct a [`State`] from the given bytes as part of a
+/// [`Machine`](crate::machine) with the specific number of states. The number
+/// of states has to known since the size of the transition matrix depends on
+/// it.
 pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error>> {
     // len: 3 distributions + 3 flags + next_state
     if buf.len() < 3 * SERIALIZEDDISTSIZE + 3 + (num_states + 2) * 8 * Event::iterator().len() {
@@ -159,6 +188,9 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     })
 }
 
+/// A helper used to construct [`State::next_state`] based on a map of
+/// transitions ([`Event`] to probability vector) and the total number of states
+/// in the [`Machine`](crate::machine).
 pub fn make_next_state(
     t: HashMap<Event, HashMap<usize, f64>>,
     num_states: usize,

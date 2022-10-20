@@ -1,3 +1,5 @@
+//! Distributions sampled as part of a [`State`](crate::state).
+
 use byteorder::ByteOrder;
 use byteorder::{LittleEndian, WriteBytesExt};
 use rand_distr::{
@@ -11,25 +13,39 @@ use simple_error::bail;
 
 use crate::constants::*;
 
-/// DistType represents the type of a Dist
+/// DistType represents the type of a [`Dist`]. Supports a wide range of
+/// different distributions. Some are probably useless and some are probably
+/// missing. Uses the [`rand_distr`] crate for sampling.
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u16)]
 pub enum DistType {
-    // standard
+    /// Default: represents a dist that should not be sampled.
     None,
+    /// Uniformly random [low, high). If low == high, constant.
     Uniform,
-    // real-valued quantities
+    /// Normal distribution with set mean and standard deviation. Useful for
+    /// real-valued quantities.
     Normal,
+    /// LogNormal distribution with set mu and sigma. Useful for real-valued
+    /// quantities.
     LogNormal,
-    // selection for Bernoulli trials (yes/no events, with a given probability)
+    /// Binomial distribution with set trials and probability. Useful for yes/no
+    /// events.
     Binomial,
+    /// Geometric distribution with set probability. Useful for yes/no events.
     Geometric,
-    // selection for occurrence of independent events at a given rate
+    /// Pareto distribution with set scale and shape. Useful for occurrence of
+    /// independent events at a given rate.
     Pareto,
+    /// Poisson distribution with set lambda. Useful for occurrence of
+    /// independent events at a given rate.
     Poisson,
+    /// Weibull distribution with set scale and shape. Useful for occurrence of
+    /// independent events at a given rate.
     Weibull,
-    // misc, broad options
+    /// Gamma distribution with set scale and shape.
     Gamma,
+    /// Beta distribution with set alpha and beta.
     Beta,
 }
 impl fmt::Display for DistType {
@@ -75,13 +91,21 @@ impl Into<u16> for DistType {
     }
 }
 
-/// A distribution used in a State
+/// A distribution used in a [`State`](crate::state). Ugly struct for the sake
+/// of serializability with a type and two parameters that depend on the type of
+/// the dist. Also has an optional starting value and max value enforced after
+/// sampling.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Dist {
+    /// The type of distribution.
     pub dist: DistType,
+    /// The first parameter, depends on type. Used by all types.
     pub param1: f64,
+    /// The second parameter, depends on type. Ignored by some types.
     pub param2: f64,
+    /// The starting value that the sampled value is added to.
     pub start: f64,
+    /// The maximum value that can be sampled (including starting value).
     pub max: f64,
 }
 
@@ -161,7 +185,7 @@ impl fmt::Display for Dist {
 }
 
 impl Dist {
-    /// Create a new None dist
+    /// Create a new [`None`](DistType) distribution.
     pub fn new() -> Self {
         Dist {
             dist: DistType::None,
@@ -172,7 +196,7 @@ impl Dist {
         }
     }
 
-    /// Validate that param1 and param2 of the given DistType is valid
+    /// Validate that the parameters is valid for the set [`DistType`].
     pub fn validate(&self) -> Result<(), Box<dyn Error>> {
         match &self.dist {
             DistType::None => {}
@@ -230,6 +254,7 @@ impl Dist {
         Ok(())
     }
 
+    /// Sample the distribution. May panic if not valid (see [`Self::validate()`]).
     pub fn sample(self) -> f64 {
         let mut r: f64 = 0.0;
         r = r.max(self.distsample() + self.start);
@@ -317,6 +342,7 @@ impl Dist {
         }
     }
 
+    /// Returns the serialized distribution of [`SERIALIZEDDISTSIZE`] bytes.
     pub fn serialize(self) -> Vec<u8> {
         let mut wtr = vec![];
         wtr.write_u16::<LittleEndian>(self.dist.into()).unwrap();
@@ -328,6 +354,7 @@ impl Dist {
     }
 }
 
+/// Try to parse a [`Dist`] from the provided bytes.
 pub fn parse_dist(buf: Vec<u8>) -> Result<Dist, Box<dyn Error>> {
     if buf.len() < SERIALIZEDDISTSIZE {
         bail!("too small")
