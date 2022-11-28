@@ -39,9 +39,8 @@ pub struct State {
 }
 
 impl State {
-    /// Create a new [`State`] with the given transition matrix (must be created
-    /// by [`make_next_state()`]) and number of total states in the
-    /// [`Machine`](crate::machine).
+    /// Create a new [`State`] with the given map of transitions ([`Event`] to probability vector)
+    /// and number of total states in the [`Machine`](crate::machine).
     pub fn new(t: HashMap<Event, HashMap<usize, f64>>, num_states: usize) -> Self {
         State {
             timeout: Dist::new(),
@@ -133,7 +132,7 @@ impl State {
 
 /// Attempt to construct a [`State`] from the given bytes as part of a
 /// [`Machine`](crate::machine) with the specific number of states. The number
-/// of states has to known since the size of the transition matrix depends on
+/// of states has to be known since the size of the transition matrix depends on
 /// it.
 pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error>> {
     // len: 3 distributions + 3 flags + next_state
