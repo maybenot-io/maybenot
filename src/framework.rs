@@ -153,6 +153,17 @@ use std::time::Instant;
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct MachineId(usize);
 
+impl MachineId {
+    /// Create a new machine identifier from a raw integer. Intended for use
+    /// with the `machine` field of [`Action`] and [`TriggerEvent`]. For testing
+    /// purposes only. For regular use, use [`MachineId`]s returned by
+    /// [Framework::trigger_events]. Triggering an event in the framework for a
+    /// machine that does not exist does not raise a panic or any error.
+    pub fn from_raw(raw: usize) -> Self {
+        MachineId(raw)
+    }
+}
+
 /// Represents an event to be triggered in the framework.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TriggerEvent {
@@ -328,6 +339,11 @@ impl Framework {
             global_paddingsent_bytes: 0,
             global_nonpadding_sent_bytes: 0,
         })
+    }
+
+    /// Returns the number of machines in the framework.
+    pub fn num_machines(&self) -> usize {
+        self.machines.len()
     }
 
     /// Trigger zero or more [`TriggerEvent`] for all machines running in the
