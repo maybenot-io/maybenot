@@ -337,7 +337,7 @@ mod tests {
         assert_eq!(m.include_small_packets, false);
 
         assert_eq!(m.states.len(), 1);
-        assert_eq!(m.states[0].block_overwrite, false);
+        assert_eq!(m.states[0].replace, false);
         assert_eq!(m.states[0].limit_includes_nonpadding, false);
         assert_eq!(m.states[0].action_is_block, false);
         assert_eq!(m.states[0].action.dist, DistType::None);

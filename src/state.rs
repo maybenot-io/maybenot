@@ -23,8 +23,10 @@ pub struct State {
     /// block. If false, the action is to inject padding.
     pub action_is_block: bool,
     /// If the action is to block, this flag determines if the action duration
-    /// should overwrite any existing blocking.
-    pub block_overwrite: bool,
+    /// should replace any existing blocking. If the action is to pad, this flag
+    /// determines if the padding packet MAY be replaced by a non-padding packet
+    /// queued at the time the padding packet would have been sent.
+    pub replace: bool,
     /// A sampled limit on the number of actions allowed on repeated transitions
     /// to the same state.
     pub limit: Dist,
@@ -46,7 +48,7 @@ impl State {
             timeout: Dist::new(),
             action: Dist::new(),
             action_is_block: false,
-            block_overwrite: false,
+            replace: false,
             limit: Dist::new(),
             limit_includes_nonpadding: false,
             next_state: make_next_state(t, num_states),
@@ -102,7 +104,7 @@ impl State {
         } else {
             wtr.write_u8(0).unwrap();
         }
-        if self.block_overwrite {
+        if self.replace {
             wtr.write_u8(1).unwrap();
         } else {
             wtr.write_u8(0).unwrap();
@@ -152,7 +154,7 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     // flags
     let action_is_block: bool = buf[r] == 1;
     r += 1;
-    let block_overwrite: bool = buf[r] == 1;
+    let replace: bool = buf[r] == 1;
     r += 1;
     let limit_includes_nonpadding: bool = buf[r] == 1;
     r += 1;
@@ -181,7 +183,7 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
         limit,
         action,
         action_is_block,
-        block_overwrite,
+        replace,
         limit_includes_nonpadding,
         next_state,
     })
@@ -275,7 +277,7 @@ mod tests {
                 max: 3.4,
             },
             action_is_block: false,
-            block_overwrite: true,
+            replace: true,
             limit_includes_nonpadding: false,
             next_state: make_next_state(t, num_states),
         };

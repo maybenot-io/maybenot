@@ -82,6 +82,7 @@
 //!             Action::InjectPadding {
 //!                 timeout: _,
 //!                 size: _,
+//!                 replace: _,
 //!                 machine: _,
 //!             } => {
 //!                 // Set the timer with the specified timeout. On expiry, do
@@ -92,18 +93,27 @@
 //!                 //    iteration.
 //!                 //
 //!                 // Above, "send" should mimic as close as possible real
-//!                 // application data being added for transport. Also, note
-//!                 // that if there already is a timer for an earlier action
-//!                 // for the machine index in question, replace it. This will
-//!                 // happen very frequently so make effort to make it
-//!                 // efficient (typically, efficient machines will always have
-//!                 // something scheduled but try to minimize actual padding
-//!                 // sent, i.e., expired timers).
+//!                 // application data being added for transport.
+//!                 //
+//!                 // If replace is true, then the padding MAY be replaced by other
+//!                 // (non-)padding data (e.g., if the application is sending
+//!                 // a lot of data or if other padding is already being sent) of
+//!                 // the same size. Typically, if this is the case or not can be
+//!                 // determined by inspecting the relevant egress queues (either
+//!                 // of packets already queued to be sent or of data waiting to
+//!                 // be sent). Regardless of if the padding is replaced or not,
+//!                 // the event should still be triggered (step 2).
+//!                 //
+//!                 // Also, note that if there already is a timer for an earlier
+//!                 // action for the machine index in question, overwrite it with
+//!                 // the new timer. This will happen very frequently so make effort
+//!                 // to make it efficient (typically, efficient machines will always
+//!                 // something scheduled but try to minimize actual padding sent).
 //!             }
 //!             Action::BlockOutgoing {
 //!                 timeout: _,
 //!                 duration: _,
-//!                 overwrite: _,
+//!                 replace: _,
 //!                 machine: _,
 //!             } => {
 //!                 // Set the timer with the specified timeout, overwriting any
@@ -114,9 +124,9 @@
 //!                 //    framework), start blocking all outgoing traffic for
 //!                 //    the specified duration. If blocking is already taking
 //!                 //    place (due to any machine), there are two cases. If
-//!                 //    overwrite is true, replace the existing blocking
+//!                 //    replace is true, replace the existing blocking
 //!                 //    duration with the specified duration in this action.
-//!                 //    If overwrite is false, pick the longest duration of
+//!                 //    If replace is false, pick the longest duration of
 //!                 //    the specified duration and the *remaining* duration to
 //!                 //    block already in place.
 //!                 // 2. Add TriggerEvent::BlockingBegin { machine: machine }
@@ -225,20 +235,23 @@ pub enum Action {
     Cancel { machine: MachineId },
     /// Schedule padding to be injected after the given timeout for the machine.
     /// The size of the padding (in bytes) is specified. Will never be larger
-    /// than MTU.
+    /// than MTU. A flag indicates if the padding packet MAY be replaced by an
+    /// existing non-padding packet already queued for sending at the time the
+    /// padding packet would have been sent (egress queued).
     InjectPadding {
         timeout: Duration,
         size: u16,
+        replace: bool,
         machine: MachineId,
     },
     /// Schedule outgoing traffic to be blocked after the given timeout for the
     /// machine. The duration of the block is specified as well as a flag
-    /// indicating of the duration should overwrite any other currently ongoing
+    /// indicating of the duration should replace any other currently ongoing
     /// blocking of outgoing traffic.
     BlockOutgoing {
         timeout: Duration,
         duration: Duration,
-        overwrite: bool,
+        replace: bool,
         machine: MachineId,
     },
 }
@@ -359,7 +372,7 @@ impl Framework {
         self.actions.fill(None);
 
         // Process all events: note that each event may lead to up to one action
-        // per machine, but that future events may overwrite those actions.
+        // per machine, but that future events may replace those actions.
         // Under load, this is preferable (because something already happened
         // before we could cause an action, so better to catch up).
         self.current_time = current_time;
@@ -549,13 +562,14 @@ impl Framework {
             Some(Action::BlockOutgoing {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
                 duration: Duration::from_micros(current.sample_block() as u64),
-                overwrite: current.block_overwrite,
+                replace: current.replace,
                 machine: mi,
             })
         } else {
             Some(Action::InjectPadding {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
                 size: current.sample_size(self.mtu as u64) as u16,
+                replace: current.replace,
                 machine: mi,
             })
         }
@@ -626,7 +640,7 @@ impl Framework {
         // blocking action
 
         // special case: we always allow overwriting existing blocking
-        if current.block_overwrite && !self.global_blocking_active {
+        if current.replace && !self.global_blocking_active {
             // we still check against sate limit, because its machine internal
             return runtime.state_limit > 0;
         }
@@ -812,6 +826,7 @@ mod tests {
             Some(Action::InjectPadding {
                 timeout: Duration::from_micros(1),
                 size: mtu as u16,
+                replace: false,
                 machine: MachineId(0),
             })
         );
@@ -834,6 +849,7 @@ mod tests {
             Some(Action::InjectPadding {
                 timeout: Duration::from_micros(10),
                 size: mtu as u16,
+                replace: false,
                 machine: MachineId(0),
             })
         );
@@ -855,6 +871,7 @@ mod tests {
                 Some(Action::InjectPadding {
                     timeout: Duration::from_micros(10),
                     size: mtu as u16,
+                    replace: false,
                     machine: MachineId(0),
                 })
             );
@@ -879,6 +896,7 @@ mod tests {
                     Some(Action::InjectPadding {
                         timeout: Duration::from_micros(10),
                         size: mtu as u16,
+                        replace: false,
                         machine: MachineId(0),
                     })
                 );
@@ -902,6 +920,7 @@ mod tests {
                     Some(Action::InjectPadding {
                         timeout: Duration::from_micros(1),
                         size: mtu as u16,
+                        replace: false,
                         machine: MachineId(0),
                     })
                 );
@@ -1067,7 +1086,7 @@ mod tests {
             Some(Action::BlockOutgoing {
                 timeout: Duration::from_micros(1),
                 duration: Duration::from_micros(10),
-                overwrite: false,
+                replace: false,
                 machine: MachineId(0),
             })
         );
@@ -1092,7 +1111,7 @@ mod tests {
                 Some(Action::BlockOutgoing {
                     timeout: Duration::from_micros(1),
                     duration: Duration::from_micros(10),
-                    overwrite: false,
+                    replace: false,
                     machine: MachineId(0),
                 })
             );
@@ -1156,6 +1175,7 @@ mod tests {
                 Some(Action::InjectPadding {
                     timeout: Duration::from_micros(2),
                     size: mtu as u16,
+                    replace: false,
                     machine: MachineId(0),
                 })
             );
@@ -1203,6 +1223,7 @@ mod tests {
             Some(Action::InjectPadding {
                 timeout: Duration::from_micros(2),
                 size: mtu as u16,
+                replace: false,
                 machine: MachineId(0),
             })
         );
@@ -1265,6 +1286,7 @@ mod tests {
                 Some(Action::InjectPadding {
                     timeout: Duration::from_micros(2),
                     size: mtu as u16,
+                    replace: false,
                     machine: MachineId(0),
                 })
             );
@@ -1273,6 +1295,7 @@ mod tests {
                 Some(Action::InjectPadding {
                     timeout: Duration::from_micros(2),
                     size: mtu as u16,
+                    replace: false,
                     machine: MachineId(1),
                 })
             );
@@ -1336,6 +1359,7 @@ mod tests {
             Some(Action::InjectPadding {
                 timeout: Duration::from_micros(2),
                 size: mtu as u16,
+                replace: false,
                 machine: MachineId(0),
             })
         );
@@ -1344,6 +1368,7 @@ mod tests {
             Some(Action::InjectPadding {
                 timeout: Duration::from_micros(2),
                 size: mtu as u16,
+                replace: false,
                 machine: MachineId(1),
             })
         );
@@ -1410,7 +1435,7 @@ mod tests {
                 Some(Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
-                    overwrite: false,
+                    replace: false,
                     machine: MachineId(0),
                 })
             );
@@ -1426,7 +1451,7 @@ mod tests {
                 Some(Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
-                    overwrite: false,
+                    replace: false,
                     machine: MachineId(0),
                 })
             );
@@ -1462,7 +1487,7 @@ mod tests {
             Some(Action::BlockOutgoing {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
-                overwrite: false,
+                replace: false,
                 machine: MachineId(0),
             })
         );
@@ -1529,7 +1554,7 @@ mod tests {
                 Some(Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
-                    overwrite: false,
+                    replace: false,
                     machine: MachineId(0),
                 })
             );
@@ -1545,7 +1570,7 @@ mod tests {
                 Some(Action::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
-                    overwrite: false,
+                    replace: false,
                     machine: MachineId(0),
                 })
             );
@@ -1581,7 +1606,7 @@ mod tests {
             Some(Action::BlockOutgoing {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
-                overwrite: false,
+                replace: false,
                 machine: MachineId(0),
             })
         );
@@ -1646,6 +1671,7 @@ mod tests {
                 Some(Action::InjectPadding {
                     timeout: Duration::from_micros(1),
                     size: mtu as u16,
+                    replace: false,
                     machine: MachineId(0),
                 })
             );
