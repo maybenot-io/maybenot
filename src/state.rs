@@ -22,6 +22,14 @@ pub struct State {
     /// A flag that determines the action. If true, the action on timeout is to
     /// block. If false, the action is to inject padding.
     pub action_is_block: bool,
+    /// if the action is to block, this flag determines if padding actions are
+    /// allowed to bypass this block action. If the action is to pad, this flag
+    /// determines if the padding packet bypasses any existing blocking (that
+    /// was triggered with the bypass flag set). This might seem excessive, but
+    /// we want to be able to be able to make machines that can fail closed
+    /// (never bypass blocking) while being able to make machines that can
+    /// bypass some kinds of blocking is essential for constant-rate defenses.
+    pub bypass: bool,
     /// If the action is to block, this flag determines if the action duration
     /// should replace any existing blocking. If the action is to pad, this flag
     /// determines if the padding packet MAY be replaced by a non-padding packet
@@ -48,6 +56,7 @@ impl State {
             timeout: Dist::new(),
             action: Dist::new(),
             action_is_block: false,
+            bypass: false,
             replace: false,
             limit: Dist::new(),
             limit_includes_nonpadding: false,
@@ -104,6 +113,11 @@ impl State {
         } else {
             wtr.write_u8(0).unwrap();
         }
+        if self.bypass {
+            wtr.write_u8(1).unwrap();
+        } else {
+            wtr.write_u8(0).unwrap();
+        }
         if self.replace {
             wtr.write_u8(1).unwrap();
         } else {
@@ -137,8 +151,8 @@ impl State {
 /// of states has to be known since the size of the transition matrix depends on
 /// it.
 pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error>> {
-    // len: 3 distributions + 3 flags + next_state
-    if buf.len() < 3 * SERIALIZEDDISTSIZE + 3 + (num_states + 2) * 8 * Event::iterator().len() {
+    // len: 3 distributions + 4 flags + next_state
+    if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::iterator().len() {
         bail!("too small")
     }
 
@@ -153,6 +167,8 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
 
     // flags
     let action_is_block: bool = buf[r] == 1;
+    r += 1;
+    let bypass: bool = buf[r] == 1;
     r += 1;
     let replace: bool = buf[r] == 1;
     r += 1;
@@ -183,6 +199,7 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
         limit,
         action,
         action_is_block,
+        bypass,
         replace,
         limit_includes_nonpadding,
         next_state,
@@ -277,6 +294,7 @@ mod tests {
                 max: 3.4,
             },
             action_is_block: false,
+            bypass: false,
             replace: true,
             limit_includes_nonpadding: false,
             next_state: make_next_state(t, num_states),
