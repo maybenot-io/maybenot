@@ -27,9 +27,9 @@
 //! // the same machines, then share the same vector across framework instances.
 //! // All runtime information is allocated internally in the framework without
 //! // modifying the machines.
-//! let s = "789cedca2101000000c230e85f1a8387009f9e351d051503ca0003".to_string();
+//! let s = "789cedca2101000000c230e85f1a8387009f9e351d051503ca0003";
 //! // machines will error if invalid
-//! let m = Machine::from_str(&s).unwrap();
+//! let m = Machine::from_str(s).unwrap();
 //!
 //! // Create the framework, a lightweight operation, with the following
 //! // parameters:
