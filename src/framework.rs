@@ -253,9 +253,19 @@ pub enum Action {
     Cancel { machine: MachineId },
     /// Schedule padding to be injected after the given timeout for the machine.
     /// The size of the padding (in bytes) is specified. Will never be larger
-    /// than MTU. A flag indicates if the padding packet MAY be replaced by an
+    /// than MTU.
+    ///
+    /// The bypass flag indicates if the padding packet MUST be sent despite
+    /// active blocking of outgoing traffic. Note that this is only allowed if
+    /// the active blocking was set with the bypass flag set to true.
+    ///
+    /// The replace flag indicates if the padding packet MAY be replaced by an
     /// existing non-padding packet already queued for sending at the time the
-    /// padding packet would have been sent (egress queued).
+    /// padding packet would have been sent (egress queued) or about to be sent.
+    ///
+    /// If the bypass and replace flags are both set to true AND the active
+    /// blocking may be bypassed, then non-padding packets MAY replace the
+    /// padding packet AND bypass the active blocking.
     InjectPadding {
         timeout: Duration,
         size: u16,
@@ -264,9 +274,14 @@ pub enum Action {
         machine: MachineId,
     },
     /// Schedule outgoing traffic to be blocked after the given timeout for the
-    /// machine. The duration of the block is specified as well as a flag
-    /// indicating of the duration should replace any other currently ongoing
-    /// blocking of outgoing traffic.
+    /// machine. The duration of the block is specified.
+    ///
+    /// The bypass flag indicates if the blocking of outgoing traffic can be
+    /// bypassed by padding packets with the bypass flag set to true.
+    ///
+    /// The replace flag indicates if the duration should replace any other
+    /// currently ongoing blocking of outgoing traffic. If the flag is false,
+    /// the longest of the two durations MUST be used.
     BlockOutgoing {
         timeout: Duration,
         duration: Duration,
