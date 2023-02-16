@@ -103,14 +103,17 @@
 //!                 // to false, then the padding MUST NOT be sent. This is to support
 //!                 // completely fail closed defenses.
 //!                 //
-//!                 // If replace is true, then the padding MAY be replaced by other
-//!                 // (non-)padding data (e.g., if the application is sending
-//!                 // a lot of data or if other padding is already being sent) of
-//!                 // the same size. Typically, if this is the case or not can be
-//!                 // determined by inspecting the relevant egress queues (either
-//!                 // of packets already queued to be sent or of data waiting to
-//!                 // be sent). Regardless of if the padding is replaced or not,
-//!                 // the event should still be triggered (step 2).
+//!                 // If replace is true, then the padding MAY be replaced by
+//!                 // other data. The other data could be in the form of an
+//!                 // encrypted packet queued to be sent, which is either padding
+//!                 // or non-padding (ideally, the user of the framework cannot
+//!                 // tell, because encrypted). The other data could also be
+//!                 // application data (non-padding) enqueued to be sent. In both
+//!                 // cases, the replaced data MUST be of the same size as the
+//!                 // padding. Regardless of if the padding is replaced or not,
+//!                 // the event should still be triggered (step 2). If enqueued
+//!                 // non-padding is sent instead of padding, then a NonPaddingSent
+//!                // event should be triggered as well.
 //!                 //
 //!                 // Above, note the use-case of having bypass and replace set to
 //!                 // true. This is to support constant-rate defenses.
