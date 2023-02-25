@@ -190,7 +190,7 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
             }
         }
         if !all_zeroes {
-            next_state.insert(event.clone(), m);
+            next_state.insert(*event, m);
         }
     }
 

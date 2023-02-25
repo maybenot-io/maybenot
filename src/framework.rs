@@ -172,6 +172,7 @@ use crate::constants::*;
 use crate::dist::DistType;
 use crate::event::*;
 use crate::machine::*;
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 use std::time::Duration;
@@ -247,7 +248,7 @@ impl fmt::Display for TriggerEvent {
 }
 
 /// The action to be taken by the framework user.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Action {
     /// Stop any currently scheduled action for the machine.
     Cancel { machine: MachineId },
@@ -351,10 +352,10 @@ impl Framework {
             m.validate()?;
         }
 
-        if max_padding_frac < 0.0 || max_padding_frac > 1.0 {
+        if !(0.0..=1.0).contains(&max_padding_frac) {
             bail!("max_padding_frac has to be beteen [0.0, 1.0]");
         }
-        if max_blocking_frac < 0.0 || max_blocking_frac > 1.0 {
+        if !(0.0..=1.0).contains(&max_blocking_frac) {
             bail!("max_blocking_frac has to be beteen [0.0, 1.0]");
         }
 
@@ -365,7 +366,7 @@ impl Framework {
                 padding_sent: 0,
                 nonpadding_sent: 0,
                 blocking_duration: Duration::from_secs(0),
-                machine_start: current_time.clone(),
+                machine_start: current_time,
             };
             machines.len()
         ];
@@ -380,9 +381,9 @@ impl Framework {
             current_time,
             global_max_blocking_frac: max_blocking_frac,
             global_max_padding_frac: max_padding_frac,
-            global_framework_start: current_time.clone(),
+            global_framework_start: current_time,
             global_blocking_active: false,
-            global_blocking_started: current_time.clone(), // ugly, can't be unset
+            global_blocking_started: current_time,
             global_blocking_duration: Duration::from_secs(0),
             global_paddingsent_bytes: 0,
             global_nonpadding_sent_bytes: 0,
@@ -412,7 +413,7 @@ impl Framework {
         // before we could cause an action, so better to catch up).
         self.current_time = current_time;
         for e in events {
-            self.process_event(&e);
+            self.process_event(e);
         }
 
         // only return actions, no None
@@ -447,10 +448,9 @@ impl Framework {
                         == StateChange::Unchanged
                     {
                         let cs = self.runtime[mi].current_state;
-                        if cs != STATEEND {
-                            if self.machines[mi].states[cs].limit_includes_nonpadding {
-                                self.decrement_limit(mi);
-                            }
+                        if cs != STATEEND && self.machines[mi].states[cs].limit_includes_nonpadding
+                        {
+                            self.decrement_limit(mi);
                         }
                     }
                 }
@@ -481,17 +481,17 @@ impl Framework {
                 // keep track of when we start blocking (for accounting in BlockingEnd)
                 if !self.global_blocking_active {
                     self.global_blocking_active = true;
-                    self.global_blocking_started = self.current_time.clone();
+                    self.global_blocking_started = self.current_time;
                 }
 
                 // blocking is a global event
                 for mi in 0..self.runtime.len() {
-                    if self.transition(mi, Event::BlockingBegin, 0) == StateChange::Unchanged {
-                        if mi == machine.0 {
-                            // decrement only makes sense if we didn't
-                            // change state and for the machine in question
-                            self.decrement_limit(mi)
-                        }
+                    if self.transition(mi, Event::BlockingBegin, 0) == StateChange::Unchanged
+                        && mi == machine.0
+                    {
+                        // decrement only makes sense if we didn't
+                        // change state and for the machine in question
+                        self.decrement_limit(mi)
                     }
                 }
             }
@@ -556,14 +556,14 @@ impl Framework {
                 self.actions[mi] = Some(Action::Cancel {
                     machine: MachineId(mi),
                 });
-                return StateChange::Unchanged;
+                StateChange::Unchanged
             }
             STATEEND => {
                 // this is a state change (because we can never reach here if already in
                 // STATEEND, see first check above), but we don't cancel any pending
                 // action, nor schedule any new action
                 self.runtime[mi].current_state = STATEEND;
-                return StateChange::Changed;
+                StateChange::Changed
             }
             _ => {
                 // transition to same or different state?
@@ -580,7 +580,7 @@ impl Framework {
                     self.actions[mi] =
                         self.schedule_action(&self.runtime[mi], machine, MachineId(mi));
                 }
-                return StateChange::Changed;
+                StateChange::Changed
             }
         }
     }
@@ -650,12 +650,10 @@ impl Framework {
             total += next_prop[i];
             if p <= total {
                 // some events are machine-defined, others framework pseudo-states
-                if i + 2 < next_prop.len() {
-                    return (i, true);
-                } else if i + 2 == next_prop.len() {
-                    return (STATECANCEL, true);
-                } else {
-                    return (STATEEND, true);
+                match next_prop.len().cmp(&(i + 2)) {
+                    Ordering::Greater => return (i, true),
+                    Ordering::Less => return (STATEEND, true),
+                    Ordering::Equal => return (STATECANCEL, true),
                 }
             }
         }
@@ -729,7 +727,7 @@ impl Framework {
         }
 
         // only state-limit left to consider
-        return runtime.state_limit > 0;
+        runtime.state_limit > 0
     }
 
     fn below_limit_padding(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
@@ -760,7 +758,7 @@ impl Framework {
         }
 
         // only state-limit left to consider
-        return runtime.state_limit > 0;
+        runtime.state_limit > 0
     }
 }
 

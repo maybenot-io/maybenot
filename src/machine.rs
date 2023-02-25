@@ -88,7 +88,7 @@ impl Machine {
         }
 
         // sane number of states
-        if self.states.len() == 0 {
+        if self.states.is_empty() {
             bail!("a machine must have at least one state")
         }
         if self.states.len() > STATEMAX {
@@ -113,7 +113,7 @@ impl Machine {
 
                 let mut p_total = 0.0;
                 for p in next.1 {
-                    if p < &0.0 || p > &1.0 {
+                    if !(&0.0..=&1.0).contains(&p) {
                         bail!("found probability {}, has to be [0.0, 1.0]", &p)
                     }
                     p_total += p;
@@ -224,12 +224,12 @@ fn parse_v1_machine(buf: &[u8]) -> Result<Machine, Box<dyn Error>> {
     }
 
     let m = Machine {
-        allowed_padding_bytes: allowed_padding_bytes,
-        max_padding_frac: max_padding_frac,
-        allowed_blocked_microsec: allowed_blocked_microsec,
-        max_blocking_frac: max_blocking_frac,
-        include_small_packets: include_small_packets,
-        states: states,
+        allowed_padding_bytes,
+        max_padding_frac,
+        allowed_blocked_microsec,
+        max_blocking_frac,
+        include_small_packets,
+        states,
     };
     m.validate()?;
     Ok(m)

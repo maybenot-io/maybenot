@@ -16,7 +16,7 @@ use crate::constants::*;
 /// DistType represents the type of a [`Dist`]. Supports a wide range of
 /// different distributions. Some are probably useless and some are probably
 /// missing. Uses the [`rand_distr`] crate for sampling.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(u16)]
 pub enum DistType {
     /// Default: represents a dist that should not be sampled.
@@ -55,7 +55,7 @@ impl fmt::Display for DistType {
 }
 
 impl From<u16> for DistType {
-    fn from(buf: u16) -> Self {
+    fn from(buf: u16) -> DistType {
         match buf {
             0 => DistType::None,
             1 => DistType::Uniform,
@@ -73,9 +73,9 @@ impl From<u16> for DistType {
     }
 }
 
-impl Into<u16> for DistType {
-    fn into(self) -> u16 {
-        match self {
+impl From<DistType> for u16 {
+    fn from(buf: DistType) -> u16 {
+        match buf {
             DistType::None => 0,
             DistType::Uniform => 1,
             DistType::Normal => 2,
@@ -90,7 +90,6 @@ impl Into<u16> for DistType {
         }
     }
 }
-
 /// A distribution used in a [`State`](crate::state). Ugly struct for the sake
 /// of serializability with a type and two parameters that depend on the type of
 /// the dist. Also has an optional starting value and max value enforced after
@@ -181,6 +180,12 @@ impl fmt::Display for Dist {
                 )
             }
         }
+    }
+}
+
+impl Default for Dist {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
