@@ -29,7 +29,7 @@
 //! // modifying the machines.
 //! let s = "789cedca2101000000c230e85f1a8387009f9e351d051503ca0003";
 //! // machines will error if invalid
-//! let m = Machine::from_str(s).unwrap();
+//! let m = vec![Machine::from_str(s).unwrap()];
 //!
 //! // Create the framework, a lightweight operation, with the following
 //! // parameters:
@@ -48,7 +48,7 @@
 //! //
 //! // The framework validates all machines (like fn parse_machine() above) so
 //! // it can error out.
-//! let mut f = Framework::new(vec![m], 0.0, 0.0, 1420, Instant::now()).unwrap();
+//! let mut f = Framework::new(&m, 0.0, 0.0, 1420, Instant::now()).unwrap();
 //!
 //! // Below is the main loop for operating the framework. This should run for
 //! // as long as the underlying connection the framework is attached to can
@@ -317,10 +317,10 @@ enum StateChange {
 /// channel, and produces as *output* zero or more [`Action`], such as to inject
 /// *padding* traffic or *block* outgoing traffic. One or more [`Machine`]
 /// determine what [`Action`] to take based on [`TriggerEvent`].
-pub struct Framework {
+pub struct Framework<'a> {
     actions: Vec<Option<Action>>,
     current_time: Instant,
-    machines: Vec<Machine>,
+    machines: &'a [Machine],
     runtime: Vec<MachineRuntime>,
     global_max_padding_frac: f64,
     global_nonpadding_sent_bytes: u64,
@@ -333,7 +333,7 @@ pub struct Framework {
     mtu: u16,
 }
 
-impl Framework {
+impl<'a> Framework<'a> {
     /// Create a new framework instance with zero or more [`Machine`]. The max
     /// padding/blocking fractions are enforced as a total across all machines.
     /// The only way those limits can be violated are through
@@ -345,13 +345,13 @@ impl Framework {
     /// simulation). Returns an error on any invalid [`Machine`] or limits not
     /// being fractions [0, 1.0].
     pub fn new(
-        machines: Vec<Machine>,
+        machines: &'a [Machine],
         max_padding_frac: f64,
         max_blocking_frac: f64,
         mtu: u16,
         current_time: Instant,
     ) -> Result<Self, Box<dyn Error>> {
-        for m in &machines {
+        for m in machines {
             m.validate()?;
         }
 
@@ -777,8 +777,18 @@ mod tests {
 
     #[test]
     fn no_machines() {
-        let f = Framework::new(vec![], 0.0, 0.0, 150, Instant::now());
+        let machines = vec![];
+        let f = Framework::new(&machines, 0.0, 0.0, 150, Instant::now());
         assert!(!f.is_err());
+    }
+
+    #[test]
+    fn reuse_machines() {
+        let machines = vec![];
+        let f1 = Framework::new(&machines, 0.0, 0.0, 150, Instant::now());
+        assert!(!f1.is_err());
+        let f2 = Framework::new(&machines, 0.0, 0.0, 150, Instant::now());
+        assert!(!f2.is_err());
     }
 
     #[test]
@@ -828,7 +838,8 @@ mod tests {
 
         let mut current_time = Instant::now();
         let mtu = 150;
-        let mut f = Framework::new(vec![m], 0.0, 0.0, mtu, current_time).unwrap();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
 
         assert_eq!(f.actions.len(), 1);
 
@@ -1118,7 +1129,8 @@ mod tests {
 
         let mut current_time = Instant::now();
         let mtu = 150;
-        let mut f = Framework::new(vec![m], 0.0, 0.0, mtu, current_time).unwrap();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
 
         _ = f.trigger_events(
             &[TriggerEvent::NonPaddingSent { bytes_sent: 0 }],
@@ -1205,7 +1217,8 @@ mod tests {
             include_small_packets: true,
         };
         let current_time = Instant::now();
-        let mut f = Framework::new(vec![m], 0.0, 0.0, mtu, current_time).unwrap();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
 
         // transition to get the loop going
         _ = f.trigger_events(
@@ -1317,7 +1330,8 @@ mod tests {
 
         // NOTE 0.5 max_padding_frac below
         let current_time = Instant::now();
-        let mut f = Framework::new(vec![m1, m2], 0.5, 0.0, mtu, current_time).unwrap();
+        let machines = vec![m1, m2];
+        let mut f = Framework::new(&machines, 0.5, 0.0, mtu, current_time).unwrap();
 
         // we have two machines that each can send 100 * mtu before their own or
         // any framework limits are applied (by design, see AllowedPaddingBytes)
@@ -1471,7 +1485,8 @@ mod tests {
         };
 
         let mut current_time = Instant::now();
-        let mut f = Framework::new(vec![m], 0.0, 0.0, 1500, current_time).unwrap();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, 1500, current_time).unwrap();
 
         // trigger self to start the blocking (triggers action)
         _ = f.trigger_events(
@@ -1593,7 +1608,8 @@ mod tests {
         };
 
         let mut current_time = Instant::now();
-        let mut f = Framework::new(vec![m], 0.0, 0.5, 1500, current_time).unwrap();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.5, 1500, current_time).unwrap();
 
         // trigger self to start the blocking (triggers action)
         _ = f.trigger_events(
@@ -1711,7 +1727,8 @@ mod tests {
 
         let mut current_time = Instant::now();
         let mtu = 1500;
-        let mut f = Framework::new(vec![m], 1.0, 0.0, mtu, current_time).unwrap();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 1.0, 0.0, mtu, current_time).unwrap();
 
         // trigger self to start the padding
         _ = f.trigger_events(
