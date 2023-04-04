@@ -6,6 +6,7 @@ use rand_distr::{
     Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, Uniform,
     Weibull,
 };
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt;
 extern crate simple_error;
@@ -16,7 +17,7 @@ use crate::constants::*;
 /// DistType represents the type of a [`Dist`]. Supports a wide range of
 /// different distributions. Some are probably useless and some are probably
 /// missing. Uses the [`rand_distr`] crate for sampling.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 #[repr(u16)]
 pub enum DistType {
     /// Default: represents a dist that should not be sampled.
@@ -94,7 +95,7 @@ impl From<DistType> for u16 {
 /// of serializability with a type and two parameters that depend on the type of
 /// the dist. Also has an optional starting value and max value enforced after
 /// sampling.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Dist {
     /// The type of distribution.
     pub dist: DistType,

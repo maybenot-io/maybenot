@@ -16,3 +16,4 @@ hex = "0.4.3"
 libflate = "1.2.0"
 ring = "0.16.20"
 rand_distr = "0.4.3"
+serde = {version = "1.0.159", features = ["derive"]}

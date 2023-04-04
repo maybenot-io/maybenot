@@ -6,6 +6,8 @@ use crate::event::*;
 use crate::state::*;
 use byteorder::ByteOrder;
 use byteorder::{LittleEndian, WriteBytesExt};
+use serde::Deserialize;
+use serde::Serialize;
 use std::error::Error;
 use std::io::Write;
 use std::str::FromStr;
@@ -18,7 +20,7 @@ use std::io::Read;
 
 /// A probabilistic state machine (Rabin automaton) consisting of zero or more
 /// [`State`] that determine when to inject and/or block outgoing traffic.
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Machine {
     /// The number of bytes of padding a machine is allowed to generate as
     /// actions before other limits apply.

@@ -1,12 +1,14 @@
 //! Events for [`State`](crate::state) transitions.
 
+use serde::{Deserialize, Serialize};
+
 use self::Event::*;
 use std::fmt;
 use std::hash::Hash;
 use std::slice::Iter;
 
 /// An Event may trigger a [`State`](crate::state) transition.
-#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Event {
     /// NonPaddingRecv is when we received non-padding.
     NonPaddingRecv,
