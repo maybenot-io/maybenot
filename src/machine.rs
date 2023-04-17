@@ -15,7 +15,7 @@ extern crate simple_error;
 use hex::{decode, encode};
 use libflate::zlib::{Decoder, Encoder};
 use ring::digest::{Context, SHA256};
-use simple_error::bail;
+use simple_error::{bail, map_err_with};
 use std::io::Read;
 
 /// A probabilistic state machine (Rabin automaton) consisting of zero or more
@@ -42,9 +42,9 @@ impl FromStr for Machine {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // hex -> zlib -> vec
-        let compressed = decode(s).expect("failed to decode hex");
+        let compressed = map_err_with!(decode(s), "failed to decode hex")?;
 
-        let mut decoder = Decoder::new(&compressed[..]).unwrap();
+        let mut decoder = map_err_with!(Decoder::new(&compressed[..]), "not in zlib format")?;
         let mut buf = Vec::new();
         decoder.read_to_end(&mut buf).unwrap();
 
