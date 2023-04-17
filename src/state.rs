@@ -152,7 +152,7 @@ impl State {
 /// [`Machine`](crate::machine) with the specific number of states. The number
 /// of states has to be known since the size of the transition matrix depends on
 /// it.
-pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error>> {
+pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
     // len: 3 distributions + 4 flags + next_state
     if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::iterator().len() {
         bail!("too small")

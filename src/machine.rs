@@ -38,7 +38,7 @@ pub struct Machine {
 }
 
 impl FromStr for Machine {
-    type Err = Box<dyn Error>;
+    type Err = Box<dyn Error + Send + Sync>;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // hex -> zlib -> vec
@@ -74,7 +74,7 @@ impl Machine {
 
     /// Validates that the machine is in a valid state (machines that are
     /// mutated may get into an invalid state).
-    pub fn validate(&self) -> Result<(), Box<dyn Error>> {
+    pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         // sane limits
         if self.max_padding_frac < 0.0 || self.max_padding_frac > 1.0 {
             bail!(
@@ -181,7 +181,7 @@ impl Machine {
     }
 }
 
-fn parse_v1_machine(buf: &[u8]) -> Result<Machine, Box<dyn Error>> {
+fn parse_v1_machine(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
     // note that we already read 2 bytes of version in fn parse_machine()
     if buf.len() < 4 * 8 + 1 + 2 {
         bail!("not enough data for version 1 machine")
