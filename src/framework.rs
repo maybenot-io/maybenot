@@ -317,10 +317,10 @@ enum StateChange {
 /// channel, and produces as *output* zero or more [`Action`], such as to inject
 /// *padding* traffic or *block* outgoing traffic. One or more [`Machine`]
 /// determine what [`Action`] to take based on [`TriggerEvent`].
-pub struct Framework<'a> {
+pub struct Framework<M> {
     actions: Vec<Option<Action>>,
     current_time: Instant,
-    machines: &'a [Machine],
+    machines: M,
     runtime: Vec<MachineRuntime>,
     global_max_padding_frac: f64,
     global_nonpadding_sent_bytes: u64,
@@ -333,7 +333,10 @@ pub struct Framework<'a> {
     mtu: u16,
 }
 
-impl<'a> Framework<'a> {
+impl<M> Framework<M>
+where
+    M: AsRef<[Machine]>,
+{
     /// Create a new framework instance with zero or more [`Machine`]. The max
     /// padding/blocking fractions are enforced as a total across all machines.
     /// The only way those limits can be violated are through
@@ -345,13 +348,13 @@ impl<'a> Framework<'a> {
     /// simulation). Returns an error on any invalid [`Machine`] or limits not
     /// being fractions [0, 1.0].
     pub fn new(
-        machines: &'a [Machine],
+        machines: M,
         max_padding_frac: f64,
         max_blocking_frac: f64,
         mtu: u16,
         current_time: Instant,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        for m in machines {
+        for m in machines.as_ref() {
             m.validate()?;
         }
 
@@ -371,10 +374,10 @@ impl<'a> Framework<'a> {
                 blocking_duration: Duration::from_secs(0),
                 machine_start: current_time,
             };
-            machines.len()
+            machines.as_ref().len()
         ];
 
-        let actions = vec![None; machines.len()];
+        let actions = vec![None; machines.as_ref().len()];
 
         Ok(Self {
             actions,
@@ -395,7 +398,7 @@ impl<'a> Framework<'a> {
 
     /// Returns the number of machines in the framework.
     pub fn num_machines(&self) -> usize {
-        self.machines.len()
+        self.machines.as_ref().len()
     }
 
     /// Trigger zero or more [`TriggerEvent`] for all machines running in the
@@ -451,7 +454,8 @@ impl<'a> Framework<'a> {
                         == StateChange::Unchanged
                     {
                         let cs = self.runtime[mi].current_state;
-                        if cs != STATEEND && self.machines[mi].states[cs].limit_includes_nonpadding
+                        if cs != STATEEND
+                            && self.machines.as_ref()[mi].states[cs].limit_includes_nonpadding
                         {
                             self.decrement_limit(mi);
                         }
@@ -532,7 +536,7 @@ impl<'a> Framework<'a> {
 
     // FIXME: should probably just return the action instead and set mi outside?
     fn transition(&mut self, mi: usize, event: Event, n: u64) -> StateChange {
-        let machine = &self.machines[mi];
+        let machine = &self.machines.as_ref()[mi];
 
         // a machine in end state cannot transition
         if self.runtime[mi].current_state == STATEEND {
@@ -622,7 +626,7 @@ impl<'a> Framework<'a> {
         let cs = self.runtime[mi].current_state;
 
         if self.runtime[mi].state_limit == 0
-            && self.machines[mi].states[cs].limit.dist != DistType::None
+            && self.machines.as_ref()[mi].states[cs].limit.dist != DistType::None
         {
             // take no action and trigger limit reached
             self.actions[mi] = None;
