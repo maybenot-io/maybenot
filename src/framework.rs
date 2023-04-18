@@ -353,7 +353,7 @@ where
         max_blocking_frac: f64,
         mtu: u16,
         current_time: Instant,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         for m in machines.as_ref() {
             m.validate()?;
         }
