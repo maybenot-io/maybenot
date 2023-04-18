@@ -203,7 +203,7 @@ impl Dist {
     }
 
     /// Validate that the parameters is valid for the set [`DistType`].
-    pub fn validate(&self) -> Result<(), Box<dyn Error>> {
+    pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         match &self.dist {
             DistType::None => {}
             DistType::Uniform => {
@@ -361,7 +361,7 @@ impl Dist {
 }
 
 /// Try to parse a [`Dist`] from the provided bytes.
-pub fn parse_dist(buf: Vec<u8>) -> Result<Dist, Box<dyn Error>> {
+pub fn parse_dist(buf: Vec<u8>) -> Result<Dist, Box<dyn Error + Send + Sync>> {
     if buf.len() < SERIALIZEDDISTSIZE {
         bail!("too small")
     }
