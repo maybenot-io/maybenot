@@ -109,7 +109,7 @@
 //!                 // or non-padding (ideally, the user of the framework cannot
 //!                 // tell, because encrypted). The other data could also be
 //!                 // application data (non-padding) enqueued to be sent. In both
-//!                 // cases, the replaced data MUST be of the same size as the
+//!                 // cases, the replaced data MAY be of the same size as the
 //!                 // padding. Regardless of if the padding is replaced or not,
 //!                 // the event should still be triggered (step 2). If enqueued
 //!                 // non-padding is sent instead of padding, then a NonPaddingSent
