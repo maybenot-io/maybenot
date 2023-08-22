@@ -11,9 +11,9 @@ description = "a library for running state machines that pad and/or block networ
 [dependencies]
 rand="0.8.5"
 byteorder="1.4.3"
-simple-error = "0.2.3"
+simple-error = "0.3.0"
 hex = "0.4.3"
-libflate = "1.2.0"
+libflate = "2.0.0"
 ring = "0.16.20"
 rand_distr = "0.4.3"
-serde = {version = "1.0.159", features = ["derive"]}
+serde = {version = "1.0.185", features = ["derive"]}
