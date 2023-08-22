@@ -102,7 +102,7 @@ impl Machine {
         }
 
         // check each state
-        for state in &self.states {
+        for (index, state) in self.states.iter().enumerate() {
             // validate transitions
             for next in &state.next_state {
                 if next.1.len() != self.states.len() + 2 {
@@ -129,8 +129,9 @@ impl Machine {
                 if p_total <= 0.0 || p_total >= 1.0005 {
                     // 1.0005 due to rounding
                     bail!(
-                        "found invalid total probability vector {}, must be (0.0, 1.0]",
-                        p_total
+                        "found invalid total probability vector {} at index {}, must be (0.0, 1.0]",
+                        p_total,
+                        index
                     )
                 }
             }
