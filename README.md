@@ -108,3 +108,12 @@ Shmatikov and Wang from 2006.
 See the [paper](https://doi.org/10.1145/3603216.3624953) and
 [documentation](https://docs.rs/maybenot/latest/maybenot) for further details on
 the framework.
+
+Development of defenses using Maybenot is under active development. For some
+early results, see
+[https://github.com/ewitwer/maybenot-defenses](https://github.com/ewitwer/maybenot-defenses).
+
+While v1 of the framework and simulator are stable, v2 is slowly shaping up as
+we expand the capabilities of the framework. The goal is to keep the framework
+as simple as possible, while still being expressive enough to implement a wide
+range of defenses.
