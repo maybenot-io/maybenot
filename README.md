@@ -2,7 +2,7 @@
 
 Maybenot is a framework for traffic analysis defenses that hide patterns in
 encrypted communication. Its goal is to increase the uncertainty of network
-attackers, hence its logo 🤔 - the thinking face emoji (Unicode U+1F914).
+attackers, hence its logo 🤔 - the thinking face emoji (U+1F914).
 
 [![Crates.io][crates-badge]][crates-url]
 [![Documentation][docs-badge]][docs-url]
