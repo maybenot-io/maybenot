@@ -47,7 +47,6 @@ and executing scheduled actions. Maybenot does not specify the specific async
 runtime or how to keep time for sake of ease of integration.
 
 ## Example usage
-
 ```rust,no_run
 use maybenot::{
 framework::{Action, Framework, TriggerEvent},
@@ -95,15 +94,6 @@ loop {
 }
  ```
 
-## Origin
-Maybenot is based on the [Circuit Padding Framework of
-Tor](https://gitweb.torproject.org/tor.git/plain/doc/HACKING/CircuitPaddingDevelopment.md)
-by Mike Perry and George Kadianakis from 2019, which is a generalization of the
-[WTF-PAD Website Fingerprinting Defense](https://arxiv.org/pdf/1512.00524.pdf)
-design by Juarez et al. from 2016, which in turn is based on the concept of
-[Adaptive Padding](https://www.cs.utexas.edu/~shmat/shmat_esorics06.pdf) by
-Shmatikov and Wang from 2006.
-
 ## More details
 See the [paper](https://doi.org/10.1145/3603216.3624953) and
 [documentation](https://docs.rs/maybenot/latest/maybenot) for further details on
@@ -122,6 +112,15 @@ range of defenses.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as MIT or Apache-2.0, without any additional terms or conditions.
+
+## Origin
+Maybenot is based on the [Circuit Padding Framework of
+Tor](https://gitweb.torproject.org/tor.git/plain/doc/HACKING/CircuitPaddingDevelopment.md)
+by Perry and Kadianakis from 2019, which is a generalization of the [WTF-PAD
+Website Fingerprinting Defense](https://arxiv.org/pdf/1512.00524.pdf) design by
+Juarez et al. from 2016, which in turn is based on the concept of [Adaptive
+Padding](https://www.cs.utexas.edu/~shmat/shmat_esorics06.pdf) by Shmatikov and
+Wang from 2006.
 
 ## Sponsorship
 Made possible with support from [Mullvad VPN](https://mullvad.net/), the
