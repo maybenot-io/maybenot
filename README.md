@@ -117,3 +117,13 @@ While v1 of the framework and simulator are stable, v2 is slowly shaping up as
 we expand the capabilities of the framework. The goal is to keep the framework
 as simple as possible, while still being expressive enough to implement a wide
 range of defenses.
+
+## Contributing
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as MIT or Apache-2.0, without any additional terms or conditions.
+
+## Sponsorship
+Made possible with support from [Mullvad VPN](https://mullvad.net/), the
+[Swedish Internet Foundation](https://internetstiftelsen.se/en/), and the
+[Knowledge Foundation of Sweden](https://www.kks.se/en/start-en/).
