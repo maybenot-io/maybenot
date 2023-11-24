@@ -20,9 +20,8 @@ attackers, hence its logo 🤔 - the thinking face emoji (U+1F914).
 
 Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or Tor.
 While the connections are encrypted, *patterns* in the encrypted communication
-may still leak information about the underlying plaintext being communicated
-over encrypted. Maybenot is a framework for creating defenses that hide such
-patterns.
+may still leak information about the communicated plaintext. Maybenot is a
+framework for creating defenses that hide such patterns.
 
 To simulate defenses based on Maybenot, see the [Maybenot
 simulator](https://github.com/maybenot-io/maybenot-simulator/).
