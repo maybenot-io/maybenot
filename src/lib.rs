@@ -3,9 +3,8 @@
 //!
 //! Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or
 //! Tor. While the connections are encrypted, *patterns* in the encrypted
-//! communication may still leak information about the underlying plaintext
-//! being communicated over encrypted. Maybenot is a framework for creating
-//! defenses that hide such patterns.
+//! communication may still leak information about the communicated plaintext.
+//! Maybenot is a framework for creating defenses that hide such patterns.
 //!
 //! If you want to use Maybenot, see [`framework`] for details. As a user, that
 //! is typically all that you need and the other modules can be ignored. Note
