@@ -49,6 +49,7 @@ pub enum DistType {
     /// Beta distribution with set alpha and beta.
     Beta,
 }
+
 impl fmt::Display for DistType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -91,6 +92,7 @@ impl From<DistType> for u16 {
         }
     }
 }
+
 /// A distribution used in a [`State`](crate::state). Ugly struct for the sake
 /// of serializability with a type and two parameters that depend on the type of
 /// the dist. Also has an optional starting value and max value enforced after
@@ -124,62 +126,62 @@ impl fmt::Display for Dist {
             DistType::None => write!(f, "none"),
             DistType::Uniform => {
                 write!(f, "Uniform [{:?}, {:?}]{}", self.param1, self.param2, clamp)
-            }
+            },
             DistType::Normal => {
                 write!(
                     f,
                     "Normal mean {:?} stdev {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            }
+            },
             DistType::LogNormal => {
                 write!(
                     f,
                     "LogNormal mu {:?} sigma {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            }
+            },
             DistType::Binomial => {
                 write!(
                     f,
                     "Binomial trials {:?} probability {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            }
+            },
             DistType::Geometric => {
                 write!(f, "Geometric probability {:?}{}", self.param1, clamp)
-            }
+            },
             DistType::Pareto => {
                 write!(
                     f,
                     "Pareto scale {:?} shape {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            }
+            },
             DistType::Poisson => {
                 write!(f, "Poisson lambda {:?}{}", self.param1, clamp)
-            }
+            },
             DistType::Weibull => {
                 write!(
                     f,
                     "Weibull scale {:?} shape {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            }
+            },
             DistType::Gamma => {
                 write!(
                     f,
                     "Gamma scale {:?} shape {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            }
+            },
             DistType::Beta => {
                 write!(
                     f,
                     "Beta alpha {:?} beta {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            }
+            },
         }
     }
 }
@@ -202,7 +204,7 @@ impl Dist {
         }
     }
 
-    /// Validate that the parameters is valid for the set [`DistType`].
+    /// Validate that the parameters are valid for the set [`DistType`].
     pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         match &self.dist {
             DistType::None => {}
@@ -358,34 +360,33 @@ impl Dist {
         wtr.write_f64::<LittleEndian>(self.max).unwrap();
         wtr
     }
-}
 
-/// Try to parse a [`Dist`] from the provided bytes.
-pub fn parse_dist(buf: Vec<u8>) -> Result<Dist, Box<dyn Error + Send + Sync>> {
-    if buf.len() < SERIALIZEDDISTSIZE {
-        bail!("too small")
+    /// Try to parse a [`Dist`] from the provided bytes.
+    pub fn parse(buf: Vec<u8>) -> Result<Dist, Box<dyn Error + Send + Sync>> {
+        if buf.len() < SERIALIZEDDISTSIZE {
+            bail!("too small")
+        }
+
+        let mut d: Dist = Dist {
+            dist: DistType::None,
+            param1: 0.0,
+            param2: 0.0,
+            start: 0.0,
+            max: 0.0,
+        };
+
+        d.dist = DistType::from(LittleEndian::read_u16(&buf[..2]));
+        d.param1 = LittleEndian::read_f64(&buf[2..10]);
+        d.param2 = LittleEndian::read_f64(&buf[10..18]);
+        d.start = LittleEndian::read_f64(&buf[18..26]);
+        d.max = LittleEndian::read_f64(&buf[26..34]);
+
+        Ok(d)
     }
-
-    let mut d: Dist = Dist {
-        dist: DistType::None,
-        param1: 0.0,
-        param2: 0.0,
-        start: 0.0,
-        max: 0.0,
-    };
-
-    d.dist = DistType::from(LittleEndian::read_u16(&buf[..2]));
-    d.param1 = LittleEndian::read_f64(&buf[2..10]);
-    d.param2 = LittleEndian::read_f64(&buf[10..18]);
-    d.start = LittleEndian::read_f64(&buf[18..26]);
-    d.max = LittleEndian::read_f64(&buf[26..34]);
-
-    Ok(d)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::parse_dist;
     use crate::dist::*;
 
     #[test]
@@ -419,6 +420,7 @@ mod tests {
         d.dist = DistType::Beta;
         assert_eq!(d.to_string(), "Beta alpha 1.0 beta 2.0");
     }
+
     #[test]
     fn none() {
         let d = Dist {
@@ -443,19 +445,20 @@ mod tests {
         };
 
         let s = d.serialize();
-        let r = parse_dist(s).unwrap();
+        let r = Dist::parse(s).unwrap();
         assert_eq!(d.dist, r.dist);
 
         for i in 0..100 {
             d.dist = DistType::from(i);
             if i > 10 {
                 // NOTE: fragile, depends on number of dists
+                // TODO: swap to std::mem::variant_count::<DistType>()
                 assert_eq!(d.dist, DistType::None);
             } else if i > 0 {
                 assert_ne!(d.dist, DistType::None);
             }
             let s = d.serialize();
-            let r = parse_dist(s).unwrap();
+            let r = Dist::parse(s).unwrap();
             assert_eq!(d.dist, r.dist);
         }
     }

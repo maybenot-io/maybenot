@@ -137,9 +137,9 @@ impl Machine {
             }
 
             // validate distribution parameters
-            state.action.validate()?;
-            state.limit.validate()?;
-            state.timeout.validate()?;
+            state.action_dist.validate()?;
+            state.limit_dist.validate()?;
+            state.timeout_dist.validate()?;
         }
 
         Ok(())
@@ -221,7 +221,7 @@ fn parse_v1_machine(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>>
 
     let mut states = vec![];
     for _ in 0..num_states {
-        let s = parse_state(buf[r..r + expected_state_len].to_vec(), num_states).unwrap();
+        let s = State::parse(buf[r..r + expected_state_len].to_vec(), num_states).unwrap();
         r += expected_state_len;
         states.push(s);
     }
@@ -240,6 +240,7 @@ fn parse_v1_machine(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>>
 
 #[cfg(test)]
 mod tests {
+    use crate::action::*;
     use crate::dist::*;
     use crate::machine::*;
     use std::collections::HashMap;
@@ -258,21 +259,21 @@ mod tests {
         t.insert(Event::PaddingRecv, e0);
         t.insert(Event::LimitReached, e1);
         let mut s0 = State::new(t, num_states);
-        s0.timeout = Dist {
+        s0.timeout_dist = Dist {
             dist: DistType::Poisson,
             param1: 1.2,
             param2: 3.4,
             start: 5.6,
             max: 7.8,
         };
-        s0.limit = Dist {
+        s0.limit_dist = Dist {
             dist: DistType::Pareto,
             param1: 9.0,
             param2: 1.2,
             start: 3.4,
             max: 5.6,
         };
-        s0.action = Dist {
+        s0.action_dist = Dist {
             dist: DistType::Geometric,
             param1: 0.8,
             param2: 9.0,
@@ -289,28 +290,31 @@ mod tests {
         t.insert(Event::NonPaddingRecv, e0);
         t.insert(Event::PaddingSent, e1);
         let mut s1 = State::new(t, num_states);
-        s1.timeout = Dist {
+        s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 0.1,
             param2: 1.2,
             start: 3.4,
             max: 5.6,
         };
-        s1.limit = Dist {
+        s1.limit_dist = Dist {
             dist: DistType::Weibull,
             param1: 1.2,
             param2: 3.4,
             start: 5.6,
             max: 7.8,
         };
-        s1.action = Dist {
+        s1.action_dist = Dist {
             dist: DistType::Beta,
             param1: 5.6,
             param2: 7.8,
             start: 9.0,
             max: 1.2,
         };
-        s1.action_is_block = true;
+        s1.action = Action::BlockOutgoing {
+            bypass: false,
+            replace: false,
+        };
 
         let m = Machine {
             allowed_padding_bytes: 1000,
@@ -340,24 +344,23 @@ mod tests {
         assert_eq!(m.include_small_packets, false);
 
         assert_eq!(m.states.len(), 1);
-        assert_eq!(m.states[0].replace, false);
         assert_eq!(m.states[0].limit_includes_nonpadding, false);
-        assert_eq!(m.states[0].action_is_block, false);
-        assert_eq!(m.states[0].action.dist, DistType::None);
-        assert_eq!(m.states[0].action.param1, 0.0);
-        assert_eq!(m.states[0].action.param2, 0.0);
-        assert_eq!(m.states[0].action.max, 0.0);
-        assert_eq!(m.states[0].action.start, 0.0);
-        assert_eq!(m.states[0].limit.dist, DistType::None);
-        assert_eq!(m.states[0].limit.param1, 0.0);
-        assert_eq!(m.states[0].limit.param2, 0.0);
-        assert_eq!(m.states[0].limit.max, 0.0);
-        assert_eq!(m.states[0].limit.start, 0.0);
-        assert_eq!(m.states[0].timeout.dist, DistType::None);
-        assert_eq!(m.states[0].timeout.param1, 0.0);
-        assert_eq!(m.states[0].timeout.param2, 0.0);
-        assert_eq!(m.states[0].timeout.max, 0.0);
-        assert_eq!(m.states[0].timeout.start, 0.0);
+        assert_eq!(m.states[0].action, Action::InjectPadding { bypass: false, replace: false });
+        assert_eq!(m.states[0].action_dist.dist, DistType::None);
+        assert_eq!(m.states[0].action_dist.param1, 0.0);
+        assert_eq!(m.states[0].action_dist.param2, 0.0);
+        assert_eq!(m.states[0].action_dist.max, 0.0);
+        assert_eq!(m.states[0].action_dist.start, 0.0);
+        assert_eq!(m.states[0].limit_dist.dist, DistType::None);
+        assert_eq!(m.states[0].limit_dist.param1, 0.0);
+        assert_eq!(m.states[0].limit_dist.param2, 0.0);
+        assert_eq!(m.states[0].limit_dist.max, 0.0);
+        assert_eq!(m.states[0].limit_dist.start, 0.0);
+        assert_eq!(m.states[0].timeout_dist.dist, DistType::None);
+        assert_eq!(m.states[0].timeout_dist.param1, 0.0);
+        assert_eq!(m.states[0].timeout_dist.param2, 0.0);
+        assert_eq!(m.states[0].timeout_dist.max, 0.0);
+        assert_eq!(m.states[0].timeout_dist.start, 0.0);
 
         assert_eq!(m.states[0].next_state.len(), 0);
     }
@@ -370,14 +373,14 @@ mod tests {
         e.insert(0, 1.0);
         t.insert(Event::PaddingSent, e);
         let mut s0 = State::new(t, 1);
-        s0.timeout = Dist {
+        s0.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 1.2,
             param2: 3.4,
             start: 5.6,
             max: 7.8,
         };
-        s0.action = Dist {
+        s0.action_dist = Dist {
             dist: DistType::Poisson,
             param1: 0.5,
             param2: 0.0,
@@ -411,21 +414,24 @@ mod tests {
         e.insert(0, 1.0);
         t.insert(Event::BlockingEnd, e);
         let mut s0 = State::new(t, 1);
-        s0.timeout = Dist {
+        s0.timeout_dist = Dist {
             dist: DistType::Pareto,
             param1: 1.2,
             param2: 3.4,
             start: 5.6,
             max: 7.8,
         };
-        s0.action = Dist {
+        s0.action_dist = Dist {
             dist: DistType::Geometric,
             param1: 0.3,
             param2: 0.7,
             start: 3.4,
             max: 7.9,
         };
-        s0.action_is_block = true;
+        s0.action = Action::BlockOutgoing {
+            bypass: false,
+            replace: false,
+        };
         let m = Machine {
             allowed_padding_bytes: 0,
             max_padding_frac: 0.0,
@@ -453,34 +459,37 @@ mod tests {
         e.insert(1, 1.0);
         t.insert(Event::BlockingEnd, e);
         let mut s0 = State::new(t, 2);
-        s0.timeout = Dist {
+        s0.timeout_dist = Dist {
             dist: DistType::Pareto,
             param1: 1.2,
             param2: 3.4,
             start: 5.6,
             max: 7.8,
         };
-        s0.action = Dist {
+        s0.action_dist = Dist {
             dist: DistType::Geometric,
             param1: 0.3,
             param2: 0.7,
             start: 3.4,
             max: 7.9,
         };
-        s0.action_is_block = true;
+        s0.action = Action::BlockOutgoing {
+            bypass: false,
+            replace: false,
+        };
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::PaddingSent, e);
         let mut s1 = State::new(t, 2);
-        s1.timeout = Dist {
+        s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 1.2,
             param2: 3.4,
             start: 5.6,
             max: 7.8,
         };
-        s1.action = Dist {
+        s1.action_dist = Dist {
             dist: DistType::Poisson,
             param1: 0.5,
             param2: 0.0,
@@ -517,14 +526,14 @@ mod tests {
             e.insert(i, 1.0);
             t.insert(Event::PaddingSent, e);
             let mut s = State::new(t, num_states);
-            s.timeout = Dist {
+            s.timeout_dist = Dist {
                 dist: DistType::Uniform,
                 param1: 1.2,
                 param2: 3.4,
                 start: 5.6,
                 max: 7.8,
             };
-            s.action = Dist {
+            s.action_dist = Dist {
                 dist: DistType::Poisson,
                 param1: 0.5,
                 param2: 0.0,

@@ -1,5 +1,6 @@
 //! A state as part of a [`Machine`](crate::machine).
 
+use crate::action::*;
 use crate::constants::*;
 use crate::dist::*;
 use crate::event::*;
@@ -16,34 +17,23 @@ use simple_error::bail;
 /// A state as part of a [`Machine`](crate::machine).
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct State {
-    /// On transition to this state, sampled for a timeout duration until the
-    /// action is triggered.
-    pub timeout: Dist,
-    /// A sampled duration for the action.
-    pub action: Dist,
-    /// A flag that determines the action. If true, the action on timeout is to
-    /// block. If false, the action is to inject padding.
-    pub action_is_block: bool,
-    /// if the action is to block, this flag determines if padding actions are
-    /// allowed to bypass this block action. If the action is to pad, this flag
-    /// determines if the padding packet bypasses any existing blocking (that
-    /// was triggered with the bypass flag set). This might seem excessive, but
-    /// we want to be able to be able to make machines that can fail closed
-    /// (never bypass blocking) while being able to make machines that can
-    /// bypass some kinds of blocking is essential for constant-rate defenses.
-    pub bypass: bool,
-    /// If the action is to block, this flag determines if the action duration
-    /// should replace any existing blocking. If the action is to pad, this flag
-    /// determines if the padding packet MAY be replaced by a non-padding packet
-    /// queued at the time the padding packet would have been sent.
-    pub replace: bool,
-    /// A sampled limit on the number of actions allowed on repeated transitions
-    /// to the same state.
-    pub limit: Dist,
+    /// On transition to this state, this distribution will be sampled for a
+    /// timeout duration after which the action is triggered.
+    pub timeout_dist: Dist,
+    /// A distribution from which a value for the action is sampled. If
+    /// padding, this is the size of the padding packet; if blocking, it is
+    /// the duration of the blocking. For timer and counter actions, it is the
+    /// value to set the timer to or add/subtract from the counter.
+    pub action_dist: Dist,
+    /// A distribution from which a limit on the number of actions allowed on
+    /// repeated transitions to the same state is sampled.
+    pub limit_dist: Dist,
+    /// The action to be taken upon transition to this state.
+    pub action: Action,
     /// A flag that specifies if the sampled limit should also be decremented on
-    /// nonpadding (normal) traffic sent.
+    /// non-padding (normal) traffic sent.
     pub limit_includes_nonpadding: bool,
-    /// A map of all possible events associated to a probability vector. This is
+    /// A map of all possible events to associated probability vectors. This is
     /// a transition matrix, so the length of the probability vector is a
     /// function of the total number of states in a machine. The structure of
     /// the map is created by [`make_next_state()`].
@@ -55,12 +45,13 @@ impl State {
     /// and number of total states in the [`Machine`](crate::machine).
     pub fn new(t: HashMap<Event, HashMap<usize, f64>>, num_states: usize) -> Self {
         State {
-            timeout: Dist::new(),
-            action: Dist::new(),
-            action_is_block: false,
-            bypass: false,
-            replace: false,
-            limit: Dist::new(),
+            timeout_dist: Dist::new(),
+            action_dist: Dist::new(),
+            limit_dist: Dist::new(),
+            action: Action::InjectPadding {
+                bypass: false,
+                replace: false,
+            },
             limit_includes_nonpadding: false,
             next_state: make_next_state(t, num_states),
         }
@@ -68,23 +59,24 @@ impl State {
 
     /// Sample a timeout.
     pub fn sample_timeout(&self) -> f64 {
-        self.timeout.sample().min(MAXSAMPLEDTIMEOUT)
+        self.timeout_dist.sample().min(MAXSAMPLEDTIMEOUT)
     }
 
     /// Sample a limit.
     pub fn sample_limit(&self) -> u64 {
-        if self.limit.dist == DistType::None {
+        if self.limit_dist.dist == DistType::None {
             return STATELIMITMAX;
         }
-        self.limit.sample().round() as u64
+        let s = self.limit_dist.sample().round() as u64;
+        s.min(STATELIMITMAX)
     }
 
     /// Sample a size for a padding action.
     pub fn sample_size(&self, mtu: u64) -> u64 {
-        if self.action.dist == DistType::None {
+        if self.action_dist.dist == DistType::None {
             return mtu;
         }
-        let s = self.action.sample().round() as u64;
+        let s = self.action_dist.sample().round() as u64;
         if s > mtu {
             return mtu;
         }
@@ -95,9 +87,9 @@ impl State {
         s
     }
 
-    /// Sample a block duration for a blocking action.
+    /// Sample a blocking duration for a blocking action.
     pub fn sample_block(&self) -> f64 {
-        self.action.sample().min(MAXSAMPLEDBLOCK)
+        self.action_dist.sample().min(MAXSAMPLEDBLOCK)
     }
 
     /// Serialize the state into a byte vector.
@@ -105,25 +97,22 @@ impl State {
         let mut wtr = vec![];
 
         // distributions
-        wtr.write_all(&self.action.serialize()).unwrap();
-        wtr.write_all(&self.limit.serialize()).unwrap();
-        wtr.write_all(&self.timeout.serialize()).unwrap();
+        wtr.write_all(&self.action_dist.serialize()).unwrap();
+        wtr.write_all(&self.limit_dist.serialize()).unwrap();
+        wtr.write_all(&self.timeout_dist.serialize()).unwrap();
 
         // flags
-        if self.action_is_block {
-            wtr.write_u8(1).unwrap();
-        } else {
-            wtr.write_u8(0).unwrap();
-        }
-        if self.bypass {
-            wtr.write_u8(1).unwrap();
-        } else {
-            wtr.write_u8(0).unwrap();
-        }
-        if self.replace {
-            wtr.write_u8(1).unwrap();
-        } else {
-            wtr.write_u8(0).unwrap();
+        match self.action {
+            Action::BlockOutgoing { bypass, replace } => {
+                wtr.write_u8(1).unwrap(); // action_is_block
+                wtr.write_u8(if bypass { 1 } else { 0 }).unwrap();
+                wtr.write_u8(if replace { 1 } else { 0 }).unwrap();
+            },
+            Action::InjectPadding { bypass, replace } => {
+                wtr.write_u8(0).unwrap(); // action_is_block
+                wtr.write_u8(if bypass { 1 } else { 0 }).unwrap();
+                wtr.write_u8(if replace { 1 } else { 0 }).unwrap();
+            },
         }
         if self.limit_includes_nonpadding {
             wtr.write_u8(1).unwrap();
@@ -146,66 +135,77 @@ impl State {
 
         wtr
     }
-}
 
-/// Attempt to construct a [`State`] from the given bytes as part of a
-/// [`Machine`](crate::machine) with the specific number of states. The number
-/// of states has to be known since the size of the transition matrix depends on
-/// it.
-pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
-    // len: 3 distributions + 4 flags + next_state
-    if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::iterator().len() {
-        bail!("too small")
-    }
+    /// Attempt to construct a [`State`] from the given bytes as part of a
+    /// [`Machine`](crate::machine) with the specific number of states. The number
+    /// of states has to be known since the size of the transition matrix depends on
+    /// it.
+    pub fn parse(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
+        // len: 3 distributions + 4 flags + next_state
+        if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::iterator().len() {
+            bail!("too small")
+        }
 
-    // distributions
-    let mut r: usize = 0;
-    let action = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
-    r += SERIALIZEDDISTSIZE;
-    let limit = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
-    r += SERIALIZEDDISTSIZE;
-    let timeout = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
-    r += SERIALIZEDDISTSIZE;
+        // distributions
+        let mut r: usize = 0;
+        let action_dist = Dist::parse(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
+        r += SERIALIZEDDISTSIZE;
+        let limit_dist = Dist::parse(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
+        r += SERIALIZEDDISTSIZE;
+        let timeout_dist = Dist::parse(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
+        r += SERIALIZEDDISTSIZE;
 
-    // flags
-    let action_is_block: bool = buf[r] == 1;
-    r += 1;
-    let bypass: bool = buf[r] == 1;
-    r += 1;
-    let replace: bool = buf[r] == 1;
-    r += 1;
-    let limit_includes_nonpadding: bool = buf[r] == 1;
-    r += 1;
+        // flags
+        let action_is_block: bool = buf[r] == 1;
+        r += 1;
+        let bypass: bool = buf[r] == 1;
+        r += 1;
+        let replace: bool = buf[r] == 1;
+        r += 1;
 
-    // next state
-    let mut next_state: HashMap<Event, Vec<f64>> = HashMap::new();
-    for event in Event::iterator() {
-        let mut m = vec![];
+        let action = if action_is_block {
+            Action::BlockOutgoing {
+                bypass,
+                replace,
+            }
+        } else {
+            Action::InjectPadding {
+                bypass,
+                replace,
+            }
+        };
 
-        let mut all_zeroes = true;
-        for _ in 0..num_states + 2 {
-            let v = LittleEndian::read_f64(&buf[r..r + 8]);
-            m.push(v);
-            r += 8; // for f64
-            if v != 0.0 {
-                all_zeroes = false;
+        let limit_includes_nonpadding: bool = buf[r] == 1;
+        r += 1;
+
+        // next state
+        let mut next_state: HashMap<Event, Vec<f64>> = HashMap::new();
+        for event in Event::iterator() {
+            let mut m = vec![];
+
+            let mut all_zeroes = true;
+            for _ in 0..num_states + 2 {
+                let v = LittleEndian::read_f64(&buf[r..r + 8]);
+                m.push(v);
+                r += 8; // for f64
+                if v != 0.0 {
+                    all_zeroes = false;
+                }
+            }
+            if !all_zeroes {
+                next_state.insert(*event, m);
             }
         }
-        if !all_zeroes {
-            next_state.insert(*event, m);
-        }
-    }
 
-    Ok(State {
-        timeout,
-        limit,
-        action,
-        action_is_block,
-        bypass,
-        replace,
-        limit_includes_nonpadding,
-        next_state,
-    })
+        Ok(State {
+            timeout_dist,
+            action_dist,
+            limit_dist,
+            action,
+            limit_includes_nonpadding,
+            next_state,
+        })
+    }
 }
 
 /// A helper used to construct [`State::next_state`] based on a map of
@@ -274,36 +274,37 @@ mod tests {
 
         // create master
         let s = State {
-            timeout: Dist {
+            timeout_dist: Dist {
                 dist: DistType::Poisson,
                 param1: 1.2,
                 param2: 3.4,
                 start: 5.6,
                 max: 7.8,
             },
-            limit: Dist {
+            limit_dist: Dist {
                 dist: DistType::Pareto,
                 param1: 9.0,
                 param2: 1.2,
                 start: 3.4,
                 max: 5.6,
             },
-            action: Dist {
+            action_dist: Dist {
                 dist: DistType::Geometric,
                 param1: 7.8,
                 param2: 9.0,
                 start: 1.2,
                 max: 3.4,
             },
-            action_is_block: false,
-            bypass: false,
-            replace: true,
+            action: Action::InjectPadding {
+                bypass: false,
+                replace: true,
+            },
             limit_includes_nonpadding: false,
             next_state: make_next_state(t, num_states),
         };
 
         let buf = s.serialize(num_states);
-        let parsed = parse_state(buf, num_states).unwrap();
+        let parsed = State::parse(buf, num_states).unwrap();
         assert_eq!(s, parsed);
     }
 }

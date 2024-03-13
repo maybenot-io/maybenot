@@ -12,7 +12,7 @@ pub const MAXSAMPLEDTIMEOUT: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 /// one minute in microseconds.
 pub const MAXSAMPLEDBLOCK: f64 = 1000.0 * 1000.0 * 60.0;
 
-/// The size (in bytes) of a serialized [`State`](crate::state).
+/// The size (in bytes) of a serialized distribution for a [`State`](crate::state).
 pub const SERIALIZEDDISTSIZE: usize = 2 + 8 * 4;
 
 /// The maximum possible sampled limit of a [`State`](crate::state). This is the
@@ -22,7 +22,7 @@ pub const STATELIMITMAX: u64 = u64::MAX;
 /// An internal pseudo-state that means that no [`State`](crate::state) defined
 /// in a transition: it is used for state transitions as a "no-op" transition
 /// for any remaining probability up until 1.0.
-pub const STATENOP: usize = u64::MAX as usize;
+pub const STATENOP: usize = usize::MAX;
 /// A pseudo-state that means the [`Machine`](crate::machine) should completely
 /// stop.
 pub const STATEEND: usize = STATENOP - 1;

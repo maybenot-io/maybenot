@@ -11,7 +11,9 @@
 //! ## Example usage
 //! ```
 //! use maybenot::{
-//! framework::{Action, Framework, TriggerEvent},
+//! action::TriggerAction,
+//! event::TriggerEvent,
+//! framework::Framework,
 //! machine::Machine,
 //! };
 //! use std::{str::FromStr, time::Instant};
@@ -71,15 +73,15 @@
 //!         // machine (regardless of the number of events). It is your
 //!         // responsibility to perform those actions according to the
 //!         // specification. To do so, you will need up to one timer per
-//!         // machine. The machine identifier (machine in each Action) uniquely
-//!         // and deterministically maps to a single machine running in the
+//!         // machine. The machine identifier (machine in each TriggerAction)
+//!         // uniquely and deterministically maps to a single machine running in the
 //!         // framework (so suitable as a key for a data structure storing your
 //!         // timers, e.g., a HashMap<MachineId, SomeTimerDataStructure>).
 //!         match action {
-//!             Action::Cancel { machine: _ } => {
+//!             TriggerAction::Cancel { machine: _ } => {
 //!                 // If any active pending timer for this machine, cancel it.
 //!             }
-//!             Action::InjectPadding {
+//!             TriggerAction::InjectPadding {
 //!                 timeout: _,
 //!                 size: _,
 //!                 bypass: _,
@@ -124,7 +126,7 @@
 //!                 // to make it efficient (typically, efficient machines will always
 //!                 // something scheduled but try to minimize actual padding sent).
 //!             }
-//!             Action::BlockOutgoing {
+//!             TriggerAction::BlockOutgoing {
 //!                 timeout: _,
 //!                 duration: _,
 //!                 bypass: _,
@@ -158,7 +160,7 @@
 //!                 //
 //!                 // If bypass is true and blocking was activated, extended, or
 //!                 // replaced in step 1, then a bypass flag MUST be set and be
-//!                 // available to check as part of dealing with Action::InjectPadding
+//!                 // available to check as part of dealing with TriggerAction::InjectPadding
 //!                 // actions (see above).
 //!             }
 //!         }
@@ -171,129 +173,19 @@
 //! ```
 use simple_error::bail;
 
+use crate::action::*;
 use crate::constants::*;
 use crate::dist::DistType;
 use crate::event::*;
 use crate::machine::*;
 use std::cmp::Ordering;
 use std::error::Error;
-use std::fmt;
 use std::time::Duration;
 use std::time::Instant;
 
 /// An opaque token representing one machine running inside the framework.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct MachineId(usize);
-
-impl MachineId {
-    /// Create a new machine identifier from a raw integer. Intended for use
-    /// with the `machine` field of [`Action`] and [`TriggerEvent`]. For testing
-    /// purposes only. For regular use, use [`MachineId`]s returned by
-    /// [Framework::trigger_events]. Triggering an event in the framework for a
-    /// machine that does not exist does not raise a panic or any error.
-    pub fn from_raw(raw: usize) -> Self {
-        MachineId(raw)
-    }
-}
-
-/// Represents an event to be triggered in the framework.
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub enum TriggerEvent {
-    /// Received non-padding bytes.
-    NonPaddingRecv { bytes_recv: u16 },
-    /// Received padding bytes.
-    PaddingRecv { bytes_recv: u16 },
-    /// Sent non-padding bytes.
-    NonPaddingSent { bytes_sent: u16 },
-    /// Sent padding bytes.
-    PaddingSent { bytes_sent: u16, machine: MachineId },
-    /// Blocking of outgoing traffic started by the action from a machine.
-    BlockingBegin { machine: MachineId },
-    /// Blocking of outgoing traffic stopped.
-    BlockingEnd,
-    /// An event triggered internally by the framework when a state has used up
-    /// its limit.
-    LimitReached { machine: MachineId },
-    /// The MTU of the protected connection was updated.
-    UpdateMTU { new_mtu: u16 },
-}
-
-impl TriggerEvent {
-    /// Checks if the [`TriggerEvent`] is a particular [`Event`].
-    pub fn is_event(&self, e: Event) -> bool {
-        match self {
-            TriggerEvent::NonPaddingRecv { .. } => e == Event::NonPaddingRecv,
-            TriggerEvent::PaddingRecv { .. } => e == Event::PaddingRecv,
-            TriggerEvent::NonPaddingSent { .. } => e == Event::NonPaddingSent,
-            TriggerEvent::PaddingSent { .. } => e == Event::PaddingSent,
-            TriggerEvent::BlockingBegin { .. } => e == Event::BlockingBegin,
-            TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
-            TriggerEvent::LimitReached { .. } => e == Event::LimitReached,
-            TriggerEvent::UpdateMTU { .. } => e == Event::UpdateMTU,
-        }
-    }
-}
-
-impl fmt::Display for TriggerEvent {
-    // note that we don't share the private MachineId
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            TriggerEvent::NonPaddingRecv { bytes_recv } => write!(f, "rn,{}", bytes_recv),
-            TriggerEvent::PaddingRecv { bytes_recv } => write!(f, "rp,{}", bytes_recv),
-            TriggerEvent::NonPaddingSent { bytes_sent } => write!(f, "sn,{}", bytes_sent),
-            TriggerEvent::PaddingSent { bytes_sent, .. } => write!(f, "sp,{}", bytes_sent),
-            TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
-            TriggerEvent::BlockingEnd => write!(f, "be"),
-            TriggerEvent::LimitReached { .. } => write!(f, "lr"),
-            TriggerEvent::UpdateMTU { new_mtu } => write!(f, "um,{}", new_mtu),
-        }
-    }
-}
-
-/// The action to be taken by the framework user.
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub enum Action {
-    /// Stop any currently scheduled action for the machine.
-    Cancel { machine: MachineId },
-    /// Schedule padding to be injected after the given timeout for the machine.
-    /// The size of the padding (in bytes) is specified. Will never be larger
-    /// than MTU.
-    ///
-    /// The bypass flag indicates if the padding packet MUST be sent despite
-    /// active blocking of outgoing traffic. Note that this is only allowed if
-    /// the active blocking was set with the bypass flag set to true.
-    ///
-    /// The replace flag indicates if the padding packet MAY be replaced by an
-    /// existing non-padding packet already queued for sending at the time the
-    /// padding packet would have been sent (egress queued) or about to be sent.
-    ///
-    /// If the bypass and replace flags are both set to true AND the active
-    /// blocking may be bypassed, then non-padding packets MAY replace the
-    /// padding packet AND bypass the active blocking.
-    InjectPadding {
-        timeout: Duration,
-        size: u16,
-        bypass: bool,
-        replace: bool,
-        machine: MachineId,
-    },
-    /// Schedule outgoing traffic to be blocked after the given timeout for the
-    /// machine. The duration of the block is specified.
-    ///
-    /// The bypass flag indicates if the blocking of outgoing traffic can be
-    /// bypassed by padding packets with the bypass flag set to true.
-    ///
-    /// The replace flag indicates if the duration should replace any other
-    /// currently ongoing blocking of outgoing traffic. If the flag is false,
-    /// the longest of the two durations MUST be used.
-    BlockOutgoing {
-        timeout: Duration,
-        duration: Duration,
-        bypass: bool,
-        replace: bool,
-        machine: MachineId,
-    },
-}
 
 #[derive(Debug, Clone)]
 struct MachineRuntime {
@@ -310,15 +202,17 @@ enum StateChange {
     Changed,
     Unchanged,
 }
+
 /// An instance of the Maybenot framework.
 ///
 /// An instance of the [`Framework`] repeatedly takes as *input* one or more
 /// [`TriggerEvent`] describing the encrypted traffic going over an encrypted
-/// channel, and produces as *output* zero or more [`Action`], such as to inject
-/// *padding* traffic or *block* outgoing traffic. One or more [`Machine`]
-/// determine what [`Action`] to take based on [`TriggerEvent`].
+/// channel, and produces as *output* zero or more [`TriggerAction`], such as
+/// to inject *padding* traffic or *block* outgoing traffic. One or more
+/// [`Machine`] determine what [`TriggerAction`] to take based on
+/// [`TriggerEvent`].
 pub struct Framework<M> {
-    actions: Vec<Option<Action>>,
+    actions: Vec<Option<TriggerAction>>,
     current_time: Instant,
     machines: M,
     runtime: Vec<MachineRuntime>,
@@ -359,10 +253,10 @@ where
         }
 
         if !(0.0..=1.0).contains(&max_padding_frac) {
-            bail!("max_padding_frac has to be beteen [0.0, 1.0]");
+            bail!("max_padding_frac has to be between [0.0, 1.0]");
         }
         if !(0.0..=1.0).contains(&max_blocking_frac) {
-            bail!("max_blocking_frac has to be beteen [0.0, 1.0]");
+            bail!("max_blocking_frac has to be between [0.0, 1.0]");
         }
 
         let runtime = vec![
@@ -404,12 +298,12 @@ where
     /// Trigger zero or more [`TriggerEvent`] for all machines running in the
     /// framework. The current time SHOULD be the current time at time of
     /// calling the method (e.g., [`Instant::now()`]). Returns an iterator of
-    /// zero or more [`Action`] that MUST be taken by the caller.
+    /// zero or more [`TriggerAction`] that MUST be taken by the caller.
     pub fn trigger_events(
         &mut self,
         events: &[TriggerEvent],
         current_time: Instant,
-    ) -> impl Iterator<Item = &Action> {
+    ) -> impl Iterator<Item = &TriggerAction> {
         // reset all actions
         self.actions.fill(None);
 
@@ -471,7 +365,6 @@ where
 
                 for mi in 0..self.runtime.len() {
                     // ... but the event is per-machine
-                    // TODO: we probably want a PaddingQueued (self) and PaddingSent (global)
                     if mi == machine.0 {
                         self.runtime[mi].padding_sent += *bytes_sent as u64;
 
@@ -481,6 +374,7 @@ where
                             // decrement only makes sense if we didn't change state
                             self.decrement_limit(mi)
                         }
+                        break;
                     }
                 }
             }
@@ -534,7 +428,6 @@ where
         };
     }
 
-    // FIXME: should probably just return the action instead and set mi outside?
     fn transition(&mut self, mi: usize, event: Event, n: u64) -> StateChange {
         let machine = &self.machines.as_ref()[mi];
 
@@ -560,7 +453,7 @@ where
         match next_state {
             STATECANCEL => {
                 // cancel any pending action, but doesn't count as a state change
-                self.actions[mi] = Some(Action::Cancel {
+                self.actions[mi] = Some(TriggerAction::Cancel {
                     machine: MachineId(mi),
                 });
                 StateChange::Unchanged
@@ -597,25 +490,28 @@ where
         runtime: &MachineRuntime,
         machine: &Machine,
         mi: MachineId,
-    ) -> Option<Action> {
+    ) -> Option<TriggerAction> {
         let current = &machine.states[runtime.current_state];
 
-        if current.action_is_block {
-            Some(Action::BlockOutgoing {
-                timeout: Duration::from_micros(current.sample_timeout() as u64),
-                duration: Duration::from_micros(current.sample_block() as u64),
-                bypass: current.bypass,
-                replace: current.replace,
-                machine: mi,
-            })
-        } else {
-            Some(Action::InjectPadding {
-                timeout: Duration::from_micros(current.sample_timeout() as u64),
-                size: current.sample_size(self.mtu as u64) as u16,
-                bypass: current.bypass,
-                replace: current.replace,
-                machine: mi,
-            })
+        match current.action {
+            Action::BlockOutgoing { bypass, replace } => {
+                Some(TriggerAction::BlockOutgoing {
+                    timeout: Duration::from_micros(current.sample_timeout() as u64),
+                    duration: Duration::from_micros(current.sample_block() as u64),
+                    bypass: bypass,
+                    replace: replace,
+                    machine: mi,
+                })
+            },
+            Action::InjectPadding { bypass, replace } => {
+                Some(TriggerAction::InjectPadding {
+                    timeout: Duration::from_micros(current.sample_timeout() as u64),
+                    size: current.sample_size(self.mtu as u64) as u16,
+                    bypass: bypass,
+                    replace: replace,
+                    machine: mi,
+                })
+            },
         }
     }
 
@@ -626,7 +522,7 @@ where
         let cs = self.runtime[mi].current_state;
 
         if self.runtime[mi].state_limit == 0
-            && self.machines.as_ref()[mi].states[cs].limit.dist != DistType::None
+            && self.machines.as_ref()[mi].states[cs].limit_dist.dist != DistType::None
         {
             // take no action and trigger limit reached
             self.actions[mi] = None;
@@ -649,15 +545,15 @@ where
         {
             return (0, false);
         }
-        let next_prop = &machine.states[runtime.current_state].next_state[&event];
+        let next_prob = &machine.states[runtime.current_state].next_state[&event];
 
         let p = rand::random::<f64>();
         let mut total = 0.0;
-        for i in 0..next_prop.len() {
-            total += next_prop[i];
+        for i in 0..next_prob.len() {
+            total += next_prob[i];
             if p <= total {
                 // some events are machine-defined, others framework pseudo-states
-                match next_prop.len().cmp(&(i + 2)) {
+                match next_prob.len().cmp(&(i + 2)) {
                     Ordering::Greater => return (i, true),
                     Ordering::Less => return (STATEEND, true),
                     Ordering::Equal => return (STATECANCEL, true),
@@ -671,7 +567,7 @@ where
     fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
         // either blocking or padding limits apply
-        if current.action_is_block {
+        if let Action::BlockOutgoing { .. } = current.action {
             return self.below_limit_blocking(runtime, machine);
         }
         self.below_limit_padding(runtime, machine)
@@ -682,8 +578,10 @@ where
         // blocking action
 
         // special case: we always allow overwriting existing blocking
-        if current.replace && !self.global_blocking_active {
-            // we still check against sate limit, because its machine internal
+        let replace = if let Action::BlockOutgoing { replace, .. } = current.action { replace } else { false };
+
+        if replace {
+            // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
 
@@ -703,7 +601,7 @@ where
         // machine allowed blocking duration first, since it bypasses the
         // other two types of limits
         if m_block_dur < Duration::from_micros(machine.allowed_blocked_microsec) {
-            // we still check against sate limit, because its machine internal
+            // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
 
@@ -757,9 +655,12 @@ where
 
         // hit global limits?
         if self.global_max_padding_frac > 0.0 {
-            let frac = self.global_paddingsent_bytes as f64
-                / (self.global_paddingsent_bytes as f64 + self.global_nonpadding_sent_bytes as f64);
-            if frac >= self.global_max_padding_frac {
+            let total = self.global_paddingsent_bytes + self.global_nonpadding_sent_bytes;
+            if total == 0 {
+                // FIXME: same as above, should this be true?
+                return false;
+            }
+            if self.global_paddingsent_bytes as f64 / total as f64 >= self.global_max_padding_frac {
                 return false;
             }
         }
@@ -808,7 +709,7 @@ mod tests {
         e.insert(1, 1.0);
         t.insert(Event::PaddingSent, e);
         let mut s0 = State::new(t, num_states);
-        s0.timeout = Dist {
+        s0.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 10.0,
             param2: 10.0,
@@ -822,7 +723,7 @@ mod tests {
         e.insert(0, 1.0);
         t.insert(Event::PaddingRecv, e);
         let mut s1 = State::new(t, num_states);
-        s1.timeout = Dist {
+        s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 1.0,
             param2: 1.0,
@@ -876,7 +777,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(Action::InjectPadding {
+            Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(1),
                 size: mtu as u16,
                 bypass: false,
@@ -900,7 +801,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::PaddingRecv { bytes_recv: 0 }], current_time);
         assert_eq!(
             f.actions[0],
-            Some(Action::InjectPadding {
+            Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(10),
                 size: mtu as u16,
                 bypass: false,
@@ -923,7 +824,7 @@ mod tests {
             );
             assert_eq!(
                 f.actions[0],
-                Some(Action::InjectPadding {
+                Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(10),
                     size: mtu as u16,
                     bypass: false,
@@ -949,7 +850,7 @@ mod tests {
                 );
                 assert_eq!(
                     f.actions[0],
-                    Some(Action::InjectPadding {
+                    Some(TriggerAction::InjectPadding {
                         timeout: Duration::from_micros(10),
                         size: mtu as u16,
                         bypass: false,
@@ -974,7 +875,7 @@ mod tests {
                 );
                 assert_eq!(
                     f.actions[0],
-                    Some(Action::InjectPadding {
+                    Some(TriggerAction::InjectPadding {
                         timeout: Duration::from_micros(1),
                         size: mtu as u16,
                         bypass: false,
@@ -996,7 +897,7 @@ mod tests {
         e.insert(1, 1.0);
         t.insert(Event::PaddingSent, e);
         let mut s0 = State::new(t, num_states);
-        s0.timeout = Dist {
+        s0.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 10.0,
             param2: 10.0,
@@ -1094,7 +995,7 @@ mod tests {
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingSent, e);
         let mut s0 = State::new(t, num_states);
-        s0.timeout = Dist {
+        s0.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 0.0,
             param2: 0.0,
@@ -1106,21 +1007,24 @@ mod tests {
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingSent, e);
         let mut s1 = State::new(t, num_states);
-        s1.timeout = Dist {
+        s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 1.0,
             param2: 1.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action = Dist {
+        s1.action_dist = Dist {
             dist: DistType::Uniform,
             param1: 10.0,
             param2: 10.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action_is_block = true;
+        s1.action = Action::BlockOutgoing {
+            bypass: false,
+            replace: false,
+        };
 
         let m = Machine {
             allowed_padding_bytes: 1000 * 1024,
@@ -1142,7 +1046,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(Action::BlockOutgoing {
+            Some(TriggerAction::BlockOutgoing {
                 timeout: Duration::from_micros(1),
                 duration: Duration::from_micros(10),
                 bypass: false,
@@ -1168,7 +1072,7 @@ mod tests {
             );
             assert_eq!(
                 f.actions[0],
-                Some(Action::BlockOutgoing {
+                Some(TriggerAction::BlockOutgoing {
                     timeout: Duration::from_micros(1),
                     duration: Duration::from_micros(10),
                     bypass: false,
@@ -1204,7 +1108,7 @@ mod tests {
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
         let mut s1 = State::new(t, num_states);
-        s1.timeout = Dist {
+        s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
@@ -1234,7 +1138,7 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(
                 f.actions[0],
-                Some(Action::InjectPadding {
+                Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(2),
                     size: mtu as u16,
                     bypass: false,
@@ -1283,7 +1187,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(Action::InjectPadding {
+            Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(2),
                 size: mtu as u16,
                 bypass: false,
@@ -1314,7 +1218,7 @@ mod tests {
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
         let mut s1 = State::new(t, num_states);
-        s1.timeout = Dist {
+        s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
@@ -1348,7 +1252,7 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(
                 f.actions[0],
-                Some(Action::InjectPadding {
+                Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(2),
                     size: mtu as u16,
                     bypass: false,
@@ -1358,7 +1262,7 @@ mod tests {
             );
             assert_eq!(
                 f.actions[1],
-                Some(Action::InjectPadding {
+                Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(2),
                     size: mtu as u16,
                     bypass: false,
@@ -1423,7 +1327,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(Action::InjectPadding {
+            Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(2),
                 size: mtu as u16,
                 bypass: false,
@@ -1433,7 +1337,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[1],
-            Some(Action::InjectPadding {
+            Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(2),
                 size: mtu as u16,
                 bypass: false,
@@ -1463,21 +1367,24 @@ mod tests {
         t.insert(Event::NonPaddingRecv, e.clone());
         let mut s1 = State::new(t, num_states);
         // block every 2us for 2us
-        s1.timeout = Dist {
+        s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action = Dist {
+        s1.action_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action_is_block = true;
+        s1.action = Action::BlockOutgoing {
+            bypass: false,
+            replace: false,
+        };
 
         let m = Machine {
             allowed_padding_bytes: 0,
@@ -1502,7 +1409,7 @@ mod tests {
         for _ in 0..5 {
             assert_eq!(
                 f.actions[0],
-                Some(Action::BlockOutgoing {
+                Some(TriggerAction::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     bypass: false,
@@ -1519,7 +1426,7 @@ mod tests {
             );
             assert_eq!(
                 f.actions[0],
-                Some(Action::BlockOutgoing {
+                Some(TriggerAction::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     bypass: false,
@@ -1556,7 +1463,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(Action::BlockOutgoing {
+            Some(TriggerAction::BlockOutgoing {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
                 bypass: false,
@@ -1586,21 +1493,24 @@ mod tests {
         t.insert(Event::NonPaddingRecv, e.clone());
         let mut s1 = State::new(t, num_states);
         // block every 2us for 2us
-        s1.timeout = Dist {
+        s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action = Dist {
+        s1.action_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action_is_block = true;
+        s1.action = Action::BlockOutgoing {
+            bypass: false,
+            replace: false,
+        };
 
         let m = Machine {
             allowed_padding_bytes: 0,
@@ -1625,7 +1535,7 @@ mod tests {
         for _ in 0..5 {
             assert_eq!(
                 f.actions[0],
-                Some(Action::BlockOutgoing {
+                Some(TriggerAction::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     bypass: false,
@@ -1642,7 +1552,7 @@ mod tests {
             );
             assert_eq!(
                 f.actions[0],
-                Some(Action::BlockOutgoing {
+                Some(TriggerAction::BlockOutgoing {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     bypass: false,
@@ -1679,7 +1589,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(Action::BlockOutgoing {
+            Some(TriggerAction::BlockOutgoing {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
                 bypass: false,
@@ -1705,14 +1615,14 @@ mod tests {
         e.insert(1, 1.0);
         t.insert(Event::PaddingSent, e);
         let mut s1 = State::new(t, num_states);
-        s1.timeout = Dist {
+        s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 1.0,
             param2: 1.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.limit = Dist {
+        s1.limit_dist = Dist {
             dist: DistType::Uniform,
             param1: 4.0,
             param2: 4.0,
@@ -1746,7 +1656,7 @@ mod tests {
         for _ in 0..4 {
             assert_eq!(
                 f.actions[0],
-                Some(Action::InjectPadding {
+                Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(1),
                     size: mtu as u16,
                     bypass: false,

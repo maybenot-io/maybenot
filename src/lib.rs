@@ -4,7 +4,7 @@
 //! Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or
 //! Tor. While the connections are encrypted, *patterns* in the encrypted
 //! communication may still leak information about the underlying plaintext
-//! being communicated over encrypted. Maybenot is a framework for creating
+//! being communicated with encryption. Maybenot is a framework for creating
 //! defenses that hide such patterns.
 //!
 //! If you want to use Maybenot, see [`framework`] for details. As a user, that
@@ -14,7 +14,8 @@
 //!
 //! If you want to build machines for the [`framework`], take a look at all the
 //! modules. For top-down, start with [`machine`]. For bottom-down, start with
-//! [`dist`] and [`event`] before [`state`] and finally [`machine`].
+//! [`dist`], [`event`], and [`action`] before [`state`] and finally [`machine`].
+pub mod action;
 pub mod constants;
 pub mod dist;
 pub mod event;

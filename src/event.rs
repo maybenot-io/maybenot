@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::framework::MachineId;
 use self::Event::*;
 use std::fmt;
 use std::hash::Hash;
@@ -47,6 +48,60 @@ impl Event {
             UpdateMTU,
         ];
         EVENTS.iter()
+    }
+}
+
+/// Represents an event to be triggered in the framework.
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub enum TriggerEvent {
+    /// Received non-padding bytes.
+    NonPaddingRecv { bytes_recv: u16 },
+    /// Received padding bytes.
+    PaddingRecv { bytes_recv: u16 },
+    /// Sent non-padding bytes.
+    NonPaddingSent { bytes_sent: u16 },
+    /// Sent padding bytes.
+    PaddingSent { bytes_sent: u16, machine: MachineId },
+    /// Blocking of outgoing traffic started by the action from a machine.
+    BlockingBegin { machine: MachineId },
+    /// Blocking of outgoing traffic stopped.
+    BlockingEnd,
+    /// An event triggered internally by the framework when a state has used up
+    /// its limit.
+    LimitReached { machine: MachineId },
+    /// The MTU of the protected connection was updated.
+    UpdateMTU { new_mtu: u16 },
+}
+
+impl TriggerEvent {
+    /// Checks if the [`TriggerEvent`] is a particular [`Event`].
+    pub fn is_event(&self, e: Event) -> bool {
+        match self {
+            TriggerEvent::NonPaddingRecv { .. } => e == Event::NonPaddingRecv,
+            TriggerEvent::PaddingRecv { .. } => e == Event::PaddingRecv,
+            TriggerEvent::NonPaddingSent { .. } => e == Event::NonPaddingSent,
+            TriggerEvent::PaddingSent { .. } => e == Event::PaddingSent,
+            TriggerEvent::BlockingBegin { .. } => e == Event::BlockingBegin,
+            TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
+            TriggerEvent::LimitReached { .. } => e == Event::LimitReached,
+            TriggerEvent::UpdateMTU { .. } => e == Event::UpdateMTU,
+        }
+    }
+}
+
+impl fmt::Display for TriggerEvent {
+    // note that we don't share the private MachineId
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TriggerEvent::NonPaddingRecv { bytes_recv } => write!(f, "rn,{}", bytes_recv),
+            TriggerEvent::PaddingRecv { bytes_recv } => write!(f, "rp,{}", bytes_recv),
+            TriggerEvent::NonPaddingSent { bytes_sent } => write!(f, "sn,{}", bytes_sent),
+            TriggerEvent::PaddingSent { bytes_sent, .. } => write!(f, "sp,{}", bytes_sent),
+            TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
+            TriggerEvent::BlockingEnd => write!(f, "be"),
+            TriggerEvent::LimitReached { .. } => write!(f, "lr"),
+            TriggerEvent::UpdateMTU { new_mtu } => write!(f, "um,{}", new_mtu),
+        }
     }
 }
 
