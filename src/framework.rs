@@ -115,7 +115,7 @@
 //!                 // padding. Regardless of if the padding is replaced or not,
 //!                 // the event should still be triggered (step 2). If enqueued
 //!                 // non-padding is sent instead of padding, then a NonPaddingSent
-//!                // event should be triggered as well.
+//!                 // event should be triggered as well.
 //!                 //
 //!                 // Above, note the use-case of having bypass and replace set to
 //!                 // true. This is to support constant-rate defenses.
@@ -1440,7 +1440,7 @@ mod tests {
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
 
-        // now we burn our allowed padding budget, should be blocked for 10us
+        // now we've burned our blocking budget, should be blocked for 10us
         for _ in 0..5 {
             current_time = current_time.add(Duration::from_micros(2));
             _ = f.trigger_events(
@@ -1566,7 +1566,7 @@ mod tests {
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
 
-        // now we burn our allowed padding budget, should be blocked for 10us
+        // now we've burned our blocking budget, should be blocked for 10us
         for _ in 0..5 {
             current_time = current_time.add(Duration::from_micros(2));
             _ = f.trigger_events(

@@ -1,5 +1,5 @@
 //! A machine determines when to inject and/or block outgoing traffic. Consists
-//! of zero or more [`State`] structs.
+//! of one or more [`State`] structs.
 
 use crate::constants::*;
 use crate::event::*;
@@ -55,7 +55,7 @@ impl FromStr for Machine {
         let (version, payload) = buf.split_at(2);
 
         match u16::from_le_bytes(version.try_into().unwrap()) {
-            1 => parse_v1_machine(payload),
+            1 => Machine::parse_v1(payload),
             v => bail!("unsupported version: {}", v),
         }
     }
@@ -180,62 +180,62 @@ impl Machine {
         // return hex encoded string
         encode(compressed)
     }
-}
 
-fn parse_v1_machine(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
-    // note that we already read 2 bytes of version in fn parse_machine()
-    if buf.len() < 4 * 8 + 1 + 2 {
-        bail!("not enough data for version 1 machine")
+    fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
+        // note that we already read 2 bytes of version in fn parse_machine()
+        if buf.len() < 4 * 8 + 1 + 2 {
+            bail!("not enough data for version 1 machine")
+        }
+    
+        let mut r: usize = 0;
+        // 4 8-byte values
+        let allowed_padding_bytes = LittleEndian::read_u64(&buf[r..r + 8]);
+        r += 8;
+        let max_padding_frac = LittleEndian::read_f64(&buf[r..r + 8]);
+        r += 8;
+        let allowed_blocked_microsec = LittleEndian::read_u64(&buf[r..r + 8]);
+        r += 8;
+        let max_blocking_frac = LittleEndian::read_f64(&buf[r..r + 8]);
+        r += 8;
+    
+        // 1-byte flag
+        let include_small_packets = buf[r] == 1;
+        r += 1;
+    
+        // 2-byte num of states
+        let num_states: usize = LittleEndian::read_u16(&buf[r..r + 2]) as usize;
+        r += 2;
+    
+        // each state has 3 distributions + 4 flags + next_state matrix
+        let expected_state_len: usize =
+            3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::iterator().len();
+        if buf[r..].len() != expected_state_len * num_states {
+            bail!(format!(
+                "expected {} bytes for {} states, but got {} bytes",
+                expected_state_len * num_states,
+                num_states,
+                buf[r..].len()
+            ))
+        }
+    
+        let mut states = vec![];
+        for _ in 0..num_states {
+            let s = State::parse(buf[r..r + expected_state_len].to_vec(), num_states).unwrap();
+            r += expected_state_len;
+            states.push(s);
+        }
+    
+        let m = Machine {
+            allowed_padding_bytes,
+            max_padding_frac,
+            allowed_blocked_microsec,
+            max_blocking_frac,
+            include_small_packets,
+            states,
+        };
+        m.validate()?;
+        Ok(m)
     }
-
-    let mut r: usize = 0;
-    // 4 8-byte values
-    let allowed_padding_bytes = LittleEndian::read_u64(&buf[r..r + 8]);
-    r += 8;
-    let max_padding_frac = LittleEndian::read_f64(&buf[r..r + 8]);
-    r += 8;
-    let allowed_blocked_microsec = LittleEndian::read_u64(&buf[r..r + 8]);
-    r += 8;
-    let max_blocking_frac = LittleEndian::read_f64(&buf[r..r + 8]);
-    r += 8;
-
-    // 1-byte flag
-    let include_small_packets = buf[r] == 1;
-    r += 1;
-
-    // 2-byte num of states
-    let num_states: usize = LittleEndian::read_u16(&buf[r..r + 2]) as usize;
-    r += 2;
-
-    // each state has 3 distributions + 4 flags + next_state matrix
-    let expected_state_len: usize =
-        3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::iterator().len();
-    if buf[r..].len() != expected_state_len * num_states {
-        bail!(format!(
-            "expected {} bytes for {} states, but got {} bytes",
-            expected_state_len * num_states,
-            num_states,
-            buf[r..].len()
-        ))
-    }
-
-    let mut states = vec![];
-    for _ in 0..num_states {
-        let s = State::parse(buf[r..r + expected_state_len].to_vec(), num_states).unwrap();
-        r += expected_state_len;
-        states.push(s);
-    }
-
-    let m = Machine {
-        allowed_padding_bytes,
-        max_padding_frac,
-        allowed_blocked_microsec,
-        max_blocking_frac,
-        include_small_packets,
-        states,
-    };
-    m.validate()?;
-    Ok(m)
 }
 
 #[cfg(test)]
