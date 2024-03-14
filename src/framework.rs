@@ -17,11 +17,11 @@
 //! machine::Machine,
 //! };
 //! use std::{str::FromStr, time::Instant};
-//! // This is a large example usage of the maybenot framework. Some parts are a
+//! // This is a large example usage of the Maybenot framework. Some parts are a
 //! // bit odd due to avoiding everything async but should convey the general
 //! // idea.
 //!
-//! // Parse machine, this is a "no-op" machine that does nothing. Typically,
+//! // Parse a machine, this is a "no-op" machine that does nothing. Typically,
 //! // you should expect to get one or more serialized machines, not build them
 //! // from scratch. The framework takes a vector with zero or more machines as
 //! // input when created. To add or remove a machine, just recreate the
@@ -72,14 +72,15 @@
 //!         // or more actions to take, up to a maximum of one action per
 //!         // machine (regardless of the number of events). It is your
 //!         // responsibility to perform those actions according to the
-//!         // specification. To do so, you will need up to one timer per
-//!         // machine. The machine identifier (machine in each TriggerAction)
-//!         // uniquely and deterministically maps to a single machine running in the
-//!         // framework (so suitable as a key for a data structure storing your
-//!         // timers, e.g., a HashMap<MachineId, SomeTimerDataStructure>).
+//!         // specification. To do so, you will need an action timer, machine
+//!         // timer, and two counters per machine. The machine identifier
+//!         // (machine in each TriggerAction) uniquely and deterministically
+//!         // maps to a single machine running in the framework (so suitable
+//!         // as a key for a data structure storing your timers, e.g. a
+//!         // HashMap<MachineId, SomeTimerDataStructure>), and counters.
 //!         match action {
 //!             TriggerAction::Cancel { machine: _ } => {
-//!                 // If any active pending timer for this machine, cancel it.
+//!                 // If any pending action timer for this machine, cancel it.
 //!             }
 //!             TriggerAction::InjectPadding {
 //!                 timeout: _,
@@ -88,13 +89,15 @@
 //!                 replace: _,
 //!                 machine: _,
 //!             } => {
-//!                 // Set the timer with the specified timeout. On expiry, do
-//!                 // the following (all of nothing):
+//!                 // Set the action timer with the specified timeout. On expiry,
+//!                 // do the following (all or nothing):
 //!                 //
 //!                 // 1. Send size padding.
-//!                 // 2. Add TriggerEvent::PaddingSent{ bytes_sent: size,
+//!                 // 2. Add TriggerEvent::PaddingQueued{ bytes_queued: size,
 //!                 //    machine: machine } to be triggered next loop
 //!                 //    iteration.
+//!                 // 2. Trigger TriggerEvent::PaddingSent{ bytes_sent: size,
+//!                 //    machine: machine } when the padding is sent.
 //!                 //
 //!                 // Above, "send" should mimic as close as possible real
 //!                 // application data being added for transport.
@@ -113,18 +116,19 @@
 //!                 // application data (non-padding) enqueued to be sent. In both
 //!                 // cases, the replaced data MAY be of the same size as the
 //!                 // padding. Regardless of if the padding is replaced or not,
-//!                 // the event should still be triggered (step 2). If enqueued
-//!                 // non-padding is sent instead of padding, then a NonPaddingSent
-//!                 // event should be triggered as well.
+//!                 // the events should still be triggered (steps 2/3). If enqueued
+//!                 // non-padding is sent instead of padding, then NonPaddingQueued
+//!                 // and NonPaddingSent events should be triggered as well.
 //!                 //
 //!                 // Above, note the use-case of having bypass and replace set to
 //!                 // true. This is to support constant-rate defenses.
 //!                 //
-//!                 // Also, note that if there already is a timer for an earlier
-//!                 // action for the machine index in question, overwrite it with
+//!                 // Also, note that if there already is an action timer for an
+//!                 // earlier action for the machine in question, overwrite it with
 //!                 // the new timer. This will happen very frequently so make effort
 //!                 // to make it efficient (typically, efficient machines will always
-//!                 // something scheduled but try to minimize actual padding sent).
+//!                 // have something scheduled but try to minimize actual padding
+//!                 // sent).
 //!             }
 //!             TriggerAction::BlockOutgoing {
 //!                 timeout: _,
@@ -133,8 +137,8 @@
 //!                 replace: _,
 //!                 machine: _,
 //!             } => {
-//!                 // Set the timer with the specified timeout, overwriting any
-//!                 // existing action timer for the machine (be it to block or
+//!                 // Set an action timer with the specified timeout, overwriting
+//!                 // any existing action timer for the machine (be it to block or
 //!                 // inject). On expiry, do the following (all or nothing):
 //!                 //
 //!                 // 1. If no blocking is currently taking place (globally
@@ -160,8 +164,40 @@
 //!                 //
 //!                 // If bypass is true and blocking was activated, extended, or
 //!                 // replaced in step 1, then a bypass flag MUST be set and be
-//!                 // available to check as part of dealing with TriggerAction::InjectPadding
-//!                 // actions (see above).
+//!                 // available to check as part of dealing with
+//!                 // TriggerAction::InjectPadding actions (see above).
+//!             }
+//!             TriggerAction::UpdateCounter {
+//!                 value: _,
+//!                 counter: _,
+//!                 decrement: _,
+//!                 machine: _,
+//!             } => {
+//!                 // Each machine has two counters - update the one specified
+//!                 // by counter (will be 0 or 1). If decrement is true, subtract
+//!                 // the given value from the current counter value; otherwise,
+//!                 // add it. If the counter value is zero:
+//!                 //
+//!                 // 1. If the counter value was already zero, do nothing.
+//!                 // 2. If the counter value has decreased to zero, add
+//!                 //    TriggerEvent::CounterZero { machine: machine } to be
+//!                 //    triggered next loop iteration.
+//!             }
+//!             TriggerAction::UpdateTimer {
+//!                 duration: _,
+//!                 replace: _,
+//!                 machine: _,
+//!             } => {
+//!                 // If the replace flag is true, overwrite the machine's
+//!                 // non-action timer with the specified duration. If replace
+//!                 // is false, use the longest of the remaining and specified
+//!                 // durations.
+//!                 // 
+//!                 // Do not schedule any events to be triggered, even if the
+//!                 // timer was set to zero - this allows for the timer to be
+//!                 // explicitly reset. If the timer was not set to zero,
+//!                 // trigger TriggerEvent::TimerEnd { machine: machine }
+//!                 // when it subsequently expires.
 //!             }
 //!         }
 //!     }
@@ -425,6 +461,28 @@ where
                     self.transition(mi, Event::UpdateMTU, *new_mtu as u64);
                 }
             }
+            TriggerEvent::CounterZero { machine } => {
+                self.transition(machine.0, Event::CounterZero, 0);
+            }
+            TriggerEvent::TimerEnd { machine } => {
+                self.transition(machine.0, Event::TimerEnd, 0);
+            }
+            TriggerEvent::NonPaddingQueued { bytes_queued } => {
+                for mi in 0..self.runtime.len() {
+                    self.transition(mi, Event::NonPaddingQueued, *bytes_queued as u64);
+                }
+            }
+            TriggerEvent::PaddingQueued {
+                bytes_queued,
+                machine,
+            } => {
+                for mi in 0..self.runtime.len() {
+                    if mi == machine.0 {
+                        self.transition(mi, Event::NonPaddingQueued, *bytes_queued as u64);
+                        break;
+                    }
+                }
+            }
         };
     }
 
@@ -494,6 +552,15 @@ where
         let current = &machine.states[runtime.current_state];
 
         match current.action {
+            Action::InjectPadding { bypass, replace } => {
+                Some(TriggerAction::InjectPadding {
+                    timeout: Duration::from_micros(current.sample_timeout() as u64),
+                    size: current.sample_size(self.mtu as u64) as u16,
+                    bypass: bypass,
+                    replace: replace,
+                    machine: mi,
+                })
+            },
             Action::BlockOutgoing { bypass, replace } => {
                 Some(TriggerAction::BlockOutgoing {
                     timeout: Duration::from_micros(current.sample_timeout() as u64),
@@ -503,12 +570,18 @@ where
                     machine: mi,
                 })
             },
-            Action::InjectPadding { bypass, replace } => {
-                Some(TriggerAction::InjectPadding {
-                    timeout: Duration::from_micros(current.sample_timeout() as u64),
-                    size: current.sample_size(self.mtu as u64) as u16,
-                    bypass: bypass,
-                    replace: replace,
+            Action::UpdateCounter { counter, decrement } => {
+                Some(TriggerAction::UpdateCounter {
+                    value: current.sample_counter_value(),
+                    counter,
+                    decrement,
+                    machine: mi,
+                })
+            },
+            Action::UpdateTimer { replace } => {
+                Some(TriggerAction::UpdateTimer {
+                    duration: Duration::from_micros(current.sample_timer_duration() as u64),
+                    replace,
                     machine: mi,
                 })
             },
@@ -567,10 +640,15 @@ where
     fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
         // either blocking or padding limits apply
-        if let Action::BlockOutgoing { .. } = current.action {
-            return self.below_limit_blocking(runtime, machine);
+        match current.action {
+            Action::BlockOutgoing { .. } => {
+                self.below_limit_blocking(runtime, machine)
+            },
+            Action::InjectPadding { .. } => {
+                self.below_limit_padding(runtime, machine)
+            },
+            _ => true,
         }
-        self.below_limit_padding(runtime, machine)
     }
 
     fn below_limit_blocking(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {

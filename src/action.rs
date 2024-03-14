@@ -33,6 +33,25 @@ pub enum Action {
         bypass: bool,
         replace: bool,
     },
+    /// Increment or decrement one of the counters associated with a machine.
+    ///
+    /// The counter field indicates which of the machine's counters should be
+    /// updated. It can be used for indexing and may not exceed
+    /// [`COUNTERSPERMACHINE`](crate::constants) minus one.
+    ///
+    /// The decrement flag, when set, specifies that counter updates subtract
+    /// from the counter's current value instead of adding to it.
+    UpdateCounter {
+        counter: usize,
+        decrement: bool,
+    },
+    /// Update the timer duration for a machine.
+    ///
+    /// The replace flag determines if the action duration should replace the
+    /// current timer duration, if the timer has already been set.
+    UpdateTimer {
+        replace: bool,
+    }
 }
 
 /// The action to be taken by the framework user.
@@ -62,7 +81,7 @@ pub enum TriggerAction {
         replace: bool,
         machine: MachineId,
     },
-    /// Schedule blocking of outgoing traffic toafter the given timeout for a
+    /// Schedule blocking of outgoing traffic after the given timeout for a
     /// machine. The duration of the blocking is specified.
     ///
     /// The bypass flag indicates if the blocking of outgoing traffic can be
@@ -75,6 +94,34 @@ pub enum TriggerAction {
         timeout: Duration,
         duration: Duration,
         bypass: bool,
+        replace: bool,
+        machine: MachineId,
+    },
+    /// Update the value of one of the counters for a machine.
+    ///
+    /// The counter field indicates which of the machine's counters should be
+    /// updated. It ranges from zero to [`COUNTERSPERMACHINE`](crate::constants)
+    /// minus one and can be used for indexing.
+    ///
+    /// The decrement flag determines whether to add to or subtract from the
+    /// current counter value.
+    UpdateCounter {
+        value: u64,
+        counter: usize,
+        decrement: bool,
+        machine: MachineId,
+    },
+    /// Update the timer duration for a machine.
+    ///
+    /// The replace flag specifies if the duration should replace the current
+    /// timer duration. If the flag is false, the longest of the two durations
+    /// MUST be used.
+    ///
+    /// If the new duration of the timer is zero, which can occur if it was
+    /// previously zero or the replace flag is true, the TimerEnd event MUST
+    /// NOT be triggered. This allows for silently canceling the timer.
+    UpdateTimer {
+        duration: Duration,
         replace: bool,
         machine: MachineId,
     },

@@ -27,6 +27,14 @@ pub enum Event {
     LimitReached,
     /// UpdateMTU is when the MTU of the protected connection was updated.
     UpdateMTU,
+    /// CounterZero is when a machine's counter was decremented to zero.
+    CounterZero,
+    /// TimerEnd is when a machine's timer expired.
+    TimerEnd,
+    /// NonPaddingQueued is when we queued non-padding.
+    NonPaddingQueued,
+    /// PaddingQueued is when we queued padding.
+    PaddingQueued,
 }
 
 impl fmt::Display for Event {
@@ -36,7 +44,7 @@ impl fmt::Display for Event {
 }
 
 impl Event {
-    pub fn iterator() -> Iter<'static, Event> {
+    pub fn v1_events_iter() -> Iter<'static, Event> {
         static EVENTS: [Event; 8] = [
             NonPaddingRecv,
             PaddingRecv,
@@ -46,6 +54,24 @@ impl Event {
             BlockingEnd,
             LimitReached,
             UpdateMTU,
+        ];
+        EVENTS.iter()
+    }
+
+    pub fn v2_events_iter() -> Iter<'static, Event> {
+        static EVENTS: [Event; 12] = [
+            NonPaddingRecv,
+            PaddingRecv,
+            NonPaddingSent,
+            PaddingSent,
+            BlockingBegin,
+            BlockingEnd,
+            LimitReached,
+            UpdateMTU,
+            CounterZero,
+            TimerEnd,
+            NonPaddingQueued,
+            PaddingQueued,
         ];
         EVENTS.iter()
     }
@@ -71,6 +97,14 @@ pub enum TriggerEvent {
     LimitReached { machine: MachineId },
     /// The MTU of the protected connection was updated.
     UpdateMTU { new_mtu: u16 },
+    /// A machine's counter was decremented to zero.
+    CounterZero { machine: MachineId },
+    /// A machine's timer expired.
+    TimerEnd { machine: MachineId },
+    /// Queued non-padding bytes.
+    NonPaddingQueued { bytes_queued: u16 },
+    /// Queued padding bytes.
+    PaddingQueued { bytes_queued: u16, machine: MachineId },
 }
 
 impl TriggerEvent {
@@ -85,6 +119,10 @@ impl TriggerEvent {
             TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
             TriggerEvent::LimitReached { .. } => e == Event::LimitReached,
             TriggerEvent::UpdateMTU { .. } => e == Event::UpdateMTU,
+            TriggerEvent::CounterZero { .. } => e == Event::CounterZero,
+            TriggerEvent::TimerEnd { .. } => e == Event::TimerEnd,
+            TriggerEvent::NonPaddingQueued { .. } => e == Event::NonPaddingQueued,
+            TriggerEvent::PaddingQueued { .. } => e == Event::PaddingQueued,
         }
     }
 }
@@ -101,6 +139,10 @@ impl fmt::Display for TriggerEvent {
             TriggerEvent::BlockingEnd => write!(f, "be"),
             TriggerEvent::LimitReached { .. } => write!(f, "lr"),
             TriggerEvent::UpdateMTU { new_mtu } => write!(f, "um,{}", new_mtu),
+            TriggerEvent::CounterZero { .. } => write!(f, "cz"),
+            TriggerEvent::TimerEnd { .. } => write!(f, "te"),
+            TriggerEvent::NonPaddingQueued { bytes_queued } => write!(f, "qn,{}", bytes_queued),
+            TriggerEvent::PaddingQueued { bytes_queued, .. } => write!(f, "qp,{}", bytes_queued),
         }
     }
 }
@@ -118,5 +160,13 @@ mod tests {
         assert_eq!(Event::BlockingEnd.to_string(), "BlockingEnd");
         assert_eq!(Event::LimitReached.to_string(), "LimitReached");
         assert_eq!(Event::UpdateMTU.to_string(), "UpdateMTU");
+    }
+
+    #[test]
+    fn v2_events() {
+        assert_eq!(Event::CounterZero.to_string(), "CounterZero");
+        assert_eq!(Event::TimerEnd.to_string(), "TimerEnd");
+        assert_eq!(Event::NonPaddingQueued.to_string(), "NonPaddingQueued");
+        assert_eq!(Event::PaddingQueued.to_string(), "PaddingQueued");
     }
 }

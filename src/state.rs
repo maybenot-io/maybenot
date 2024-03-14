@@ -18,7 +18,8 @@ use simple_error::bail;
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     /// On transition to this state, this distribution will be sampled for a
-    /// timeout duration after which the action is triggered.
+    /// timeout duration after which the action is triggered. This distribution
+    /// is ignored for timer and counter actions.
     pub timeout_dist: Dist,
     /// A distribution from which a value for the action is sampled. If
     /// padding, this is the size of the padding packet; if blocking, it is
@@ -92,6 +93,17 @@ impl State {
         self.action_dist.sample().min(MAXSAMPLEDBLOCK)
     }
 
+    /// Sample a value for a counter update action.
+    pub fn sample_counter_value(&self) -> u64 {
+        let s = self.action_dist.sample().round() as u64;
+        s.min(MAXSAMPLEDCOUNTERVALUE)
+    }
+
+    /// Sample a duration for a timer update action.
+    pub fn sample_timer_duration(&self) -> f64 {
+        self.action_dist.sample().min(MAXSAMPLEDTIMERDURATION)
+    }
+
     /// Serialize the state into a byte vector.
     pub fn serialize(&self, num_states: usize) -> Vec<u8> {
         let mut wtr = vec![];
@@ -103,15 +115,25 @@ impl State {
 
         // flags
         match self.action {
-            Action::BlockOutgoing { bypass, replace } => {
-                wtr.write_u8(1).unwrap(); // action_is_block
+            Action::InjectPadding { bypass, replace } => {
+                wtr.write_u8(0).unwrap(); // action_is_block in v1
                 wtr.write_u8(if bypass { 1 } else { 0 }).unwrap();
                 wtr.write_u8(if replace { 1 } else { 0 }).unwrap();
             },
-            Action::InjectPadding { bypass, replace } => {
-                wtr.write_u8(0).unwrap(); // action_is_block
+            Action::BlockOutgoing { bypass, replace } => {
+                wtr.write_u8(1).unwrap(); // action_is_block in v1
                 wtr.write_u8(if bypass { 1 } else { 0 }).unwrap();
                 wtr.write_u8(if replace { 1 } else { 0 }).unwrap();
+            },
+            Action::UpdateCounter { counter, decrement } => {
+                wtr.write_u8(2).unwrap(); // action_is_block in v1
+                wtr.write_u8(counter as u8).unwrap();
+                wtr.write_u8(if decrement { 1 } else { 0 }).unwrap();
+            },
+            Action::UpdateTimer { replace } => {
+                wtr.write_u8(3).unwrap(); // action_is_block in v1
+                wtr.write_u8(if replace { 1 } else { 0 }).unwrap();
+                wtr.write_u8(0).unwrap();
             },
         }
         if self.limit_includes_nonpadding {
@@ -121,7 +143,7 @@ impl State {
         }
 
         // next_state, ugly, encodes every possible event to be constant size
-        for event in Event::iterator() {
+        for event in Event::v2_events_iter() {
             let exists = self.next_state.contains_key(event);
             for i in 0..num_states + 2 {
                 if exists {
@@ -140,9 +162,9 @@ impl State {
     /// [`Machine`](crate::machine) with the specific number of states. The number
     /// of states has to be known since the size of the transition matrix depends on
     /// it.
-    pub fn parse(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
+    pub fn parse_v1(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
         // len: 3 distributions + 4 flags + next_state
-        if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::iterator().len() {
+        if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::v1_events_iter().len() {
             bail!("too small")
         }
 
@@ -180,7 +202,84 @@ impl State {
 
         // next state
         let mut next_state: HashMap<Event, Vec<f64>> = HashMap::new();
-        for event in Event::iterator() {
+        for event in Event::v1_events_iter() {
+            let mut m = vec![];
+
+            let mut all_zeroes = true;
+            for _ in 0..num_states + 2 {
+                let v = LittleEndian::read_f64(&buf[r..r + 8]);
+                m.push(v);
+                r += 8; // for f64
+                if v != 0.0 {
+                    all_zeroes = false;
+                }
+            }
+            if !all_zeroes {
+                next_state.insert(*event, m);
+            }
+        }
+
+        Ok(State {
+            timeout_dist,
+            action_dist,
+            limit_dist,
+            action,
+            limit_includes_nonpadding,
+            next_state,
+        })
+    }
+
+    /// Attempt to construct a [`State`] from the given bytes as part of a
+    /// [`Machine`](crate::machine) with the specific number of states. The number
+    /// of states has to be known since the size of the transition matrix depends on
+    /// it.
+    pub fn parse_v2(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
+        // len: 3 distributions + 4 flags + next_state
+        if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::v2_events_iter().len() {
+            bail!("too small")
+        }
+
+        // distributions
+        let mut r: usize = 0;
+        let action_dist = Dist::parse(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
+        r += SERIALIZEDDISTSIZE;
+        let limit_dist = Dist::parse(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
+        r += SERIALIZEDDISTSIZE;
+        let timeout_dist = Dist::parse(buf[r..r + SERIALIZEDDISTSIZE].to_vec()).unwrap();
+        r += SERIALIZEDDISTSIZE;
+
+        // flags
+        let action: u8 = buf[r];
+        r += 1;
+        let param1: u8 = buf[r];
+        r += 1;
+        let param2: u8 = buf[r];
+        r += 1;
+
+        let action = match action {
+            1 => Action::BlockOutgoing {
+                bypass: param1 == 1,
+                replace: param2 == 1,
+            },
+            2 => Action::UpdateCounter {
+                counter: param1 as usize,
+                decrement: param2 == 1,
+            },
+            3 => Action::UpdateTimer {
+                replace: param1 == 1,
+            },
+            _ => Action::InjectPadding {
+                bypass: param1 == 1,
+                replace: param2 == 1,
+            },
+        };
+
+        let limit_includes_nonpadding: bool = buf[r] == 1;
+        r += 1;
+
+        // next state
+        let mut next_state: HashMap<Event, Vec<f64>> = HashMap::new();
+        for event in Event::v2_events_iter() {
             let mut m = vec![];
 
             let mut all_zeroes = true;
@@ -216,7 +315,7 @@ pub fn make_next_state(
     num_states: usize,
 ) -> HashMap<Event, Vec<f64>> {
     let mut r = HashMap::new();
-    for event in Event::iterator() {
+    for event in Event::v2_events_iter() {
         if !t.contains_key(event) {
             continue;
         }
@@ -304,7 +403,7 @@ mod tests {
         };
 
         let buf = s.serialize(num_states);
-        let parsed = State::parse(buf, num_states).unwrap();
+        let parsed = State::parse_v2(buf, num_states).unwrap();
         assert_eq!(s, parsed);
     }
 }

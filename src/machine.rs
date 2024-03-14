@@ -1,6 +1,7 @@
 //! A machine determines when to inject and/or block outgoing traffic. Consists
 //! of one or more [`State`] structs.
 
+use crate::action::*;
 use crate::constants::*;
 use crate::event::*;
 use crate::state::*;
@@ -18,7 +19,7 @@ use ring::digest::{Context, SHA256};
 use simple_error::{bail, map_err_with};
 use std::io::Read;
 
-/// A probabilistic state machine (Rabin automaton) consisting of zero or more
+/// A probabilistic state machine (Rabin automaton) consisting of one or more
 /// [`State`] that determine when to inject and/or block outgoing traffic.
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Machine {
@@ -56,6 +57,7 @@ impl FromStr for Machine {
 
         match u16::from_le_bytes(version.try_into().unwrap()) {
             1 => Machine::parse_v1(payload),
+            2 => Machine::parse_v2(payload),
             v => bail!("unsupported version: {}", v),
         }
     }
@@ -103,6 +105,20 @@ impl Machine {
 
         // check each state
         for (index, state) in self.states.iter().enumerate() {
+            // validate counter actions
+            match &state.action {
+                Action::UpdateCounter { counter, .. } => {
+                    if counter >= &COUNTERSPERMACHINE {
+                        bail!(
+                            "found UpdateCounter w/ id {}, has to be [0, {})",
+                            counter,
+                            COUNTERSPERMACHINE
+                        )
+                    }
+                },
+                _ => {},
+            }
+
             // validate transitions
             for next in &state.next_state {
                 if next.1.len() != self.states.len() + 2 {
@@ -208,7 +224,7 @@ impl Machine {
     
         // each state has 3 distributions + 4 flags + next_state matrix
         let expected_state_len: usize =
-            3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::iterator().len();
+            3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::v1_events_iter().len();
         if buf[r..].len() != expected_state_len * num_states {
             bail!(format!(
                 "expected {} bytes for {} states, but got {} bytes",
@@ -220,7 +236,63 @@ impl Machine {
     
         let mut states = vec![];
         for _ in 0..num_states {
-            let s = State::parse(buf[r..r + expected_state_len].to_vec(), num_states).unwrap();
+            let s = State::parse_v1(buf[r..r + expected_state_len].to_vec(), num_states).unwrap();
+            r += expected_state_len;
+            states.push(s);
+        }
+    
+        let m = Machine {
+            allowed_padding_bytes,
+            max_padding_frac,
+            allowed_blocked_microsec,
+            max_blocking_frac,
+            include_small_packets,
+            states,
+        };
+        m.validate()?;
+        Ok(m)
+    }
+
+    fn parse_v2(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
+        // note that we already read 2 bytes of version in fn parse_machine()
+        if buf.len() < 4 * 8 + 1 + 2 {
+            bail!("not enough data for version 2 machine")
+        }
+    
+        let mut r: usize = 0;
+        // 4 8-byte values
+        let allowed_padding_bytes = LittleEndian::read_u64(&buf[r..r + 8]);
+        r += 8;
+        let max_padding_frac = LittleEndian::read_f64(&buf[r..r + 8]);
+        r += 8;
+        let allowed_blocked_microsec = LittleEndian::read_u64(&buf[r..r + 8]);
+        r += 8;
+        let max_blocking_frac = LittleEndian::read_f64(&buf[r..r + 8]);
+        r += 8;
+    
+        // 1-byte flag
+        let include_small_packets = buf[r] == 1;
+        r += 1;
+    
+        // 2-byte num of states
+        let num_states: usize = LittleEndian::read_u16(&buf[r..r + 2]) as usize;
+        r += 2;
+    
+        // each state has 3 distributions + 4 flags + next_state matrix
+        let expected_state_len: usize =
+            3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::v2_events_iter().len();
+        if buf[r..].len() != expected_state_len * num_states {
+            bail!(format!(
+                "expected {} bytes for {} states, but got {} bytes",
+                expected_state_len * num_states,
+                num_states,
+                buf[r..].len()
+            ))
+        }
+    
+        let mut states = vec![];
+        for _ in 0..num_states {
+            let s = State::parse_v2(buf[r..r + expected_state_len].to_vec(), num_states).unwrap();
             r += expected_state_len;
             states.push(s);
         }
@@ -240,7 +312,6 @@ impl Machine {
 
 #[cfg(test)]
 mod tests {
-    use crate::action::*;
     use crate::dist::*;
     use crate::machine::*;
     use std::collections::HashMap;

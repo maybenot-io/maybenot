@@ -27,6 +27,6 @@ pub mod state;
 mod tests {
     #[test]
     fn constants_set() {
-        assert_eq!(crate::constants::VERSION, 1);
+        assert_eq!(crate::constants::VERSION, 2);
     }
 }

@@ -2,7 +2,7 @@
 
 /// The highest possible version of a [`Machine`](crate::machine) supported by
 /// this framework.
-pub const VERSION: u8 = 1;
+pub const VERSION: u8 = 2;
 
 /// The maximum sampled timeout in a [`State`](crate::state), set to a day in
 /// microseconds.
@@ -37,3 +37,15 @@ pub const STATEMAX: usize = STATECANCEL - 1;
 /// WireGuard keepalive), see [`include_small_packets`](crate::machine) in
 /// [`Machine`](crate::machine).
 pub const MAXSMALLPACKETSIZE: u64 = 52;
+
+/// The number of counters available to each machine. This limits the IDs
+/// that can be specified in an UpdateCounter [`Action`](crate::action).
+pub const COUNTERSPERMACHINE: usize = 1;
+
+/// The maximum sampled counter value in a [`State`](crate::state), which is
+/// currently effectively unlimited in practice.
+pub const MAXSAMPLEDCOUNTERVALUE: u64 = u64::MAX;
+
+/// The maximum sampled timer duration in a [`State`](crate::state), set to a
+/// day in microseconds.
+pub const MAXSAMPLEDTIMERDURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
