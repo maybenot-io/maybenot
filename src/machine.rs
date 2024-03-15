@@ -141,7 +141,7 @@ impl Machine {
                 // - if pTotal <= 0.0, then we shouldn't have an entry in NextState
                 // - pTotal < 1.0 is OK, to support a "nop" transition (self
                 // transition has implications in the framework, i.e., involving
-                // limits on padding sent in he state)
+                // limits on padding sent in the state)
                 if p_total <= 0.0 || p_total >= 1.0005 {
                     // 1.0005 due to rounding
                     bail!(
@@ -317,10 +317,168 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    fn validate_machine() {
+        let num_states = 1;
+
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        // invalid state transition
+        e.insert(1, 1.0);
+        t.insert(Event::PaddingSent, e);
+        let mut s0 = State::new(t, num_states);
+        s0.timeout_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 10.0,
+            param2: 10.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s0.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 10.0,
+            param2: 10.0,
+            start: 0.0,
+            max: 0.0,
+        };
+
+        // machine with broken state
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0.clone()],
+            include_small_packets: true,
+        };
+        // while we get an error here, as intended, the error is not the
+        // expected one, because make_next_state() actually ignores the
+        // transition to the non-existing state as it makes the probability
+        // matrix based on num_states
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // try setting total probability too high
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.1);
+        t.insert(Event::PaddingSent, e);
+        s0.next_state = make_next_state(t, num_states);
+        
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0.clone()],
+            include_small_packets: true,
+        };
+
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // repair state
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::PaddingSent, e);
+        s0.next_state = make_next_state(t, num_states);
+
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0.clone()],
+            include_small_packets: true,
+        };
+
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_ok());
+
+        // counter update action with invalid id
+        s0.action = Action::UpdateCounter {
+            counter: COUNTERSPERMACHINE,
+            decrement: false,
+        };
+
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0.clone()],
+            include_small_packets: true,
+        };
+
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // repair state
+        s0.action = Action::InjectPadding {
+            bypass: false,
+            replace: false,
+        };
+
+        // invalid machine lacking state
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![],
+            include_small_packets: true,
+        };
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // bad padding and blocking fractions
+        let mut m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0.clone()],
+            include_small_packets: true,
+        };
+
+        m.max_padding_frac = -0.1;
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+        m.max_padding_frac = 1.1;
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+        m.max_padding_frac = 0.5;
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_ok());
+
+        m.max_blocking_frac = -0.1;
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+        m.max_blocking_frac = 1.1;
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+        m.max_blocking_frac = 0.5;
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_ok());
+    }
+
+    #[test]
     fn basic_serialization() {
         // plan: manually create a machine, serialize it, parse it, and then compare
         let num_states = 2;
 
+        // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e0: HashMap<usize, f64> = HashMap::new();
         e0.insert(0, 0.4);
@@ -328,7 +486,9 @@ mod tests {
         let mut e1: HashMap<usize, f64> = HashMap::new();
         e1.insert(1, 1.0);
         t.insert(Event::PaddingRecv, e0);
-        t.insert(Event::LimitReached, e1);
+        t.insert(Event::LimitReached, e1.clone());
+        t.insert(Event::BlockingBegin, e1);
+
         let mut s0 = State::new(t, num_states);
         s0.timeout_dist = Dist {
             dist: DistType::Poisson,
@@ -352,6 +512,7 @@ mod tests {
             max: 3.4,
         };
 
+        // state 1
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e0: HashMap<usize, f64> = HashMap::new();
         e0.insert(0, 0.2);
@@ -359,7 +520,9 @@ mod tests {
         let mut e1: HashMap<usize, f64> = HashMap::new();
         e1.insert(0, 1.0);
         t.insert(Event::NonPaddingRecv, e0);
-        t.insert(Event::PaddingSent, e1);
+        t.insert(Event::NonPaddingQueued, e1.clone());
+        t.insert(Event::NonPaddingSent, e1);
+
         let mut s1 = State::new(t, num_states);
         s1.timeout_dist = Dist {
             dist: DistType::Uniform,
@@ -387,6 +550,7 @@ mod tests {
             replace: false,
         };
 
+        // machine
         let m = Machine {
             allowed_padding_bytes: 1000,
             max_padding_frac: 0.123,
@@ -437,12 +601,47 @@ mod tests {
     }
 
     #[test]
+    fn parse_v2_machine_nop() {
+        // attempt to parse an empty no-op machine (does nothing)
+        let s = "789cedc3b10d0000000130fc7f341f580d9a54a898b7c106990004".to_string();
+        let m = Machine::from_str(&s).unwrap();
+
+        assert_eq!(m.allowed_blocked_microsec, 0);
+        assert_eq!(m.allowed_padding_bytes, 0);
+        assert_eq!(m.max_blocking_frac, 0.0);
+        assert_eq!(m.max_padding_frac, 0.0);
+        assert_eq!(m.include_small_packets, false);
+
+        assert_eq!(m.states.len(), 1);
+        assert_eq!(m.states[0].limit_includes_nonpadding, false);
+        assert_eq!(m.states[0].action, Action::InjectPadding { bypass: false, replace: false });
+        assert_eq!(m.states[0].action_dist.dist, DistType::None);
+        assert_eq!(m.states[0].action_dist.param1, 0.0);
+        assert_eq!(m.states[0].action_dist.param2, 0.0);
+        assert_eq!(m.states[0].action_dist.max, 0.0);
+        assert_eq!(m.states[0].action_dist.start, 0.0);
+        assert_eq!(m.states[0].limit_dist.dist, DistType::None);
+        assert_eq!(m.states[0].limit_dist.param1, 0.0);
+        assert_eq!(m.states[0].limit_dist.param2, 0.0);
+        assert_eq!(m.states[0].limit_dist.max, 0.0);
+        assert_eq!(m.states[0].limit_dist.start, 0.0);
+        assert_eq!(m.states[0].timeout_dist.dist, DistType::None);
+        assert_eq!(m.states[0].timeout_dist.param1, 0.0);
+        assert_eq!(m.states[0].timeout_dist.param2, 0.0);
+        assert_eq!(m.states[0].timeout_dist.max, 0.0);
+        assert_eq!(m.states[0].timeout_dist.start, 0.0);
+
+        assert_eq!(m.states[0].next_state.len(), 0);
+    }
+
+    #[test]
     fn parse_v1_machine_padding() {
         // make a 1-state padding machine, serialize, and compare
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::PaddingSent, e);
+
         let mut s0 = State::new(t, 1);
         s0.timeout_dist = Dist {
             dist: DistType::Uniform,
@@ -458,6 +657,7 @@ mod tests {
             start: 1.2,
             max: 3.4,
         };
+
         let m = Machine {
             allowed_padding_bytes: 1000,
             max_padding_frac: 0.123,
@@ -466,13 +666,19 @@ mod tests {
             states: vec![s0],
             include_small_packets: false,
         };
+
         let s = m.serialize();
         println!("{}", s);
         let m_parsed = Machine::from_str(&s).unwrap();
         assert_eq!(m, m_parsed);
 
-        // add hardcoded assert
+        // add hardcoded assert v1
         let hardcoded = "789cbdcebb0d80201006e0bb5858d8db3a8403c034c6dada25dcc40d5cc59286848405f8b9828450000d5f71b947ee724c6622f15ee763ef4f21cd31cd88d19f86bbf00a01168d5605173b8758350ad81a6ef472e9df5102a4ac13d3".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
+
+        // add hardcoded assert v2
+        let hardcoded = "789cddcebb0d80201006e0430b0b7b5b87700098c6585bbb849bb881ab50d29090b0003f5790100aa0e52b2ef7c85d6e223313fbeeebb5cf2f91e6042d88914ec383798900ab42ab42143b27db140ad81b6ef472e9df510415f313d4".to_string();
         let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
         assert_eq!(m, m_hardcoded);
     }
@@ -484,6 +690,7 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::BlockingEnd, e);
+
         let mut s0 = State::new(t, 1);
         s0.timeout_dist = Dist {
             dist: DistType::Pareto,
@@ -503,6 +710,7 @@ mod tests {
             bypass: false,
             replace: false,
         };
+
         let m = Machine {
             allowed_padding_bytes: 0,
             max_padding_frac: 0.0,
@@ -511,13 +719,151 @@ mod tests {
             states: vec![s0],
             include_small_packets: true,
         };
+
+        let s = m.serialize();
+        println!("{}", s);
+        let m_parsed = Machine::from_str(&s).unwrap();
+        assert_eq!(m, m_parsed);
+
+        // add hardcoded assert v1
+        let hardcoded = "789cc5cda11180300c05d04480c123e9061806482493300a3b80c231103b7038b86300f8b45c454d45459fc85d72c90f536819ddac598fbe7d4e61a6823a6b93c1da050d543a4f1fa3d88f28ff8cdbdf22086a450346dddb9c2e4149f20205f11a22".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
+
+        // add hardcoded assert v2
+        let hardcoded = "789ccdcd310e40501004d059098d5ee9df40e300bba593388a3b50e91cc81d4447e2008c4f141aa5ff8a4d26d99d8df0d637c209e4c35c15fba22288517aa3d6dea40c945ad79e9c71ff4372776ccf2d8b2833067276bdfdd3aa1c413b00d4e71a23".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
+    }
+
+    #[test]
+    fn parse_v2_machine_counter() {
+        // make a 2-state counter update machine, serialize, and compare
+        let num_states = 2;
+
+        // state 0
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::NonPaddingRecv, e.clone());
+        t.insert(Event::CounterZero, e);
+
+        let mut s0 = State::new(t, num_states);
+        s0.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 6.0,
+            param2: 6.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s0.action = Action::UpdateCounter {
+            counter: 0,
+            decrement: true,
+        };
+
+        // state 1
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::PaddingRecv, e);
+
+        let mut s1 = State::new(t, num_states);
+        s1.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 6.0,
+            param2: 6.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s1.action = Action::UpdateCounter {
+            counter: 0,
+            decrement: false,
+        };
+
+        // machine
+        let m = Machine {
+            allowed_padding_bytes: 1000,
+            max_padding_frac: 0.123,
+            allowed_blocked_microsec: 1000000,
+            max_blocking_frac: 0.456,
+            states: vec![s0, s1],
+            include_small_packets: false,
+        };
+
         let s = m.serialize();
         println!("{}", s);
         let m_parsed = Machine::from_str(&s).unwrap();
         assert_eq!(m, m_parsed);
 
         // add hardcoded assert
-        let hardcoded = "789cc5cda11180300c05d04480c123e9061806482493300a3b80c231103b7038b86300f8b45c454d45459fc85d72c90f536819ddac598fbe7d4e61a6823a6b93c1da050d543a4f1fa3d88f28ff8cdbdf22086a450346dddb9c2e4149f20205f11a22".to_string();
+        let hardcoded = "789ce5d1b10980400c05d06f1cc0565cc21172388db585954b38812b3881d60e616f2338825f215c7bc571cd3d4842aa90447095f8ad433fdfd3aeaeabd801c7b82d4d7b2a0405db4fed98c86a5c7e8e79942963e9f7b70fd887adc6258c30e92f908b1761700ef8".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
+    }
+
+    #[test]
+    fn parse_v2_machine_timer() {
+        // make a 2-state timer update machine, serialize, and compare
+        let num_states = 2;
+
+        // state 0
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::PaddingQueued, e.clone());
+        t.insert(Event::PaddingSent, e);
+
+        let mut s0 = State::new(t, num_states);
+        s0.timeout_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 1.2,
+            param2: 3.4,
+            start: 5.6,
+            max: 7.8,
+        };
+        s0.action_dist = Dist {
+            dist: DistType::Poisson,
+            param1: 0.5,
+            param2: 0.0,
+            start: 1.2,
+            max: 3.4,
+        };
+
+        // state 1
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::TimerEnd, e);
+
+        let mut s1 = State::new(t, num_states);
+        s1.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 2000.0,
+            param2: 8000.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s1.action = Action::UpdateTimer {
+            replace: false,
+        };
+
+        // machine
+        let m = Machine {
+            allowed_padding_bytes: 1000,
+            max_padding_frac: 0.123,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1],
+            include_small_packets: false,
+        };
+
+        let s = m.serialize();
+        println!("{}", s);
+        let m_parsed = Machine::from_str(&s).unwrap();
+        assert_eq!(m, m_parsed);
+
+        // add hardcoded assert
+        let hardcoded = "789cedd2bb0980301006e0241616f6b60ee100b969c4dada259cc015dc20ab58da08820bf89b4840ae88c575e6835c5e2470dc19b515ca5b867eda4767b17c33aa44bcadf1b2f54e8b0015e12841b3379d571336d07cf843da11f3f9279ebfc6009a4335c88559d8d3715912af90940b8f031895".to_string();
         let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
         assert_eq!(m, m_hardcoded);
     }
@@ -525,11 +871,15 @@ mod tests {
     #[test]
     fn parse_v1_machine_mixed() {
         // make a 2-state mixed machine, serialize, and compare
+        let num_states = 2;
+
+        // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::BlockingEnd, e);
-        let mut s0 = State::new(t, 2);
+
+        let mut s0 = State::new(t, num_states);
         s0.timeout_dist = Dist {
             dist: DistType::Pareto,
             param1: 1.2,
@@ -548,11 +898,14 @@ mod tests {
             bypass: false,
             replace: false,
         };
+
+        // state 1
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::PaddingSent, e);
-        let mut s1 = State::new(t, 2);
+
+        let mut s1 = State::new(t, num_states);
         s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 1.2,
@@ -567,6 +920,8 @@ mod tests {
             start: 1.2,
             max: 3.4,
         };
+
+        // machine
         let m = Machine {
             allowed_padding_bytes: 0,
             max_padding_frac: 0.0,
@@ -575,13 +930,149 @@ mod tests {
             states: vec![s0, s1],
             include_small_packets: true,
         };
+
+        let s = m.serialize();
+        println!("{}", s);
+        let m_parsed = Machine::from_str(&s).unwrap();
+        assert_eq!(m, m_parsed);
+
+        // add hardcoded assert v1
+        let hardcoded = "789cd5d0b10980301005d044500b7b4bb3818d03e44a27711477d0cace815cc04aec141c407f1249408b3441f0410239ee2ef0397b1a5a532bc6b52ecf4df288c5acd226d9688bc40332ea3b4510fa3d927bc76167b10872c20304996fff6497b8824a7194d96e4634e05243c983bf661033b8a4d1f491f00985720190af2886".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
+
+        // add hardcoded assert v2
+        let hardcoded = "789cddd1310a80201406e067500ded8d7983960ea06327e928dda1a6b60ed4059aa2ada003d4af85420d2e11e4070aca7b4fe40fe8aeab1976a2ac9fcb7c5f040b28a4421b44a54d02074864db285ca2de21ba666ca617832095380097e7b37fb20a6c5e89b194d1fc0cd1804d0d570eecd18398c1268da28ff897d05b0eeb172887".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
+    }
+
+    #[test]
+    fn parse_v2_machine_mixed() {
+        // make a 5-state mixed machine, serialize, and compare
+        let num_states = 5;
+
+        // state 0
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::BlockingEnd, e);
+
+        let mut s0 = State::new(t, num_states);
+        s0.timeout_dist = Dist {
+            dist: DistType::Pareto,
+            param1: 1.2,
+            param2: 3.4,
+            start: 5.6,
+            max: 7.8,
+        };
+        s0.action_dist = Dist {
+            dist: DistType::Geometric,
+            param1: 0.3,
+            param2: 0.7,
+            start: 3.4,
+            max: 7.9,
+        };
+        s0.action = Action::BlockOutgoing {
+            bypass: false,
+            replace: false,
+        };
+
+        // state 1
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(2, 1.0);
+        t.insert(Event::PaddingSent, e);
+
+        let mut s1 = State::new(t, num_states);
+        s1.timeout_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 1.2,
+            param2: 3.4,
+            start: 5.6,
+            max: 7.8,
+        };
+        s1.action_dist = Dist {
+            dist: DistType::Poisson,
+            param1: 0.5,
+            param2: 0.0,
+            start: 1.2,
+            max: 3.4,
+        };
+
+        // state 2
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(3, 1.0);
+        t.insert(Event::NonPaddingRecv, e);
+
+        let mut s2 = State::new(t, num_states);
+        s2.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 4.0,
+            param2: 4.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s2.action = Action::UpdateCounter {
+            counter: 0,
+            decrement: false,
+        };
+
+        // state 3
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(4, 1.0);
+        t.insert(Event::CounterZero, e);
+
+        let mut s3 = State::new(t, num_states);
+        s3.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 4.0,
+            param2: 4.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s3.action = Action::UpdateCounter {
+            counter: 0,
+            decrement: true,
+        };
+
+        // state 4
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::TimerEnd, e);
+
+        let mut s4 = State::new(t, num_states);
+        s4.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 1000.0,
+            param2: 1000.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s4.action = Action::UpdateTimer {
+            replace: true,
+        };
+
+        // machine
+        let m = Machine {
+            allowed_padding_bytes: 0,
+            max_padding_frac: 0.0,
+            allowed_blocked_microsec: 100000,
+            max_blocking_frac: 0.9999,
+            states: vec![s0, s1, s2, s3, s4],
+            include_small_packets: true,
+        };
+
         let s = m.serialize();
         println!("{}", s);
         let m_parsed = Machine::from_str(&s).unwrap();
         assert_eq!(m, m_parsed);
 
         // add hardcoded assert
-        let hardcoded = "789cd5d0b10980301005d044500b7b4bb3818d03e44a27711477d0cace815cc04aec141c407f1249408b3441f0410239ee2ef0397b1a5a532bc6b52ecf4df288c5acd226d9688bc40332ea3b4510fa3d927bc76167b10872c20304996fff6497b8824a7194d96e4634e05243c983bf661033b8a4d1f491f00985720190af2886".to_string();
+        let hardcoded = "789cedd53d0e82301407f0570d3ab83839ca0d5c3c40dfe8493c8aabb34e6e1e880b301136483800fc81161218ba103edf2fa14d493f06feafeca8ebf7526889aefff871cb13ad3cf2e85e09f4b312690ce0c4df4fc967cc7738983db2662d36820b63003ed7c70ab754a3111338e22985cd174074a14d355e39a8de1a9401b49580490b27095d3b7b5b9f4d5a6d3facfeefa94b9226a6355625d873c4ba2df7463309e5775d01b61fd8de1c23b66afe1552001f672f81".to_string();
         let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
         assert_eq!(m, m_hardcoded);
     }
@@ -596,6 +1087,7 @@ mod tests {
             let mut e: HashMap<usize, f64> = HashMap::new();
             e.insert(i, 1.0);
             t.insert(Event::PaddingSent, e);
+
             let mut s = State::new(t, num_states);
             s.timeout_dist = Dist {
                 dist: DistType::Uniform,
@@ -613,6 +1105,7 @@ mod tests {
             };
             states.push(s);
         }
+
         let m = Machine {
             allowed_padding_bytes: 0,
             max_padding_frac: 0.0,
@@ -621,12 +1114,19 @@ mod tests {
             states,
             include_small_packets: true,
         };
+
         let s = m.serialize();
         println!("{}", s);
         let m_parsed = Machine::from_str(&s).unwrap();
         assert_eq!(m, m_parsed);
 
+        // add hardcoded assert v1
         let hardcoded = "789cedd93b8e54311040d1e988809c107640c2027a421682580aeb20635b846420b10078dda381999efebcafed2a9f1358aa92ecd8d2dddd9dfafae561f7f6db8f8feffffcdcef3eddbd1ac683effbe138fa70f47b3f1c83d7f7c3ea86dd8b3b9f8fdedc0fc3e0dd8837000028e3d7bf7f1f000000109fd20300d027c50700000032507a0000faa6f800000040644a0f0000078a0f00000044a4f40000f094e20300000091283d00009ca3f800000040044a0f0000d7283e000000d032a507008031141f0000006891d20300c0148a0f000000b444e90100600ec5070000005aa0f40000b084e20300000035293d0000ac41f1010000801a941e0000d6a4f800000040494a0f00005b507c000000a004a50700802d293e000000b025a507008012141f000000d882d2030040498a0f000000ac49e90100a006c507000000d6a0f400005093e2030000004b283d0000b440f10100008039941e00005aa2f8000000c0144a0f00002d527c000000600ca507008096293e000000708dd2030040048a0f0000009ca3f400001089e2030000004f293d000044a4f8000000c081d2030040648a0f0000007d537a0000c840f1010000a04f4a0f000099283e000000f445e901002023c5070000803e283d000064a6f8000000909bd20300400f141f00000072527a0000e889e2030000402e4a0f00003d527c000000c841e90100a0678a0f000000b1293d0000a0f80000001095d2030000ff293e000000c4a2f40000c04b8a0f00000031283d00007099e203000040db941e0000b84df1010000a04d4a0f00008ca7f8000000d016a5070000a6537c0000006883d2030000f3293e000000d4a5f40000c0728a0f00000075283d0000b01ec507000080b2941e0000589fe203000040194a0f00006c47f1010000605b4a0f00006c4ff1010000601b4a0f000094a3f8000000b02ea5070000ca537c0000005887d2030000f5283e0000002ca3f40000407d8a0f000000f3283d0000d00ec50700008069941e0000688fe2030000c0384a0f0000b44bf1010000e03aa5070000daa7f8000000709ed203000071283e0000003ca7f40000403c8a0f0000000f941e0000884bf1010000e89dd2030000f1293e000000bd527a0000200fc5070000a0374a0f0000e4a3f8000000f442e9010080bc141f000080ec941e0000c84ff1010000c84ae90100807e283e000000d9283d0000d01fc5070000200ba5070000faa5f800000044a7f40000008a0f000040544a0f0000f048f10100008846e90100004e293e00000051283d0000c0258a0f000040eb941e0000e016c5070000a0554a0f00003096e2030000d01aa5070000984af10100006885d2030000cca5f8000000d4a6f40000004b293e000000b5283d0000c05a141f000080d2941e0000606d8a0f000040294a0f0000b015c5070000606b4a0f0000b035c5070000602b4a0f0000508ae2030000b036a5070000284df1010000588bd2030000d4a2f80000002ca5f4000000b5293e00000073293d0000402b141f000080a9941e0000a0358a0f0000c0584a0f0000d02ac5070000e016a5070000689de20300007089d203000044a1f80000009c527a00008068141f000080474a0f00001095e2030000a0f4000000d1293e000040bf941e0000200bc5070000e88fd203000064a3f8000000fd507a000080ac141f0000203fa5070000c84ef1010000f2527a0000805e283e0000403e4a0f0000d01bc5070000c843e90100007aa5f8000000f1293d000040ef141f000020aebf891aa4d5".to_string();
+        let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
+        assert_eq!(m, m_hardcoded);
+
+        // add hardcoded assert v2
+        let hardcoded = "789ceddab98d54411440d11e1c0c7c4cc80087007a4c024184421c78a48589071201c0ef46304b6f7fa9fd9d633ce995546597715fec9efbf2f96e9abbdd9bafdf3fbcfbfd637ff771f7725a0fbeeda771f4fee8d77e1a9357f7d3d10d7727773e1dbdbe9f96c9db196f000050c6cfffff3e0000000000008052946a00003129d60000000000008072946a0000b129d600000000000080fc946a00001c28d6000000000000807c946a00003ca65803000000000000d253aa0100708e620d0000000000004847a90600c0358a35000000000000603ba51a00007328d600000000000080f5946a00002ca158030000000000009653aa0100b086620d000000000000984fa90600c0168a35000000000000e036a51a00002928d600000000000080cb946a0000a4a458030000000000004e29d50000c841b1060000000000003c50aa01009093620d00000000000050aa01005086620d0000000000002253aa01005092620d0000000000002252aa01005083620d0000000000002251aa01005093620d0000000000002250aa0100d002c51a0000000000008c4ca90600404b146b0000000000003022a51a00002d52ac010000000000c048946a0000b44cb1060000000000002350aa0100d003c51a000000000000f44ca90600404f146b000000000000d023a51a00003d52ac010000000000404f946a0000f44cb1060000000000003d50aa01003002c51a000000000000b44ca90600c048146b000000000000d022a51a00002352ac010000000000404b946a00008c4cb1060000000000002d50aa01001081620d0000000000006a52aa01001089620d0000000000006a50aa01001091620d0000000000004a52aa01001099620d0000000000004a50aa010080620d000000000000f252aa0100c003c51a000000000000e4a054030080538a350000000000004849a90600009729d60000000000002005a51a0000dca658030000000000802d946a0000309f620d000000000000d650aa0100c0728a350000000000005842a9060000eb29d6000000000000600ea51a00006ca758030000000000806b946a0000908e620d000000000000ce51aa0100407a8a35000000000000784ca9060000f928d6000000000000e040a9060000f929d6000000000000884da9060000e528d60000000000008849a9060000e529d60000000000008845a9060000f528d60000000000008841a9060000f529d6000000000000189b520d0000daa158030000000000604c4a350000688f620d000000000080b128d50000a05d8a35000000000000c6a054030080f629d6000000000000e89b520d0000faa158030000000000a04f4a350000e88f620d000000000080be28d50000a05f8a35000000000000faa054030080fe29d6000000000000689b520d0000c6a158030000000000a04d4a350000188f620d000000000080b628d50000605c8a35000000000000daa054030080f129d6000000000000a84ba90600007128d6000000000000a843a9060000f128d6000000000000284ba90600007129d60000000000002843a906000028d6000000000000c84ba9060000fca358030000000000200fa51a0000f09c620d000000000080b4946a0000c0258a35000000000000d250aa010000b728d6000000000000d846a9060000cca558030000000000601da51a0000b094620d00000000008065946a0000c05a8a35000000000000e651aa0100005b29d6000000000000b84ea9060000a4a258030000000000e03ca51a0000909a620d000000000080a7946a0000402e8a35000000000000fe52aa010000b929d6000000000000a253aa010000a528d6000000000000a252aa010000a529d6000000000000a251aa010000b528d6000000000000a250aa010000b529d600000000000046a7540300005aa1580300000000001895520d0000688d620d000000000060344a350000a0558a350000000000805128d5000080d629d60000000000007aa7540300007aa158030000000000e895520d0000e88d620d0000000000a0374a350000a0578a350000000000805e28d5000080de29d60000000000005aa75403000046a1580300000000006895520d0000188d620d0000000000a0354a35000060548a350000000000805628d5000080d129d60000000000006a53aa0100005128d60000000000006a51aa010000d128d60000000000004a53aa0100005129d60000000000004a51aa010000d129d600000000000072fb03f0b5a4d6".to_string();
         let m_hardcoded = Machine::from_str(&hardcoded).unwrap();
         assert_eq!(m, m_hardcoded);
     }

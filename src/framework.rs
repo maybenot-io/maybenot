@@ -252,15 +252,15 @@ pub struct Framework<M> {
     current_time: Instant,
     machines: M,
     runtime: Vec<MachineRuntime>,
-    global_max_padding_frac: f64,
+    global_max_padding_frac: f64,///////////
     global_nonpadding_sent_bytes: u64,
     global_paddingsent_bytes: u64,
-    global_max_blocking_frac: f64,
+    global_max_blocking_frac: f64,//////////
     global_blocking_duration: Duration,
     global_blocking_started: Instant,
     global_blocking_active: bool,
-    global_framework_start: Instant,
-    mtu: u16,
+    global_framework_start: Instant,///////////
+    mtu: u16,///////////
 }
 
 impl<M> Framework<M>
@@ -778,7 +778,6 @@ mod tests {
     fn trigger_events_actions() {
         // plan: create a machine that swaps between two states, trigger one
         // then multiple events and check the resulting actions
-
         let num_states = 2;
 
         // state 0: go to state 1 on PaddingSent, pad after 10 usec
@@ -786,6 +785,7 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::PaddingSent, e);
+
         let mut s0 = State::new(t, num_states);
         s0.timeout_dist = Dist {
             dist: DistType::Uniform,
@@ -800,6 +800,7 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::PaddingRecv, e);
+        
         let mut s1 = State::new(t, num_states);
         s1.timeout_dist = Dist {
             dist: DistType::Uniform,
@@ -966,112 +967,16 @@ mod tests {
     }
 
     #[test]
-    fn validate_machine() {
-        let num_states = 1;
-
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        // invalid state transition
-        e.insert(1, 1.0);
-        t.insert(Event::PaddingSent, e);
-        let mut s0 = State::new(t, num_states);
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 10.0,
-            param2: 10.0,
-            start: 0.0,
-            max: 0.0,
-        };
-
-        // machine with broken state
-        let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0.clone()],
-            include_small_packets: true,
-        };
-        // while we get an error here, as intended, the error is not the
-        // expected one, because make_next_state() actually ignores the
-        // transition to the non-existing state as it makes the probability
-        // matrix based on num_states
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-
-        // repair state
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::PaddingSent, e);
-        s0.next_state = make_next_state(t, num_states);
-        let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0.clone()],
-            include_small_packets: true,
-        };
-
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_ok());
-
-        // invalid machine lacking state
-        let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![],
-            include_small_packets: true,
-        };
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-
-        // bad padding and blocking fractions
-        let mut m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0.clone()],
-            include_small_packets: true,
-        };
-
-        m.max_padding_frac = -0.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-        m.max_padding_frac = 1.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-        m.max_padding_frac = 0.5;
-
-        m.max_blocking_frac = -0.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-        m.max_blocking_frac = 1.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-        m.max_blocking_frac = 0.5;
-    }
-
-    #[test]
     fn blocking_machine() {
-        // a machine that blocks for 10us, 1us after EventNonPaddingSent
+        // a machine that blocks for 10us, 1us after NonPaddingSent
         let num_states = 2;
 
+        // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingSent, e);
+
         let mut s0 = State::new(t, num_states);
         s0.timeout_dist = Dist {
             dist: DistType::Uniform,
@@ -1080,10 +985,13 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
+
+        // state 1
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingSent, e);
+
         let mut s1 = State::new(t, num_states);
         s1.timeout_dist = Dist {
             dist: DistType::Uniform,
@@ -1104,6 +1012,7 @@ mod tests {
             replace: false,
         };
 
+        // machine
         let m = Machine {
             allowed_padding_bytes: 1000 * 1024,
             max_padding_frac: 1.0,
@@ -1162,6 +1071,228 @@ mod tests {
     }
 
     #[test]
+    fn counter_machine() {
+        // a machine that counts PaddingSent - NonPaddingSent
+        // use counter 1 for that, increment counter 0 on CounterZero
+        let num_states = 3;
+
+        // state 0
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e0: HashMap<usize, f64> = HashMap::new();
+        e0.insert(1, 1.0);
+        let mut e1: HashMap<usize, f64> = HashMap::new();
+        e1.insert(2, 1.0);
+        t.insert(Event::PaddingSent, e0);
+        t.insert(Event::CounterZero, e1);
+
+        let mut s0 = State::new(t, num_states);
+        s0.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 1.0,
+            param2: 1.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s0.action = Action::UpdateCounter {
+            counter: 1,
+            decrement: true,
+        };
+
+        // state 1
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::NonPaddingSent, e);
+        
+        let mut s1 = State::new(t, num_states);
+        s1.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 1.0,
+            param2: 1.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s1.action = Action::UpdateCounter {
+            counter: 1,
+            decrement: false,
+        };
+
+        // state 2
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e0: HashMap<usize, f64> = HashMap::new();
+        e0.insert(0, 1.0);
+        let mut e1: HashMap<usize, f64> = HashMap::new();
+        e1.insert(1, 1.0);
+        t.insert(Event::NonPaddingSent, e0);
+        t.insert(Event::PaddingSent, e1);
+        
+        let mut s2 = State::new(t, num_states);
+        s2.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 1.0,
+            param2: 1.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s2.action = Action::UpdateCounter {
+            counter: 0,
+            decrement: false,
+        };
+
+        // machine
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1, s2],
+            include_small_packets: true,
+        };
+
+        let mut current_time = Instant::now();
+        let mtu = 150;
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
+
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                bytes_sent: 0,
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Some(TriggerAction::UpdateCounter {
+                value: 1,
+                counter: 1,
+                decrement: false,
+                machine: MachineId(0),
+            })
+        );
+
+        current_time = current_time.add(Duration::from_micros(20));
+        _ = f.trigger_events(
+            &[TriggerEvent::NonPaddingSent { bytes_sent: 0 }],
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Some(TriggerAction::UpdateCounter {
+                value: 1,
+                counter: 1,
+                decrement: true,
+                machine: MachineId(0),
+            })
+        );
+
+        current_time = current_time.add(Duration::from_micros(20));
+        _ = f.trigger_events(
+            &[TriggerEvent::CounterZero {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Some(TriggerAction::UpdateCounter {
+                value: 1,
+                counter: 0,
+                decrement: false,
+                machine: MachineId(0),
+            })
+        );
+    }
+
+    #[test]
+    fn timer_machine() {
+        // a machine that sets the timer to 1 ms after PaddingSent
+        let num_states = 2;
+
+        // state 0
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(1, 1.0);
+        t.insert(Event::PaddingSent, e);
+
+        let mut s0 = State::new(t, num_states);
+        s0.timeout_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 1.0,
+            param2: 1.0,
+            start: 0.0,
+            max: 0.0,
+        };
+
+        // state 1
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::TimerEnd, e);
+        
+        let mut s1 = State::new(t, num_states);
+        s1.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: 1000.0, // 1 ms
+            param2: 1000.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s1.action = Action::UpdateTimer {
+            replace: false,
+        };
+
+        // machine
+        let m = Machine {
+            allowed_padding_bytes: 1000 * 1024,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1],
+            include_small_packets: true,
+        };
+
+        let mut current_time = Instant::now();
+        let mtu = 150;
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
+
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                bytes_sent: 0,
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Some(TriggerAction::UpdateTimer {
+                duration: Duration::from_micros(1000),
+                replace: false,
+                machine: MachineId(0),
+            })
+        );
+
+        current_time = current_time.add(Duration::from_micros(20));
+        _ = f.trigger_events(
+            &[TriggerEvent::TimerEnd {
+                machine: MachineId(0)
+            }],
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Some(TriggerAction::InjectPadding {
+                timeout: Duration::from_micros(1),
+                size: mtu as u16,
+                bypass: false,
+                replace: false,
+                machine: MachineId(0),
+            })
+        );
+    }
+
+    #[test]
     fn machine_max_padding_frac() {
         // We create a machine that should be allowed to send 100*MTU padding
         // bytes before machine padding limits are applied, then the machine
@@ -1169,14 +1300,17 @@ mod tests {
         // nonpadding bytes have been sent, given the set max padding fraction
         // of 0.5.
         let mtu: u16 = 1000;
-
         let num_states = 2;
+
+        // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingRecv, e);
+
         let s0 = State::new(t, num_states);
 
+        // state 1
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
@@ -1185,6 +1319,7 @@ mod tests {
         t.insert(Event::NonPaddingSent, e.clone());
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
+
         let mut s1 = State::new(t, num_states);
         s1.timeout_dist = Dist {
             dist: DistType::Uniform,
@@ -1194,6 +1329,7 @@ mod tests {
             max: 0.0,
         };
 
+        // machine
         let m = Machine {
             allowed_padding_bytes: 100 * (mtu as u64),
             max_padding_frac: 0.5,
@@ -1202,6 +1338,7 @@ mod tests {
             states: vec![s0, s1],
             include_small_packets: true,
         };
+
         let current_time = Instant::now();
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
@@ -1263,6 +1400,7 @@ mod tests {
             &[TriggerEvent::NonPaddingSent { bytes_sent: 1 }],
             current_time,
         );
+
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::InjectPadding {
@@ -1280,13 +1418,17 @@ mod tests {
         // to test the global limits of the framework we create two machines with
         // the same allowed padding, where both machines pad in parallel
         let mtu: u16 = 1000;
-
         let num_states = 2;
+
+        // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingRecv, e);
+
         let s0 = State::new(t, num_states);
+
+        // state 1
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
@@ -1295,6 +1437,7 @@ mod tests {
         t.insert(Event::NonPaddingSent, e.clone());
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
+
         let mut s1 = State::new(t, num_states);
         s1.timeout_dist = Dist {
             dist: DistType::Uniform,
@@ -1304,6 +1447,7 @@ mod tests {
             max: 0.0,
         };
 
+        // machines
         let m1 = Machine {
             allowed_padding_bytes: 100 * (mtu as u64),
             max_padding_frac: 0.0, // NOTE
@@ -1326,6 +1470,7 @@ mod tests {
             &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
             current_time,
         );
+
         // we expect 100 padding actions per machine
         for _ in 0..100 {
             assert_eq!(
@@ -1388,14 +1533,14 @@ mod tests {
         // means that we should need to send at least 2*100*mtu + 1 bytes before
         // padding is scheduled again
         for _ in 0..200 {
-            assert_eq!(f.actions[0], None);
-            assert_eq!(f.actions[1], None);
             _ = f.trigger_events(
                 &[TriggerEvent::NonPaddingSent {
                     bytes_sent: mtu as u16,
                 }],
                 current_time,
             );
+            assert_eq!(f.actions[0], None);
+            assert_eq!(f.actions[1], None);
         }
 
         // the last byte should tip it over
@@ -1403,6 +1548,7 @@ mod tests {
             &[TriggerEvent::NonPaddingSent { bytes_sent: 1 }],
             current_time,
         );
+
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::InjectPadding {
@@ -1432,17 +1578,23 @@ mod tests {
         // blocking until after 10us, given the set max blocking fraction of
         // 0.5.
         let num_states = 2;
+
+        // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingRecv, e);
+
         let s0 = State::new(t, num_states);
+
+        // state 1
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::BlockingBegin, e.clone());
         t.insert(Event::BlockingEnd, e.clone());
         t.insert(Event::NonPaddingRecv, e.clone());
+
         let mut s1 = State::new(t, num_states);
         // block every 2us for 2us
         s1.timeout_dist = Dist {
@@ -1464,6 +1616,7 @@ mod tests {
             replace: false,
         };
 
+        // machine
         let m = Machine {
             allowed_padding_bytes: 0,
             max_padding_frac: 0.0,
@@ -1558,17 +1711,23 @@ mod tests {
         // blocking until after 10us, given the set max blocking fraction of
         // 0.5 in the framework.
         let num_states = 2;
+
+        // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingRecv, e);
+
         let s0 = State::new(t, num_states);
+
+        // state 1
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::BlockingBegin, e.clone());
         t.insert(Event::BlockingEnd, e.clone());
         t.insert(Event::NonPaddingRecv, e.clone());
+
         let mut s1 = State::new(t, num_states);
         // block every 2us for 2us
         s1.timeout_dist = Dist {
@@ -1590,6 +1749,7 @@ mod tests {
             replace: false,
         };
 
+        // machine
         let m = Machine {
             allowed_padding_bytes: 0,
             max_padding_frac: 0.0,
@@ -1683,15 +1843,21 @@ mod tests {
         // then should be prevented from padding further by transitioning to
         // self
         let num_states = 2;
+
+        // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::NonPaddingSent, e);
+
         let s0 = State::new(t, num_states);
+
+        // state 1
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
         t.insert(Event::PaddingSent, e);
+
         let mut s1 = State::new(t, num_states);
         s1.timeout_dist = Dist {
             dist: DistType::Uniform,
@@ -1708,6 +1874,7 @@ mod tests {
             max: 0.0,
         };
 
+        // machine
         let m = Machine {
             allowed_padding_bytes: 100000, // NOTE, will not apply
             max_padding_frac: 1.0,         // NOTE, will not apply
