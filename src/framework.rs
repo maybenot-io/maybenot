@@ -252,15 +252,15 @@ pub struct Framework<M> {
     current_time: Instant,
     machines: M,
     runtime: Vec<MachineRuntime>,
-    global_max_padding_frac: f64,///////////
+    global_max_padding_frac: f64,
     global_nonpadding_sent_bytes: u64,
-    global_paddingsent_bytes: u64,
-    global_max_blocking_frac: f64,//////////
+    global_padding_sent_bytes: u64,
+    global_max_blocking_frac: f64,
     global_blocking_duration: Duration,
     global_blocking_started: Instant,
     global_blocking_active: bool,
-    global_framework_start: Instant,///////////
-    mtu: u16,///////////
+    global_framework_start: Instant,
+    mtu: u16,
 }
 
 impl<M> Framework<M>
@@ -321,7 +321,7 @@ where
             global_blocking_active: false,
             global_blocking_started: current_time,
             global_blocking_duration: Duration::from_secs(0),
-            global_paddingsent_bytes: 0,
+            global_padding_sent_bytes: 0,
             global_nonpadding_sent_bytes: 0,
         })
     }
@@ -397,7 +397,7 @@ where
                 machine,
             } => {
                 // accounting is global ...
-                self.global_paddingsent_bytes += *bytes_sent as u64;
+                self.global_padding_sent_bytes += *bytes_sent as u64;
 
                 for mi in 0..self.runtime.len() {
                     // ... but the event is per-machine
@@ -733,12 +733,12 @@ where
 
         // hit global limits?
         if self.global_max_padding_frac > 0.0 {
-            let total = self.global_paddingsent_bytes + self.global_nonpadding_sent_bytes;
+            let total = self.global_padding_sent_bytes + self.global_nonpadding_sent_bytes;
             if total == 0 {
                 // FIXME: same as above, should this be true?
                 return false;
             }
-            if self.global_paddingsent_bytes as f64 / total as f64 >= self.global_max_padding_frac {
+            if self.global_padding_sent_bytes as f64 / total as f64 >= self.global_max_padding_frac {
                 return false;
             }
         }
