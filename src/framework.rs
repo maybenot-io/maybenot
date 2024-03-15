@@ -451,10 +451,6 @@ where
                     self.transition(mi, Event::BlockingEnd, 0);
                 }
             }
-            TriggerEvent::LimitReached { machine } => {
-                // limit is an internal event
-                self.transition(machine.0, Event::LimitReached, 0);
-            }
             TriggerEvent::UpdateMTU { new_mtu } => {
                 self.mtu = *new_mtu;
                 for mi in 0..self.runtime.len() {
@@ -600,9 +596,7 @@ where
             // take no action and trigger limit reached
             self.actions[mi] = None;
             // next, we trigger internally event LimitReached
-            self.process_event(&TriggerEvent::LimitReached {
-                machine: MachineId(mi),
-            })
+            self.transition(mi, Event::LimitReached, 0);
         }
     }
 
