@@ -35,7 +35,6 @@ pub struct Machine {
     pub max_blocking_frac: f64,
     /// The states that make up the machine.
     pub states: Vec<State>,
-    pub include_small_packets: bool,
 }
 
 impl FromStr for Machine {
@@ -175,11 +174,7 @@ impl Machine {
         wtr.write_f64::<LittleEndian>(self.max_blocking_frac)
             .unwrap();
 
-        if self.include_small_packets {
-            wtr.write_u8(1).unwrap();
-        } else {
-            wtr.write_u8(0).unwrap();
-        }
+        wtr.write_u8(1).unwrap(); // include_small_packets in v1
 
         let num_states = self.states.len();
         wtr.write_u16::<LittleEndian>(num_states as u16).unwrap();
@@ -215,7 +210,7 @@ impl Machine {
         r += 8;
     
         // 1-byte flag
-        let include_small_packets = buf[r] == 1;
+        //let include_small_packets = buf[r] == 1;
         r += 1;
     
         // 2-byte num of states
@@ -246,7 +241,6 @@ impl Machine {
             max_padding_frac,
             allowed_blocked_microsec,
             max_blocking_frac,
-            include_small_packets,
             states,
         };
         m.validate()?;
@@ -271,7 +265,7 @@ impl Machine {
         r += 8;
     
         // 1-byte flag
-        let include_small_packets = buf[r] == 1;
+        //let include_small_packets = buf[r] == 1;
         r += 1;
     
         // 2-byte num of states
@@ -302,7 +296,6 @@ impl Machine {
             max_padding_frac,
             allowed_blocked_microsec,
             max_blocking_frac,
-            include_small_packets,
             states,
         };
         m.validate()?;
@@ -348,7 +341,6 @@ mod tests {
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
             states: vec![s0.clone()],
-            include_small_packets: true,
         };
         // while we get an error here, as intended, the error is not the
         // expected one, because make_next_state() actually ignores the
@@ -371,7 +363,6 @@ mod tests {
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
             states: vec![s0.clone()],
-            include_small_packets: true,
         };
 
         let r = m.validate();
@@ -391,7 +382,6 @@ mod tests {
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
             states: vec![s0.clone()],
-            include_small_packets: true,
         };
 
         let r = m.validate();
@@ -410,7 +400,6 @@ mod tests {
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
             states: vec![s0.clone()],
-            include_small_packets: true,
         };
 
         let r = m.validate();
@@ -430,7 +419,6 @@ mod tests {
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
             states: vec![],
-            include_small_packets: true,
         };
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
@@ -443,7 +431,6 @@ mod tests {
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
             states: vec![s0.clone()],
-            include_small_packets: true,
         };
 
         m.max_padding_frac = -0.1;
@@ -557,7 +544,6 @@ mod tests {
             allowed_blocked_microsec: 2000,
             max_blocking_frac: 0.456,
             states: vec![s0, s1],
-            include_small_packets: true,
         };
 
         // serialize, parse, eq
@@ -576,7 +562,6 @@ mod tests {
         assert_eq!(m.allowed_padding_bytes, 0);
         assert_eq!(m.max_blocking_frac, 0.0);
         assert_eq!(m.max_padding_frac, 0.0);
-        assert_eq!(m.include_small_packets, false);
 
         assert_eq!(m.states.len(), 1);
         assert_eq!(m.states[0].limit_includes_nonpadding, false);
@@ -610,7 +595,6 @@ mod tests {
         assert_eq!(m.allowed_padding_bytes, 0);
         assert_eq!(m.max_blocking_frac, 0.0);
         assert_eq!(m.max_padding_frac, 0.0);
-        assert_eq!(m.include_small_packets, false);
 
         assert_eq!(m.states.len(), 1);
         assert_eq!(m.states[0].limit_includes_nonpadding, false);
@@ -664,7 +648,6 @@ mod tests {
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
             states: vec![s0],
-            include_small_packets: false,
         };
 
         let s = m.serialize();
@@ -717,7 +700,6 @@ mod tests {
             allowed_blocked_microsec: 100000,
             max_blocking_frac: 0.9999,
             states: vec![s0],
-            include_small_packets: true,
         };
 
         let s = m.serialize();
@@ -787,7 +769,6 @@ mod tests {
             allowed_blocked_microsec: 1000000,
             max_blocking_frac: 0.456,
             states: vec![s0, s1],
-            include_small_packets: false,
         };
 
         let s = m.serialize();
@@ -854,7 +835,6 @@ mod tests {
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
             states: vec![s0, s1],
-            include_small_packets: false,
         };
 
         let s = m.serialize();
@@ -928,7 +908,6 @@ mod tests {
             allowed_blocked_microsec: 100000,
             max_blocking_frac: 0.9999,
             states: vec![s0, s1],
-            include_small_packets: true,
         };
 
         let s = m.serialize();
@@ -1063,7 +1042,6 @@ mod tests {
             allowed_blocked_microsec: 100000,
             max_blocking_frac: 0.9999,
             states: vec![s0, s1, s2, s3, s4],
-            include_small_packets: true,
         };
 
         let s = m.serialize();
@@ -1112,7 +1090,6 @@ mod tests {
             allowed_blocked_microsec: 100000,
             max_blocking_frac: 0.9999,
             states,
-            include_small_packets: true,
         };
 
         let s = m.serialize();

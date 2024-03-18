@@ -33,11 +33,6 @@ pub const STATECANCEL: usize = STATEEND - 1;
 /// can have.
 pub const STATEMAX: usize = STATECANCEL - 1;
 
-/// The max size of packets considered as a small packet (e.g., TCP ACKs,
-/// WireGuard keepalive), see [`include_small_packets`](crate::machine) in
-/// [`Machine`](crate::machine).
-pub const MAXSMALLPACKETSIZE: u64 = 52;
-
 /// The number of counters available to each machine. This limits the IDs
 /// that can be specified in an UpdateCounter [`Action`](crate::action).
 pub const COUNTERSPERMACHINE: usize = 2;
