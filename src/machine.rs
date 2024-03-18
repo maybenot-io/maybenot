@@ -114,8 +114,8 @@ impl Machine {
                             COUNTERSPERMACHINE
                         )
                     }
-                },
-                _ => {},
+                }
+                _ => {}
             }
 
             // validate transitions
@@ -197,7 +197,7 @@ impl Machine {
         if buf.len() < 4 * 8 + 1 + 2 {
             bail!("not enough data for version 1 machine")
         }
-    
+
         let mut r: usize = 0;
         // 4 8-byte values
         let allowed_padding_bytes = LittleEndian::read_u64(&buf[r..r + 8]);
@@ -208,15 +208,15 @@ impl Machine {
         r += 8;
         let max_blocking_frac = LittleEndian::read_f64(&buf[r..r + 8]);
         r += 8;
-    
+
         // 1-byte flag
         //let include_small_packets = buf[r] == 1;
         r += 1;
-    
+
         // 2-byte num of states
         let num_states: usize = LittleEndian::read_u16(&buf[r..r + 2]) as usize;
         r += 2;
-    
+
         // each state has 3 distributions + 4 flags + next_state matrix
         let expected_state_len: usize =
             3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::v1_events_iter().len();
@@ -228,14 +228,14 @@ impl Machine {
                 buf[r..].len()
             ))
         }
-    
+
         let mut states = vec![];
         for _ in 0..num_states {
             let s = State::parse_v1(buf[r..r + expected_state_len].to_vec(), num_states).unwrap();
             r += expected_state_len;
             states.push(s);
         }
-    
+
         let m = Machine {
             allowed_padding_bytes,
             max_padding_frac,
@@ -252,7 +252,7 @@ impl Machine {
         if buf.len() < 4 * 8 + 1 + 2 {
             bail!("not enough data for version 2 machine")
         }
-    
+
         let mut r: usize = 0;
         // 4 8-byte values
         let allowed_padding_bytes = LittleEndian::read_u64(&buf[r..r + 8]);
@@ -263,15 +263,15 @@ impl Machine {
         r += 8;
         let max_blocking_frac = LittleEndian::read_f64(&buf[r..r + 8]);
         r += 8;
-    
+
         // 1-byte flag
         //let include_small_packets = buf[r] == 1;
         r += 1;
-    
+
         // 2-byte num of states
         let num_states: usize = LittleEndian::read_u16(&buf[r..r + 2]) as usize;
         r += 2;
-    
+
         // each state has 3 distributions + 4 flags + next_state matrix
         let expected_state_len: usize =
             3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::v2_events_iter().len();
@@ -283,14 +283,14 @@ impl Machine {
                 buf[r..].len()
             ))
         }
-    
+
         let mut states = vec![];
         for _ in 0..num_states {
             let s = State::parse_v2(buf[r..r + expected_state_len].to_vec(), num_states).unwrap();
             r += expected_state_len;
             states.push(s);
         }
-    
+
         let m = Machine {
             allowed_padding_bytes,
             max_padding_frac,
@@ -356,7 +356,7 @@ mod tests {
         e.insert(0, 1.1);
         t.insert(Event::PaddingSent, e);
         s0.next_state = make_next_state(t, num_states);
-        
+
         let m = Machine {
             allowed_padding_bytes: 1000 * 1024,
             max_padding_frac: 1.0,
@@ -565,7 +565,13 @@ mod tests {
 
         assert_eq!(m.states.len(), 1);
         assert_eq!(m.states[0].limit_includes_nonpadding, false);
-        assert_eq!(m.states[0].action, Action::InjectPadding { bypass: false, replace: false });
+        assert_eq!(
+            m.states[0].action,
+            Action::InjectPadding {
+                bypass: false,
+                replace: false
+            }
+        );
         assert_eq!(m.states[0].action_dist.dist, DistType::None);
         assert_eq!(m.states[0].action_dist.param1, 0.0);
         assert_eq!(m.states[0].action_dist.param2, 0.0);
@@ -598,7 +604,13 @@ mod tests {
 
         assert_eq!(m.states.len(), 1);
         assert_eq!(m.states[0].limit_includes_nonpadding, false);
-        assert_eq!(m.states[0].action, Action::InjectPadding { bypass: false, replace: false });
+        assert_eq!(
+            m.states[0].action,
+            Action::InjectPadding {
+                bypass: false,
+                replace: false
+            }
+        );
         assert_eq!(m.states[0].action_dist.dist, DistType::None);
         assert_eq!(m.states[0].action_dist.param1, 0.0);
         assert_eq!(m.states[0].action_dist.param2, 0.0);
@@ -824,9 +836,7 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        s1.action = Action::UpdateTimer {
-            replace: false,
-        };
+        s1.action = Action::UpdateTimer { replace: false };
 
         // machine
         let m = Machine {
@@ -1031,9 +1041,7 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        s4.action = Action::UpdateTimer {
-            replace: true,
-        };
+        s4.action = Action::UpdateTimer { replace: true };
 
         // machine
         let m = Machine {

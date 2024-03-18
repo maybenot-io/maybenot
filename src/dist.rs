@@ -126,62 +126,62 @@ impl fmt::Display for Dist {
             DistType::None => write!(f, "none"),
             DistType::Uniform => {
                 write!(f, "Uniform [{:?}, {:?}]{}", self.param1, self.param2, clamp)
-            },
+            }
             DistType::Normal => {
                 write!(
                     f,
                     "Normal mean {:?} stdev {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            },
+            }
             DistType::LogNormal => {
                 write!(
                     f,
                     "LogNormal mu {:?} sigma {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            },
+            }
             DistType::Binomial => {
                 write!(
                     f,
                     "Binomial trials {:?} probability {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            },
+            }
             DistType::Geometric => {
                 write!(f, "Geometric probability {:?}{}", self.param1, clamp)
-            },
+            }
             DistType::Pareto => {
                 write!(
                     f,
                     "Pareto scale {:?} shape {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            },
+            }
             DistType::Poisson => {
                 write!(f, "Poisson lambda {:?}{}", self.param1, clamp)
-            },
+            }
             DistType::Weibull => {
                 write!(
                     f,
                     "Weibull scale {:?} shape {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            },
+            }
             DistType::Gamma => {
                 write!(
                     f,
                     "Gamma scale {:?} shape {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            },
+            }
             DistType::Beta => {
                 write!(
                     f,
                     "Beta alpha {:?} beta {:?}{}",
                     self.param1, self.param2, clamp
                 )
-            },
+            }
         }
     }
 }

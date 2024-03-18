@@ -16,10 +16,7 @@ pub enum Action {
     ///
     /// The replace flag determines if the padding packet MAY be replaced by a
     /// non-padding packet queued at the time the padding packet would be sent.
-    InjectPadding {
-        bypass: bool,
-        replace: bool,
-    },
+    InjectPadding { bypass: bool, replace: bool },
     /// Schedule blocking of outgoing traffic.
     ///
     /// The bypass flag determines if padding actions are allowed to bypass
@@ -29,10 +26,7 @@ pub enum Action {
     ///
     /// The replace flag determines if the action duration should replace any
     /// existing blocking.
-    BlockOutgoing {
-        bypass: bool,
-        replace: bool,
-    },
+    BlockOutgoing { bypass: bool, replace: bool },
     /// Increment or decrement one of the counters associated with a machine.
     ///
     /// The counter field indicates which of the machine's counters should be
@@ -41,17 +35,12 @@ pub enum Action {
     ///
     /// The decrement flag, when set, specifies that counter updates subtract
     /// from the counter's current value instead of adding to it.
-    UpdateCounter {
-        counter: usize,
-        decrement: bool,
-    },
+    UpdateCounter { counter: usize, decrement: bool },
     /// Update the timer duration for a machine.
     ///
     /// The replace flag determines if the action duration should replace the
     /// current timer duration, if the timer has already been set.
-    UpdateTimer {
-        replace: bool,
-    }
+    UpdateTimer { replace: bool },
 }
 
 /// The action to be taken by the framework user.

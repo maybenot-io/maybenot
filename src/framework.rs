@@ -192,7 +192,7 @@
 //!                 // non-action timer with the specified duration. If replace
 //!                 // is false, use the longest of the remaining and specified
 //!                 // durations.
-//!                 // 
+//!                 //
 //!                 // Do not schedule any events to be triggered, even if the
 //!                 // timer was set to zero - this allows for the timer to be
 //!                 // explicitly reset. If the timer was not set to zero,
@@ -380,9 +380,7 @@ where
                     // the machine includes nonpadding sent packets, decrement the
                     // limit. If the state changed, a new limit was sampled and this
                     // packet shouldn't count.
-                    if self.transition(mi, Event::NonPaddingSent)
-                        == StateChange::Unchanged
-                    {
+                    if self.transition(mi, Event::NonPaddingSent) == StateChange::Unchanged {
                         let cs = self.runtime[mi].current_state;
                         if cs != STATEEND
                             && self.machines.as_ref()[mi].states[cs].limit_includes_nonpadding
@@ -404,9 +402,7 @@ where
                     if mi == machine.0 {
                         self.runtime[mi].padding_sent += *bytes_sent as u64;
 
-                        if self.transition(mi, Event::PaddingSent)
-                            == StateChange::Unchanged
-                        {
+                        if self.transition(mi, Event::PaddingSent) == StateChange::Unchanged {
                             // decrement only makes sense if we didn't change state
                             self.decrement_limit(mi)
                         }
@@ -540,39 +536,31 @@ where
         let current = &machine.states[runtime.current_state];
 
         match current.action {
-            Action::InjectPadding { bypass, replace } => {
-                Some(TriggerAction::InjectPadding {
-                    timeout: Duration::from_micros(current.sample_timeout() as u64),
-                    size: current.sample_size(self.mtu as u64) as u16,
-                    bypass: bypass,
-                    replace: replace,
-                    machine: mi,
-                })
-            },
-            Action::BlockOutgoing { bypass, replace } => {
-                Some(TriggerAction::BlockOutgoing {
-                    timeout: Duration::from_micros(current.sample_timeout() as u64),
-                    duration: Duration::from_micros(current.sample_block() as u64),
-                    bypass: bypass,
-                    replace: replace,
-                    machine: mi,
-                })
-            },
-            Action::UpdateCounter { counter, decrement } => {
-                Some(TriggerAction::UpdateCounter {
-                    value: current.sample_counter_value(),
-                    counter,
-                    decrement,
-                    machine: mi,
-                })
-            },
-            Action::UpdateTimer { replace } => {
-                Some(TriggerAction::UpdateTimer {
-                    duration: Duration::from_micros(current.sample_timer_duration() as u64),
-                    replace,
-                    machine: mi,
-                })
-            },
+            Action::InjectPadding { bypass, replace } => Some(TriggerAction::InjectPadding {
+                timeout: Duration::from_micros(current.sample_timeout() as u64),
+                size: current.sample_size(self.mtu as u64) as u16,
+                bypass: bypass,
+                replace: replace,
+                machine: mi,
+            }),
+            Action::BlockOutgoing { bypass, replace } => Some(TriggerAction::BlockOutgoing {
+                timeout: Duration::from_micros(current.sample_timeout() as u64),
+                duration: Duration::from_micros(current.sample_block() as u64),
+                bypass: bypass,
+                replace: replace,
+                machine: mi,
+            }),
+            Action::UpdateCounter { counter, decrement } => Some(TriggerAction::UpdateCounter {
+                value: current.sample_counter_value(),
+                counter,
+                decrement,
+                machine: mi,
+            }),
+            Action::UpdateTimer { replace } => Some(TriggerAction::UpdateTimer {
+                duration: Duration::from_micros(current.sample_timer_duration() as u64),
+                replace,
+                machine: mi,
+            }),
         }
     }
 
@@ -627,12 +615,8 @@ where
         let current = &machine.states[runtime.current_state];
         // either blocking or padding limits apply
         match current.action {
-            Action::BlockOutgoing { .. } => {
-                self.below_limit_blocking(runtime, machine)
-            },
-            Action::InjectPadding { .. } => {
-                self.below_limit_padding(runtime, machine)
-            },
+            Action::BlockOutgoing { .. } => self.below_limit_blocking(runtime, machine),
+            Action::InjectPadding { .. } => self.below_limit_padding(runtime, machine),
             _ => true,
         }
     }
@@ -642,7 +626,11 @@ where
         // blocking action
 
         // special case: we always allow overwriting existing blocking
-        let replace = if let Action::BlockOutgoing { replace, .. } = current.action { replace } else { false };
+        let replace = if let Action::BlockOutgoing { replace, .. } = current.action {
+            replace
+        } else {
+            false
+        };
 
         if replace {
             // we still check against state limit, because it's machine internal
@@ -724,7 +712,8 @@ where
                 // FIXME: same as above, should this be true?
                 return false;
             }
-            if self.global_padding_sent_bytes as f64 / total as f64 >= self.global_max_padding_frac {
+            if self.global_padding_sent_bytes as f64 / total as f64 >= self.global_max_padding_frac
+            {
                 return false;
             }
         }
@@ -786,7 +775,7 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::PaddingRecv, e);
-        
+
         let mut s1 = State::new(t, num_states);
         s1.timeout_dist = Dist {
             dist: DistType::Uniform,
@@ -1087,7 +1076,7 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::NonPaddingSent, e);
-        
+
         let mut s1 = State::new(t, num_states);
         s1.action_dist = Dist {
             dist: DistType::Uniform,
@@ -1109,7 +1098,7 @@ mod tests {
         e1.insert(1, 1.0);
         t.insert(Event::NonPaddingSent, e0);
         t.insert(Event::PaddingSent, e1);
-        
+
         let mut s2 = State::new(t, num_states);
         s2.action_dist = Dist {
             dist: DistType::Uniform,
@@ -1212,7 +1201,7 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::TimerEnd, e);
-        
+
         let mut s1 = State::new(t, num_states);
         s1.action_dist = Dist {
             dist: DistType::Uniform,
@@ -1221,9 +1210,7 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        s1.action = Action::UpdateTimer {
-            replace: false,
-        };
+        s1.action = Action::UpdateTimer { replace: false };
 
         // machine
         let m = Machine {
@@ -1258,7 +1245,7 @@ mod tests {
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
             &[TriggerEvent::TimerEnd {
-                machine: MachineId(0)
+                machine: MachineId(0),
             }],
             current_time,
         );

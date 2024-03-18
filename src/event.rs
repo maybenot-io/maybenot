@@ -2,8 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::framework::MachineId;
 use self::Event::*;
+use crate::framework::MachineId;
 use std::fmt;
 use std::hash::Hash;
 use std::slice::Iter;
@@ -101,7 +101,10 @@ pub enum TriggerEvent {
     /// Queued non-padding bytes.
     NonPaddingQueued { bytes_queued: u16 },
     /// Queued padding bytes.
-    PaddingQueued { bytes_queued: u16, machine: MachineId },
+    PaddingQueued {
+        bytes_queued: u16,
+        machine: MachineId,
+    },
 }
 
 impl TriggerEvent {

@@ -119,22 +119,22 @@ impl State {
                 wtr.write_u8(0).unwrap(); // action_is_block in v1
                 wtr.write_u8(if bypass { 1 } else { 0 }).unwrap();
                 wtr.write_u8(if replace { 1 } else { 0 }).unwrap();
-            },
+            }
             Action::BlockOutgoing { bypass, replace } => {
                 wtr.write_u8(1).unwrap(); // action_is_block in v1
                 wtr.write_u8(if bypass { 1 } else { 0 }).unwrap();
                 wtr.write_u8(if replace { 1 } else { 0 }).unwrap();
-            },
+            }
             Action::UpdateCounter { counter, decrement } => {
                 wtr.write_u8(2).unwrap(); // action_is_block in v1
                 wtr.write_u8(counter as u8).unwrap();
                 wtr.write_u8(if decrement { 1 } else { 0 }).unwrap();
-            },
+            }
             Action::UpdateTimer { replace } => {
                 wtr.write_u8(3).unwrap(); // action_is_block in v1
                 wtr.write_u8(if replace { 1 } else { 0 }).unwrap();
                 wtr.write_u8(0).unwrap();
-            },
+            }
         }
         if self.limit_includes_nonpadding {
             wtr.write_u8(1).unwrap();
@@ -162,9 +162,14 @@ impl State {
     /// [`Machine`](crate::machine) with the specific number of states. The number
     /// of states has to be known since the size of the transition matrix depends on
     /// it.
-    pub fn parse_v1(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
+    pub fn parse_v1(
+        buf: Vec<u8>,
+        num_states: usize,
+    ) -> Result<State, Box<dyn Error + Send + Sync>> {
         // len: 3 distributions + 4 flags + next_state
-        if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::v1_events_iter().len() {
+        if buf.len()
+            < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::v1_events_iter().len()
+        {
             bail!("too small")
         }
 
@@ -186,15 +191,9 @@ impl State {
         r += 1;
 
         let action = if action_is_block {
-            Action::BlockOutgoing {
-                bypass,
-                replace,
-            }
+            Action::BlockOutgoing { bypass, replace }
         } else {
-            Action::InjectPadding {
-                bypass,
-                replace,
-            }
+            Action::InjectPadding { bypass, replace }
         };
 
         let limit_includes_nonpadding: bool = buf[r] == 1;
@@ -233,9 +232,14 @@ impl State {
     /// [`Machine`](crate::machine) with the specific number of states. The number
     /// of states has to be known since the size of the transition matrix depends on
     /// it.
-    pub fn parse_v2(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
+    pub fn parse_v2(
+        buf: Vec<u8>,
+        num_states: usize,
+    ) -> Result<State, Box<dyn Error + Send + Sync>> {
         // len: 3 distributions + 4 flags + next_state
-        if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::v2_events_iter().len() {
+        if buf.len()
+            < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * Event::v2_events_iter().len()
+        {
             bail!("too small")
         }
 
