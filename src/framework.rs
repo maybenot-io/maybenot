@@ -4,7 +4,7 @@
 //! Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or
 //! Tor. While the connections are encrypted, *patterns* in the encrypted
 //! communication may still leak information about the underlying plaintext
-//! being communicated over encrypted. Maybenot is a framework for creating
+//! being communicated with encryption. Maybenot is a framework for creating
 //! defenses that hide such patterns.
 //!
 //!
@@ -92,12 +92,11 @@
 //!                 // Set the action timer with the specified timeout. On expiry,
 //!                 // do the following (all or nothing):
 //!                 //
-//!                 // 1. Send size padding.
-//!                 // 2. Add TriggerEvent::PaddingQueued{ bytes_queued: size,
-//!                 //    machine: machine } to be triggered next loop
-//!                 //    iteration.
-//!                 // 2. Trigger TriggerEvent::PaddingSent{ bytes_sent: size,
-//!                 //    machine: machine } when the padding is sent.
+//!                 // 1. Add TriggerEvent::PaddingQueued{ bytes_queued: size,
+//!                 //    machine: machine } to be triggered next loop iteration.
+//!                 // 2. Send size padding.
+//!                 // 3. Trigger TriggerEvent::PaddingSent{ bytes_sent: size,
+//!                 //    machine: machine } to be triggered next loop iteration.
 //!                 //
 //!                 // Above, "send" should mimic as close as possible real
 //!                 // application data being added for transport.
@@ -116,9 +115,9 @@
 //!                 // application data (non-padding) enqueued to be sent. In both
 //!                 // cases, the replaced data MAY be of the same size as the
 //!                 // padding. Regardless of if the padding is replaced or not,
-//!                 // the events should still be triggered (steps 2/3). If enqueued
-//!                 // non-padding is sent instead of padding, then NonPaddingQueued
-//!                 // and NonPaddingSent events should be triggered as well.
+//!                 // the events should still be triggered (steps 1/3). If enqueued
+//!                 // non-padding is sent instead of padding, then NonPaddingSent
+//!                 // should be triggered as well.
 //!                 //
 //!                 // Above, note the use-case of having bypass and replace set to
 //!                 // true. This is to support constant-rate defenses.
