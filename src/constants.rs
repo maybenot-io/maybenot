@@ -8,11 +8,12 @@ pub const VERSION: u8 = 2;
 /// microseconds.
 pub const MAXSAMPLEDTIMEOUT: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 
-/// The maximum sampled blocking duration in a [`State`](crate::state), set to
-/// one minute in microseconds.
-pub const MAXSAMPLEDBLOCK: f64 = 1000.0 * 1000.0 * 60.0;
+/// The maximum sampled blocking duration in a [`State`](crate::state), set to a
+/// day in microseconds.
+pub const MAXSAMPLEDBLOCK: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 
-/// The size (in bytes) of a serialized distribution for a [`State`](crate::state).
+/// The size (in bytes) of a serialized distribution for a
+/// [`State`](crate::state).
 pub const SERIALIZEDDISTSIZE: usize = 2 + 8 * 4;
 
 /// The maximum possible sampled limit of a [`State`](crate::state). This is the
@@ -33,8 +34,8 @@ pub const STATECANCEL: usize = STATEEND - 1;
 /// can have.
 pub const STATEMAX: usize = STATECANCEL - 1;
 
-/// The number of counters available to each machine. This limits the IDs
-/// that can be specified in an UpdateCounter [`Action`](crate::action).
+/// The number of counters available to each machine. This limits the IDs that
+/// can be specified in an UpdateCounter [`Action`](crate::action).
 pub const COUNTERSPERMACHINE: usize = 2;
 
 /// The maximum sampled counter value in a [`State`](crate::state), which is
