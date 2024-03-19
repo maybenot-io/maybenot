@@ -251,14 +251,14 @@ pub struct Framework<M> {
     current_time: Instant,
     machines: M,
     runtime: Vec<MachineRuntime>,
-    global_max_padding_frac: f64,
-    global_nonpadding_sent_bytes: u64,
-    global_padding_sent_bytes: u64,
-    global_max_blocking_frac: f64,
-    global_blocking_duration: Duration,
-    global_blocking_started: Instant,
-    global_blocking_active: bool,
-    global_framework_start: Instant,
+    max_padding_frac: f64,
+    nonpadding_sent_bytes: u64,
+    padding_sent_bytes: u64,
+    max_blocking_frac: f64,
+    blocking_duration: Duration,
+    blocking_started: Instant,
+    blocking_active: bool,
+    framework_start: Instant,
     mtu: u16,
 }
 
@@ -314,14 +314,14 @@ where
             runtime,
             mtu,
             current_time,
-            global_max_blocking_frac: max_blocking_frac,
-            global_max_padding_frac: max_padding_frac,
-            global_framework_start: current_time,
-            global_blocking_active: false,
-            global_blocking_started: current_time,
-            global_blocking_duration: Duration::from_secs(0),
-            global_padding_sent_bytes: 0,
-            global_nonpadding_sent_bytes: 0,
+            max_blocking_frac: max_blocking_frac,
+            max_padding_frac: max_padding_frac,
+            framework_start: current_time,
+            blocking_active: false,
+            blocking_started: current_time,
+            blocking_duration: Duration::from_secs(0),
+            padding_sent_bytes: 0,
+            nonpadding_sent_bytes: 0,
         })
     }
 
@@ -370,7 +370,7 @@ where
                 }
             }
             TriggerEvent::NonPaddingSent { bytes_sent } => {
-                self.global_nonpadding_sent_bytes += *bytes_sent as u64;
+                self.nonpadding_sent_bytes += *bytes_sent as u64;
 
                 for mi in 0..self.runtime.len() {
                     self.runtime[mi].nonpadding_sent += *bytes_sent as u64;
@@ -394,7 +394,7 @@ where
                 machine,
             } => {
                 // accounting is global ...
-                self.global_padding_sent_bytes += *bytes_sent as u64;
+                self.padding_sent_bytes += *bytes_sent as u64;
 
                 // ... but the event is per-machine
                 let mi = machine.0;
@@ -407,9 +407,9 @@ where
             }
             TriggerEvent::BlockingBegin { machine } => {
                 // keep track of when we start blocking (for accounting in BlockingEnd)
-                if !self.global_blocking_active {
-                    self.global_blocking_active = true;
-                    self.global_blocking_started = self.current_time;
+                if !self.blocking_active {
+                    self.blocking_active = true;
+                    self.blocking_started = self.current_time;
                 }
 
                 // blocking is a global event
@@ -425,12 +425,10 @@ where
             }
             TriggerEvent::BlockingEnd => {
                 let mut blocked: Duration = Duration::from_secs(0);
-                if self.global_blocking_active {
-                    blocked = self
-                        .current_time
-                        .duration_since(self.global_blocking_started);
-                    self.global_blocking_duration += blocked;
-                    self.global_blocking_active = false;
+                if self.blocking_active {
+                    blocked = self.current_time.duration_since(self.blocking_started);
+                    self.blocking_duration += blocked;
+                    self.blocking_active = false;
                 }
 
                 for mi in 0..self.runtime.len() {
@@ -634,15 +632,11 @@ where
 
         // compute durations we've been blocking
         let mut m_block_dur = runtime.blocking_duration;
-        let mut g_block_dur = self.global_blocking_duration;
-        if self.global_blocking_active {
+        let mut g_block_dur = self.blocking_duration;
+        if self.blocking_active {
             // account for ongoing blocking as well, add duration
-            m_block_dur += self
-                .current_time
-                .duration_since(self.global_blocking_started);
-            g_block_dur += self
-                .current_time
-                .duration_since(self.global_blocking_started);
+            m_block_dur += self.current_time.duration_since(self.blocking_started);
+            g_block_dur += self.current_time.duration_since(self.blocking_started);
         }
 
         // machine allowed blocking duration first, since it bypasses the
@@ -666,14 +660,14 @@ where
         }
 
         // does the framework say no?
-        if self.global_max_blocking_frac > 0.0 {
+        if self.max_blocking_frac > 0.0 {
             // TODO: swap to g_block_dur.div_duration_f64()
             let f: f64 = g_block_dur.as_micros() as f64
                 / self
                     .current_time
-                    .duration_since(self.global_framework_start)
+                    .duration_since(self.framework_start)
                     .as_micros() as f64;
-            if f >= self.global_max_blocking_frac {
+            if f >= self.max_blocking_frac {
                 return false;
             }
         }
@@ -701,14 +695,13 @@ where
         }
 
         // hit global limits?
-        if self.global_max_padding_frac > 0.0 {
-            let total = self.global_padding_sent_bytes + self.global_nonpadding_sent_bytes;
+        if self.max_padding_frac > 0.0 {
+            let total = self.padding_sent_bytes + self.nonpadding_sent_bytes;
             if total == 0 {
                 // FIXME: same as above, should this be true?
                 return false;
             }
-            if self.global_padding_sent_bytes as f64 / total as f64 >= self.global_max_padding_frac
-            {
+            if self.padding_sent_bytes as f64 / total as f64 >= self.max_padding_frac {
                 return false;
             }
         }
