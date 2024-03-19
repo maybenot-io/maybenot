@@ -396,17 +396,13 @@ where
                 // accounting is global ...
                 self.global_padding_sent_bytes += *bytes_sent as u64;
 
-                for mi in 0..self.runtime.len() {
-                    // ... but the event is per-machine
-                    if mi == machine.0 {
-                        self.runtime[mi].padding_sent += *bytes_sent as u64;
+                // ... but the event is per-machine
+                let mi = machine.0;
+                self.runtime[mi].padding_sent += *bytes_sent as u64;
 
-                        if self.transition(mi, Event::PaddingSent) == StateChange::Unchanged {
-                            // decrement only makes sense if we didn't change state
-                            self.decrement_limit(mi)
-                        }
-                        break;
-                    }
+                if self.transition(mi, Event::PaddingSent) == StateChange::Unchanged {
+                    // decrement only makes sense if we didn't change state
+                    self.decrement_limit(mi)
                 }
             }
             TriggerEvent::BlockingBegin { machine } => {
