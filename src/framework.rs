@@ -398,6 +398,13 @@ where
 
                 // ... but the event is per-machine
                 let mi = machine.0;
+                if mi >= self.runtime.len() {
+                    // it's possible to create many instances of the framework
+                    // with different numbers of machines, so we need to check
+                    // this despite the machine being a MachineId
+                    return;
+                }
+
                 self.runtime[mi].padding_sent += *bytes_sent as u64;
 
                 if self.transition(mi, Event::PaddingSent) == StateChange::Unchanged {
@@ -458,12 +465,11 @@ where
                 }
             }
             TriggerEvent::PaddingQueued { machine, .. } => {
-                for mi in 0..self.runtime.len() {
-                    if mi == machine.0 {
-                        self.transition(mi, Event::NonPaddingQueued);
-                        break;
-                    }
+                let mi = machine.0;
+                if mi >= self.runtime.len() {
+                    return;
                 }
+                self.transition(mi, Event::NonPaddingQueued);
             }
         };
     }
