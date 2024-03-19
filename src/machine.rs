@@ -105,17 +105,14 @@ impl Machine {
         // check each state
         for (index, state) in self.states.iter().enumerate() {
             // validate counter actions
-            match &state.action {
-                Action::UpdateCounter { counter, .. } => {
-                    if counter >= &COUNTERSPERMACHINE {
-                        bail!(
-                            "found UpdateCounter w/ id {}, has to be [0, {})",
-                            counter,
-                            COUNTERSPERMACHINE
-                        )
-                    }
+            if let Action::UpdateCounter { counter, .. } = &state.action {
+                if counter >= &COUNTERSPERMACHINE {
+                    bail!(
+                        "found UpdateCounter w/ id {}, has to be [0, {})",
+                        counter,
+                        COUNTERSPERMACHINE
+                    )
                 }
-                _ => {}
             }
 
             // validate transitions
