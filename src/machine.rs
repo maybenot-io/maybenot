@@ -4,12 +4,18 @@
 use crate::action::*;
 use crate::constants::*;
 use crate::state::*;
+use flate2::read::ZlibDecoder;
+use flate2::write::ZlibEncoder;
+use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use simple_error::bail;
 use std::error::Error;
+use std::str::FromStr;
 extern crate simple_error;
+use base64::prelude::*;
 use hex::encode;
 use ring::digest::{Context, SHA256};
+use std::io::prelude::*;
 
 /// A probabilistic state machine (Rabin automaton) consisting of one or more
 /// [`State`] that determine when to inject and/or block outgoing traffic.
@@ -50,6 +56,15 @@ impl Machine {
         let d = context.finish();
         let s = encode(d);
         s[0..32].to_string()
+    }
+
+    pub fn serialize(&self) -> String {
+        let encoded = bincode::serialize(&self).unwrap();
+        let mut e = ZlibEncoder::new(Vec::new(), Compression::best());
+        e.write_all(encoded.as_slice()).unwrap();
+        let s = BASE64_STANDARD.encode(e.finish().unwrap());
+        // version as first 2 characters, then base64 compressed bincoded
+        format!("{:02}{}", VERSION, s)
     }
 
     /// Validates that the machine is in a valid state (machines that are
@@ -134,6 +149,33 @@ impl Machine {
         }
 
         Ok(())
+    }
+}
+
+/// from a serialized string, attempt to create a machine
+impl FromStr for Machine {
+    type Err = Box<dyn Error + Send + Sync>;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // version as first 2 characters, then base64
+        if s.len() < 3 {
+            bail!("string too short")
+        }
+        let version = &s[0..2];
+        if version != format!("{:02}", VERSION) {
+            bail!("version mismatch, expected {}, got {}", VERSION, version)
+        }
+        let s = &s[2..];
+
+        // base64 decoding has a fixed ratio of ~4:3
+        let compressed = BASE64_STANDARD.decode(s.as_bytes()).unwrap();
+        // decompress, but scared of exceeding memory limits / zlib bombs
+        let mut decoder = ZlibDecoder::new(compressed.as_slice());
+        let mut buf = vec![0; MAX_DECOMPRESSED_SIZE];
+        let bytes_read = decoder.read(&mut buf)?;
+        let m: Machine = bincode::deserialize(&buf[..bytes_read]).unwrap();
+        m.validate()?;
+        Ok(m)
     }
 }
 

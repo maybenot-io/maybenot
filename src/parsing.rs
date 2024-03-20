@@ -1,8 +1,8 @@
 use std::{collections::HashMap, error::Error, io::Read};
 
 use byteorder::{ByteOrder, LittleEndian};
+use flate2::read::ZlibDecoder;
 use hex::decode;
-use libflate::zlib::Decoder;
 use simple_error::{bail, map_err_with};
 use std::slice::Iter;
 
@@ -40,9 +40,9 @@ pub fn parse_v1_machine(s: &str) -> Result<Machine, Box<dyn Error + Send + Sync>
     // hex -> zlib -> vec
     let compressed = map_err_with!(decode(s), "failed to decode hex")?;
 
-    let mut decoder = map_err_with!(Decoder::new(&compressed[..]), "not in zlib format")?;
-    let mut buf = Vec::new();
-    decoder.read_to_end(&mut buf).unwrap();
+    let mut d = ZlibDecoder::new(compressed.as_slice());
+    let mut buf = vec![];
+    d.read_to_end(&mut buf)?;
 
     if buf.len() < 2 {
         bail!("cannot read version")
@@ -197,6 +197,8 @@ fn parse_dist(buf: Vec<u8>) -> Result<Dist, Box<dyn Error + Send + Sync>> {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     #[test]
@@ -210,9 +212,13 @@ mod tests {
             "789ccdd14b4802411807f0d122d630a80e75e920646a9db2d24bd48c9587b012bc04415d32e856eca107d4210f792809a38804e910f400835ca88387d8961e144920b551aed8b59032cc0e59d16c0f41962510dafa0d0cc3cc77f8bef9cbc0b7e0092f06f131832c076f3f21c0e88d464f4c1b51449d3731df6b432feb0fa1f6e20e841f3fc801e5bd5f3d28efa43d8bbc1a1a5f6692e12589b860c84f62f752fbcd3e14605fb549f6bb6de86e0c1a7a028d88f09575d9a7dad2491120ff6279b0a1ca84ecf551ab6b418502adca267a486bc28f5fb20d4a7cb2db0d32fe34c94067ccda6d64afe1dba926585a782e5a2fb5dcdd9496721e42dfd5e35aed5e04865a0a9a13c3ec9ff62707db89d7b391233d1ae7a35458d219ce3049dd40b40827966d52e24a1c4a0be362a05fcde9923b97d0ecf1fa2b9f39c14f181ceeb914c74273f52cb9143e862b7d1554dd565850f7dfbd03f1ca70ff"
             ];
 
-        for m in machines {
+        for m in machines.iter() {
             let machine = parse_v1_machine(m).unwrap();
             println!("{:?}", machine);
+            assert_eq!(
+                machine,
+                Machine::from_str(machine.serialize().as_str()).unwrap()
+            );
         }
     }
 }

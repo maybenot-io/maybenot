@@ -4,6 +4,10 @@
 /// this framework.
 pub const VERSION: u8 = 2;
 
+/// The maximum size of a decompressed encoded [`Machine`](crate::machine) in
+/// bytes. Set to 1MB. This is a soft limit and can be increased if necessary.
+pub const MAX_DECOMPRESSED_SIZE: usize = 1 << 20;
+
 /// The maximum sampled timeout in a [`State`](crate::state), set to a day in
 /// microseconds.
 pub const MAXSAMPLEDTIMEOUT: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
