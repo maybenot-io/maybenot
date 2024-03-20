@@ -747,8 +747,7 @@ where
         if machine.max_padding_frac > 0.0 {
             let total = runtime.nonpadding_sent + runtime.padding_sent;
             if total == 0 {
-                // FIXME: edge-case, was defined as false in go-framework, but should be true?
-                return false;
+                return true;
             }
             if runtime.padding_sent as f64 / total as f64 >= machine.max_padding_frac {
                 return false;
@@ -757,9 +756,11 @@ where
 
         // hit global limits?
         if self.global_max_padding_frac > 0.0 {
-            let frac = self.global_paddingsent_bytes as f64
-                / (self.global_paddingsent_bytes as f64 + self.global_nonpadding_sent_bytes as f64);
-            if frac >= self.global_max_padding_frac {
+            let total = self.global_paddingsent_bytes + self.global_nonpadding_sent_bytes;
+            if total == 0 {
+                return true;
+            }
+            if self.global_paddingsent_bytes as f64 / total as f64 >= self.global_max_padding_frac {
                 return false;
             }
         }
