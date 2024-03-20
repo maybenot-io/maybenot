@@ -10,12 +10,16 @@ keywords = [ "anonymity", "correlation", "fingerprinting", "privacy", "security"
 categories = [ "cryptography", "network-programming" ]
 repository = "https://github.com/maybenot-io/maybenot"
 
+[features]
+default = []
+parsing = ["libflate", "byteorder"]
+
 [dependencies]
+byteorder= {version = "1.4.3", optional = true}
+libflate = {version = "2.0.0", optional = true}
 rand="0.8.5"
-byteorder="1.4.3"
 simple-error = "0.3.0"
 hex = "0.4.3"
-libflate = "2.0.0"
 ring = "0.16.20"
 rand_distr = "0.4.3"
 serde = {version = "1.0.185", features = ["derive"]}

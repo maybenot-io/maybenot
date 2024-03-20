@@ -12,10 +12,6 @@ pub const MAXSAMPLEDTIMEOUT: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 /// day in microseconds.
 pub const MAXSAMPLEDBLOCK: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 
-/// The size (in bytes) of a serialized distribution for a
-/// [`State`](crate::state).
-pub const SERIALIZEDDISTSIZE: usize = 2 + 8 * 4;
-
 /// The maximum possible sampled limit of a [`State`](crate::state). This is the
 /// default if no limit dist is specified (in practice, the same as no limit).
 pub const STATELIMITMAX: u64 = u64::MAX;

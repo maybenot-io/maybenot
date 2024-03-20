@@ -21,19 +21,12 @@
 //! // bit odd due to avoiding everything async but should convey the general
 //! // idea.
 //!
-//! // Parse a machine, this is a "no-op" machine that does nothing. Typically,
-//! // you should expect to get one or more serialized machines, not build them
-//! // from scratch. The framework takes a vector with zero or more machines as
-//! // input when created. To add or remove a machine, just recreate the
-//! // framework. If you expect to create many instances of the framework for
-//! // the same machines, then share the same vector across framework instances.
-//! // All runtime information is allocated internally in the framework without
-//! // modifying the machines.
-//! let s = "789cedca2101000000c230e85f1a8387009f9e351d051503ca0003";
-//! // machines will error if invalid
-//! let m = vec![Machine::from_str(s).unwrap()];
+//! // Technically, we need zero or more machines to create a framework. Machines
+//! // are the core of the framework and define the behavior of the framework.
+//! // For now, we use an empty vector.
+//! let machines = vec![];
 //!
-//! // Create the framework, a lightweight operation, with the following
+//! // You create the framework, a lightweight operation, with the following
 //! // parameters:
 //! // - A vector of zero or more machines.
 //! // - Max fractions prevent machines from causing too much overhead: note
@@ -48,9 +41,8 @@
 //! // below. This is exposed mainly for testing purposes (can also be used to
 //! // make the creation of some odd types of machines easier).
 //! //
-//! // The framework validates all machines (like fn parse_machine() above) so
-//! // it can error out.
-//! let mut f = Framework::new(&m, 0.0, 0.0, 1420, Instant::now()).unwrap();
+//! // The framework validates all machines (if any) so it can error out.
+//! let mut f = Framework::new(&machines, 0.0, 0.0, 1420, Instant::now()).unwrap();
 //!
 //! // Below is the main loop for operating the framework. This should run for
 //! // as long as the underlying connection the framework is attached to can

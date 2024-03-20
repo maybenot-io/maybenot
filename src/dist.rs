@@ -1,7 +1,5 @@
 //! Distributions sampled as part of a [`State`](crate::state).
 
-use byteorder::ByteOrder;
-use byteorder::{LittleEndian, WriteBytesExt};
 use rand_distr::{
     Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, Uniform,
     Weibull,
@@ -11,8 +9,6 @@ use std::error::Error;
 use std::fmt;
 extern crate simple_error;
 use simple_error::bail;
-
-use crate::constants::*;
 
 /// DistType represents the type of a [`Dist`]. Supports a wide range of
 /// different distributions. Some are probably useless and some are probably
@@ -349,40 +345,6 @@ impl Dist {
             }
         }
     }
-
-    /// Returns the serialized distribution of [`SERIALIZEDDISTSIZE`] bytes.
-    pub fn serialize(self) -> Vec<u8> {
-        let mut wtr = vec![];
-        wtr.write_u16::<LittleEndian>(self.dist.into()).unwrap();
-        wtr.write_f64::<LittleEndian>(self.param1).unwrap();
-        wtr.write_f64::<LittleEndian>(self.param2).unwrap();
-        wtr.write_f64::<LittleEndian>(self.start).unwrap();
-        wtr.write_f64::<LittleEndian>(self.max).unwrap();
-        wtr
-    }
-
-    /// Try to parse a [`Dist`] from the provided bytes.
-    pub fn parse(buf: Vec<u8>) -> Result<Dist, Box<dyn Error + Send + Sync>> {
-        if buf.len() < SERIALIZEDDISTSIZE {
-            bail!("too small")
-        }
-
-        let mut d: Dist = Dist {
-            dist: DistType::None,
-            param1: 0.0,
-            param2: 0.0,
-            start: 0.0,
-            max: 0.0,
-        };
-
-        d.dist = DistType::from(LittleEndian::read_u16(&buf[..2]));
-        d.param1 = LittleEndian::read_f64(&buf[2..10]);
-        d.param2 = LittleEndian::read_f64(&buf[10..18]);
-        d.start = LittleEndian::read_f64(&buf[18..26]);
-        d.max = LittleEndian::read_f64(&buf[26..34]);
-
-        Ok(d)
-    }
 }
 
 #[cfg(test)]
@@ -432,34 +394,5 @@ mod tests {
         };
 
         assert_eq!(d.sample(), f64::MAX);
-    }
-
-    #[test]
-    fn serialize_all_distributions() {
-        let mut d = Dist {
-            dist: DistType::Pareto,
-            param1: 123.45,
-            param2: 67.89,
-            start: 2.1,
-            max: 4.5,
-        };
-
-        let s = d.serialize();
-        let r = Dist::parse(s).unwrap();
-        assert_eq!(d.dist, r.dist);
-
-        for i in 0..100 {
-            d.dist = DistType::from(i);
-            if i > 10 {
-                // NOTE: fragile, depends on number of dists
-                // TODO: swap to std::mem::variant_count::<DistType>()
-                assert_eq!(d.dist, DistType::None);
-            } else if i > 0 {
-                assert_ne!(d.dist, DistType::None);
-            }
-            let s = d.serialize();
-            let r = Dist::parse(s).unwrap();
-            assert_eq!(d.dist, r.dist);
-        }
     }
 }

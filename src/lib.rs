@@ -23,6 +23,9 @@ pub mod framework;
 pub mod machine;
 pub mod state;
 
+#[cfg(feature = "parsing")]
+pub mod parsing;
+
 #[cfg(test)]
 mod tests {
     #[test]

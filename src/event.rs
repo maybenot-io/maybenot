@@ -44,21 +44,7 @@ impl fmt::Display for Event {
 }
 
 impl Event {
-    pub fn v1_events_iter() -> Iter<'static, Event> {
-        static EVENTS: [Event; 8] = [
-            NonPaddingRecv,
-            PaddingRecv,
-            NonPaddingSent,
-            PaddingSent,
-            BlockingBegin,
-            BlockingEnd,
-            LimitReached,
-            UpdateMTU,
-        ];
-        EVENTS.iter()
-    }
-
-    pub fn v2_events_iter() -> Iter<'static, Event> {
+    pub fn iter() -> Iter<'static, Event> {
         static EVENTS: [Event; 12] = [
             NonPaddingRecv,
             PaddingRecv,
