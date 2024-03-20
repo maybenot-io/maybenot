@@ -365,7 +365,7 @@ where
             bail!("max_blocking_frac has to be beteen [0.0, 1.0]");
         }
 
-        let runtime = vec![
+        let mut runtime = vec![
             MachineRuntime {
                 current_state: 0,
                 state_limit: 0,
@@ -376,6 +376,10 @@ where
             };
             machines.as_ref().len()
         ];
+
+        for mi in 0..runtime.len() {
+            runtime[mi].state_limit = machines.as_ref()[mi].states[0].sample_limit();
+        }
 
         let actions = vec![None; machines.as_ref().len()];
 
