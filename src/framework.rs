@@ -682,7 +682,7 @@ where
         // blocking action
 
         // special case: we always allow overwriting existing blocking
-        if current.replace && !self.global_blocking_active {
+        if current.replace && self.global_blocking_active {
             // we still check against sate limit, because its machine internal
             return runtime.state_limit > 0;
         }
