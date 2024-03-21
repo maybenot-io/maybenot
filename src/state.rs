@@ -56,23 +56,23 @@ impl State {
 
     /// Sample a timeout.
     pub fn sample_timeout(&self) -> f64 {
-        self.timeout_dist.sample().min(MAXSAMPLEDTIMEOUT)
+        self.timeout_dist.sample().min(MAX_SAMPLED_TIMEOUT)
     }
 
     /// Sample a limit.
     pub fn sample_limit(&self) -> u64 {
         if self.limit_dist.dist == DistType::None {
-            return STATELIMITMAX;
+            return STATE_LIMIT_MAX;
         }
         let s = self.limit_dist.sample().round() as u64;
-        s.min(STATELIMITMAX)
+        s.min(STATE_LIMIT_MAX)
     }
 
     /// Sample a size for a padding action.
     pub fn sample_size(&self) -> u64 {
         let s = self.action_dist.sample().round() as u64;
-        if s > MAXSAMPLEDPADDING {
-            return MAXSAMPLEDPADDING;
+        if s > MAX_SAMPLED_PADDING {
+            return MAX_SAMPLED_PADDING;
         }
         if s == 0 {
             // never send empty padding
@@ -83,18 +83,18 @@ impl State {
 
     /// Sample a blocking duration for a blocking action.
     pub fn sample_block(&self) -> f64 {
-        self.action_dist.sample().min(MAXSAMPLEDBLOCK)
+        self.action_dist.sample().min(MAX_SAMPLED_BLOCK)
     }
 
     /// Sample a value for a counter update action.
     pub fn sample_counter_value(&self) -> u64 {
         let s = self.action_dist.sample().round() as u64;
-        s.min(MAXSAMPLEDCOUNTERVALUE)
+        s.min(MAX_SAMPLED_COUNTER_VALUE)
     }
 
     /// Sample a duration for a timer update action.
     pub fn sample_timer_duration(&self) -> f64 {
-        self.action_dist.sample().min(MAXSAMPLEDTIMERDURATION)
+        self.action_dist.sample().min(MAX_SAMPLED_TIMER_DURATION)
     }
 }
 
@@ -148,13 +148,13 @@ pub fn make_next_state(
         }
 
         // set StateCancel and StateEnd
-        if probmap.contains_key(&STATECANCEL) {
-            res.push(*probmap.get(&STATECANCEL).unwrap());
+        if probmap.contains_key(&STATE_CANCEL) {
+            res.push(*probmap.get(&STATE_CANCEL).unwrap());
         } else {
             res.push(0.0);
         }
-        if probmap.contains_key(&STATEEND) {
-            res.push(*probmap.get(&STATEEND).unwrap());
+        if probmap.contains_key(&STATE_END) {
+            res.push(*probmap.get(&STATE_END).unwrap());
         } else {
             res.push(0.0);
         }

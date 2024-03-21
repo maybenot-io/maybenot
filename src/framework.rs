@@ -388,7 +388,7 @@ where
                     // packet shouldn't count.
                     if self.transition(mi, Event::NonPaddingSent) == StateChange::Unchanged {
                         let cs = self.runtime[mi].current_state;
-                        if cs != STATEEND
+                        if cs != STATE_END
                             && self.machines.as_ref()[mi].states[cs].limit_includes_nonpadding
                         {
                             self.decrement_limit(mi);
@@ -476,7 +476,7 @@ where
         let machine = &self.machines.as_ref()[mi];
 
         // a machine in end state cannot transition
-        if self.runtime[mi].current_state == STATEEND {
+        if self.runtime[mi].current_state == STATE_END {
             return StateChange::Unchanged;
         }
 
@@ -599,13 +599,13 @@ where
                 // some events are machine-defined, others framework pseudo-states
                 match next_prob.len().cmp(&(i + 2)) {
                     Ordering::Greater => return (i, true),
-                    Ordering::Less => return (STATEEND, true),
-                    Ordering::Equal => return (STATECANCEL, true),
+                    Ordering::Less => return (STATE_END, true),
+                    Ordering::Equal => return (STATE_CANCEL, true),
                 }
             }
         }
 
-        (STATENOP, false)
+        (STATE_NOP, false)
     }
 
     fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {

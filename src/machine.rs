@@ -88,10 +88,10 @@ impl Machine {
         if self.states.is_empty() {
             bail!("a machine must have at least one state")
         }
-        if self.states.len() > STATEMAX {
+        if self.states.len() > STATE_MAX {
             bail!(
                 "too many states, max is {}, found {}",
-                STATEMAX,
+                STATE_MAX,
                 self.states.len()
             )
         }
@@ -100,11 +100,11 @@ impl Machine {
         for (index, state) in self.states.iter().enumerate() {
             // validate counter actions
             if let Action::UpdateCounter { counter, .. } = &state.action {
-                if counter >= &COUNTERSPERMACHINE {
+                if counter >= &COUNTERS_PER_MACHINE {
                     bail!(
                         "found UpdateCounter w/ id {}, has to be [0, {})",
                         counter,
-                        COUNTERSPERMACHINE
+                        COUNTERS_PER_MACHINE
                     )
                 }
             }
@@ -266,7 +266,7 @@ mod tests {
 
         // counter update action with invalid id
         s0.action = Action::UpdateCounter {
-            counter: COUNTERSPERMACHINE,
+            counter: COUNTERS_PER_MACHINE,
             decrement: false,
         };
 
