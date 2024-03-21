@@ -631,7 +631,7 @@ where
             false
         };
 
-        if replace {
+        if replace && self.blocking_active {
             // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
@@ -692,8 +692,7 @@ where
         if machine.max_padding_frac > 0.0 {
             let total = runtime.nonpadding_sent + runtime.padding_sent;
             if total == 0 {
-                // FIXME: edge-case, was defined as false in go-framework, but should be true?
-                return false;
+                return true;
             }
             if runtime.padding_sent as f64 / total as f64 >= machine.max_padding_frac {
                 return false;
@@ -704,8 +703,7 @@ where
         if self.max_padding_frac > 0.0 {
             let total = self.padding_sent_bytes + self.nonpadding_sent_bytes;
             if total == 0 {
-                // FIXME: same as above, should this be true?
-                return false;
+                return true;
             }
             if self.padding_sent_bytes as f64 / total as f64 >= self.max_padding_frac {
                 return false;
