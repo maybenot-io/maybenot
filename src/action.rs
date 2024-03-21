@@ -62,7 +62,6 @@ pub enum TriggerAction {
     /// Cancel the timer for a machine.
     Cancel { machine: MachineId, timer: Timer },
     /// Schedule padding to be injected after the given timeout for a machine.
-    /// The size of the padding (in bytes) is specified.
     ///
     /// The bypass flag indicates if the padding packet MUST be sent despite
     /// active blocking of outgoing traffic. Note that this is only allowed if
@@ -77,7 +76,6 @@ pub enum TriggerAction {
     /// padding packet AND bypass the active blocking.
     InjectPadding {
         timeout: Duration,
-        size: u16,
         bypass: bool,
         replace: bool,
         machine: MachineId,

@@ -16,10 +16,6 @@ pub const MAX_SAMPLED_BLOCK: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 /// currently effectively unlimited in practice.
 pub const MAX_SAMPLED_COUNTER_VALUE: u64 = u64::MAX;
 
-/// The maximum sampled padding size in a [`State`](crate::state), set to 20,000
-/// bytes for now.
-pub const MAX_SAMPLED_PADDING: u64 = 20000;
-
 /// The maximum sampled timeout in a [`State`](crate::state), set to a day in
 /// microseconds.
 pub const MAX_SAMPLED_TIMEOUT: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;

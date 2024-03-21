@@ -68,19 +68,6 @@ impl State {
         s.min(STATE_LIMIT_MAX)
     }
 
-    /// Sample a size for a padding action.
-    pub fn sample_size(&self) -> u64 {
-        let s = self.action_dist.sample().round() as u64;
-        if s > MAX_SAMPLED_PADDING {
-            return MAX_SAMPLED_PADDING;
-        }
-        if s == 0 {
-            // never send empty padding
-            return 1;
-        }
-        s
-    }
-
     /// Sample a blocking duration for a blocking action.
     pub fn sample_block(&self) -> f64 {
         self.action_dist.sample().min(MAX_SAMPLED_BLOCK)

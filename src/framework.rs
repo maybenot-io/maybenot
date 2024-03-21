@@ -83,17 +83,17 @@
 //!             }
 //!             TriggerAction::InjectPadding {
 //!                 timeout: _,
-//!                 size: _,
 //!                 bypass: _,
 //!                 replace: _,
 //!                 machine: _,
 //!             } => {
 //!                 // Set the action timer with the specified timeout. On expiry,
-//!                 // do the following (all or nothing):
+//!                 // do the following:
 //!                 //
-//!                 // 1. Trigger TriggerEvent::PaddingQueued{ machine: machine }.
-//!                 // 2. Send size padding.
-//!                 // 3. Trigger TriggerEvent::PaddingSent{ machine: machine }.
+//!                 // 1. Queue a padding packet to be sent.
+//!                 // 2. Trigger TriggerEvent::PaddingQueued{ machine: machine }.
+//!                 // 3. When any padding packet actually is sent over the network,
+//!                 //    trigger TriggerEvent::PaddingSent.
 //!                 //
 //!                 // Above, "send" should mimic as close as possible real
 //!                 // application data being added for transport.
@@ -541,7 +541,6 @@ where
             Action::Cancel { timer } => Some(TriggerAction::Cancel { machine: mi, timer }),
             Action::InjectPadding { bypass, replace } => Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
-                size: current.sample_size() as u16,
                 bypass,
                 replace,
                 machine: mi,
@@ -751,7 +750,6 @@ mod tests {
         // plan: create a machine that swaps between two states, trigger one
         // then multiple events and check the resulting actions
         let num_states = 2;
-        let packet_size: u16 = 150;
 
         // state 0: go to state 1 on PaddingSent, pad after 10 usec
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -767,13 +765,6 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: packet_size as f64,
-            param2: packet_size as f64,
-            start: 0.0,
-            max: 0.0,
-        };
 
         // state 1: go to state 0 on PaddingRecv, pad after 1 usec
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -786,13 +777,6 @@ mod tests {
             dist: DistType::Uniform,
             param1: 1.0,
             param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s1.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: packet_size as f64,
-            param2: packet_size as f64,
             start: 0.0,
             max: 0.0,
         };
@@ -837,7 +821,6 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(1),
-                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -855,7 +838,6 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(10),
-                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -872,7 +854,6 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(10),
-                    size: packet_size,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -895,7 +876,6 @@ mod tests {
                     f.actions[0],
                     Some(TriggerAction::InjectPadding {
                         timeout: Duration::from_micros(10),
-                        size: packet_size,
                         bypass: false,
                         replace: false,
                         machine: MachineId(0),
@@ -914,7 +894,6 @@ mod tests {
                     f.actions[0],
                     Some(TriggerAction::InjectPadding {
                         timeout: Duration::from_micros(1),
-                        size: packet_size,
                         bypass: false,
                         replace: false,
                         machine: MachineId(0),
@@ -1131,7 +1110,6 @@ mod tests {
     fn timer_machine() {
         // a machine that sets the timer to 1 ms after PaddingSent
         let num_states = 2;
-        let packet_size: u16 = 150;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -1144,13 +1122,6 @@ mod tests {
             dist: DistType::Uniform,
             param1: 1.0,
             param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: packet_size as f64,
-            param2: packet_size as f64,
             start: 0.0,
             max: 0.0,
         };
@@ -1205,7 +1176,6 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(1),
-                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -1215,12 +1185,11 @@ mod tests {
 
     #[test]
     fn machine_max_padding_frac() {
-        // We create a machine that should be allowed to send 100*MTU padding
-        // bytes before machine padding limits are applied, then the machine
-        // should be limited from sending any padding until at least 100*MTU
-        // nonpadding bytes have been sent, given the set max padding fraction
+        // We create a machine that should be allowed to send 100 padding
+        // packets before machine padding limits are applied, then the machine
+        // should be limited from sending any padding until at least 100
+        // nonpadding packets have been sent, given the set max padding fraction
         // of 0.5.
-        let packet_size: u16 = 1000;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -1237,13 +1206,6 @@ mod tests {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: packet_size as f64,
-            param2: packet_size as f64,
             start: 0.0,
             max: 0.0,
         };
@@ -1270,7 +1232,6 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(2),
-                    size: packet_size,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -1306,7 +1267,6 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(2),
-                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -1318,7 +1278,6 @@ mod tests {
     fn framework_max_padding_frac() {
         // to test the global limits of the framework we create two machines with
         // the same allowed padding, where both machines pad in parallel
-        let packet_size: u16 = 1000;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -1335,13 +1294,6 @@ mod tests {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: packet_size as f64,
-            param2: packet_size as f64,
             start: 0.0,
             max: 0.0,
         };
@@ -1372,7 +1324,6 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(2),
-                    size: packet_size,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -1382,7 +1333,6 @@ mod tests {
                 f.actions[1],
                 Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(2),
-                    size: packet_size,
                     bypass: false,
                     replace: false,
                     machine: MachineId(1),
@@ -1433,7 +1383,6 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(2),
-                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -1443,7 +1392,6 @@ mod tests {
             f.actions[1],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(2),
-                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(1),
@@ -1836,7 +1784,6 @@ mod tests {
         // then should be prevented from padding further by transitioning to
         // self
         let num_states = 2;
-        let packet_size: u16 = 1500;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -1857,13 +1804,6 @@ mod tests {
             dist: DistType::Uniform,
             param1: 1.0,
             param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s1.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: packet_size as f64,
-            param2: packet_size as f64,
             start: 0.0,
             max: 0.0,
         };
@@ -1899,7 +1839,6 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(1),
-                    size: packet_size,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
