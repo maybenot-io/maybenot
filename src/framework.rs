@@ -222,6 +222,17 @@ use std::time::Instant;
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct MachineId(usize);
 
+impl MachineId {
+    /// Create a new machine identifier from a raw integer. Intended for use
+    /// with the `machine` field of [`TriggerAction`] and [`TriggerEvent`]. For
+    /// testing purposes only. For regular use, use [`MachineId`] returned by
+    /// [Framework::trigger_events]. Triggering an event in the framework for a
+    /// machine that does not exist does not raise a panic or any error.
+    pub fn from_raw(raw: usize) -> Self {
+        MachineId(raw)
+    }
+}
+
 #[derive(Debug, Clone)]
 struct MachineRuntime {
     current_state: usize,
