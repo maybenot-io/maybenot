@@ -6,9 +6,22 @@ use crate::framework::MachineId;
 use std::hash::Hash;
 use std::time::Duration;
 
+/// The different types of timers used by a [`Machine`](crate::machine).
+#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
+pub enum Timer {
+    /// The scheduled timer for actions with a timeout.
+    Action,
+    /// The machine timer updated by the machine using the UpdateTimer action.
+    Machine,
+    /// Apply to all timers.
+    All,
+}
+
 /// An Action happens upon transition to a [`State`](crate::state).
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Action {
+    /// Cancel a timer.
+    Cancel { timer: Timer },
     /// Schedule padding to be injected.
     ///
     /// The bypass flag determines if the padding packet MUST bypass any
@@ -46,8 +59,8 @@ pub enum Action {
 /// The action to be taken by the framework user.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TriggerAction {
-    /// Stop any currently scheduled action for the machine.
-    Cancel { machine: MachineId },
+    /// Cancel the timer for a machine.
+    Cancel { machine: MachineId, timer: Timer },
     /// Schedule padding to be injected after the given timeout for a machine.
     /// The size of the padding (in bytes) is specified.
     ///
@@ -104,10 +117,6 @@ pub enum TriggerAction {
     /// The replace flag specifies if the duration should replace the current
     /// timer duration. If the flag is false, the longest of the two durations
     /// MUST be used.
-    ///
-    /// If the new duration of the timer is zero, which can occur if it was
-    /// previously zero or the replace flag is true, the TimerEnd event MUST
-    /// NOT be triggered. This allows for silently canceling the timer.
     UpdateTimer {
         duration: Duration,
         replace: bool,

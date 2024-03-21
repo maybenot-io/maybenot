@@ -145,6 +145,7 @@ mod tests {
     #[test]
     fn v2_events() {
         assert_eq!(Event::CounterZero.to_string(), "CounterZero");
+        assert_eq!(Event::TimerBegin.to_string(), "TimerBegin");
         assert_eq!(Event::TimerEnd.to_string(), "TimerEnd");
         assert_eq!(Event::NonPaddingQueued.to_string(), "NonPaddingQueued");
         assert_eq!(Event::PaddingQueued.to_string(), "PaddingQueued");

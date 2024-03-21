@@ -29,7 +29,7 @@
 //! // the same machines, then share the same vector across framework instances.
 //! // All runtime information is allocated internally in the framework without
 //! // modifying the machines.
-//! let s = "02eNrFwDEBAAAAAbDpX1oDr7HFXQEBJgAC";
+//! let s = "02eNq9zSEBAAAAwrDTvzQegfwKDL7gm7MBNQAD";
 //! // machines will error if invalid
 //! let m = vec![Machine::from_str(s).unwrap()];
 //!
@@ -77,8 +77,9 @@
 //!         // as a key for a data structure storing your timers, e.g. a
 //!         // HashMap<MachineId, SomeTimerDataStructure>), and counters.
 //!         match action {
-//!             TriggerAction::Cancel { machine: _ } => {
-//!                 // If any pending action timer for this machine, cancel it.
+//!             TriggerAction::Cancel { machine: _, timer: _ } => {
+//!                 // Cancel the specified timer (action, machine, or both) for the
+//!                 // machine in question.
 //!             }
 //!             TriggerAction::InjectPadding {
 //!                 timeout: _,
@@ -188,14 +189,12 @@
 //!                 // is false, use the longest of the remaining and specified
 //!                 // durations.
 //!                 //
-//!                 // If a new timer was started, add TriggerEvent::TimerBegin {
-//!                 // machine: machine } to be triggered next loop iteration.
+//!                 // If a new timer is started or an existing timer replaced,
+//!                 // add TriggerEvent::TimerBegin { machine: machine } to be
+//!                 // triggered next loop iteration.
 //!                 //
 //!                 // Trigger TriggerEvent::TimerEnd { machine: machine } when
 //!                 // the timer expires.
-//!                 //
-//!                 // Do not trigger any event if the duration was zero: this
-//!                 // allows for the timer to be explicitly turned off.
 //!             }
 //!         }
 //!     }
@@ -503,6 +502,7 @@ where
                 // cancel any pending action, but doesn't count as a state change
                 self.actions[mi] = Some(TriggerAction::Cancel {
                     machine: MachineId(mi),
+                    timer: Timer::All,
                 });
                 StateChange::Unchanged
             }
@@ -542,6 +542,7 @@ where
         let current = &machine.states[runtime.current_state];
 
         match current.action {
+            Action::Cancel { timer } => Some(TriggerAction::Cancel { machine: mi, timer }),
             Action::InjectPadding { bypass, replace } => Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
                 size: current.sample_size() as u16,
