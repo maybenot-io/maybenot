@@ -21,10 +21,10 @@ use std::io::prelude::*;
 /// [`State`] that determine when to inject and/or block outgoing traffic.
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Machine {
-    /// The number of bytes of padding a machine is allowed to generate as
+    /// The number of padding packets the machine is allowed to generate as
     /// actions before other limits apply.
     pub allowed_padding_packets: u64,
-    /// The maximum fraction of padding bytes to allow as actions.
+    /// The maximum fraction of padding packets to allow as actions.
     pub max_padding_frac: f64,
     /// The number of microseconds of blocking a machine is allowed to generate
     /// as actions before other limits apply.

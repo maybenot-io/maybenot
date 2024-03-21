@@ -113,7 +113,8 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
 
 pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
     // len: 3 distributions + 4 flags + next_state
-    if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * (v1_events_iter().len() + 1) {
+    if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * (v1_events_iter().len() + 1)
+    {
         bail!("too small")
     }
 

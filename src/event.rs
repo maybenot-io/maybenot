@@ -63,13 +63,13 @@ impl Event {
 /// Represents an event to be triggered in the framework.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TriggerEvent {
-    /// Received non-padding bytes.
+    /// Received non-padding packet.
     NonPaddingRecv,
-    /// Received padding bytes.
+    /// Received padding packet.
     PaddingRecv,
-    /// Sent non-padding bytes.
+    /// Sent non-padding packet.
     NonPaddingSent,
-    /// Sent padding bytes.
+    /// Sent padding packet.
     PaddingSent { machine: MachineId },
     /// Blocking of outgoing traffic started by the action from a machine.
     BlockingBegin { machine: MachineId },
@@ -79,9 +79,9 @@ pub enum TriggerEvent {
     CounterZero { machine: MachineId },
     /// A machine's timer expired.
     TimerEnd { machine: MachineId },
-    /// Queued non-padding bytes.
+    /// Queued non-padding packet.
     NonPaddingQueued,
-    /// Queued padding bytes.
+    /// Queued padding packet.
     PaddingQueued { machine: MachineId },
 }
 
