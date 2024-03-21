@@ -60,7 +60,7 @@
 //!     // you wait and collect events is likely going to be a bottleneck. If
 //!     // you have to consider dropping events, it is better to drop older
 //!     // events than newer.
-//!     let events = [TriggerEvent::NonPaddingSent { bytes_sent: 1420 }];
+//!     let events = [TriggerEvent::NonPaddingSent];
 //!
 //!     // Trigger the events in the framework. This takes linear time with the
 //!     // number of events but is very fast (time should be dominated by at
@@ -90,11 +90,9 @@
 //!                 // Set the action timer with the specified timeout. On expiry,
 //!                 // do the following (all or nothing):
 //!                 //
-//!                 // 1. Add TriggerEvent::PaddingQueued{ bytes_queued: size,
-//!                 //    machine: machine } to be triggered next loop iteration.
+//!                 // 1. Trigger TriggerEvent::PaddingQueued{ machine: machine }.
 //!                 // 2. Send size padding.
-//!                 // 3. Trigger TriggerEvent::PaddingSent{ bytes_sent: size,
-//!                 //    machine: machine } to be triggered next loop iteration.
+//!                 // 3. Trigger TriggerEvent::PaddingSent{ machine: machine }.
 //!                 //
 //!                 // Above, "send" should mimic as close as possible real
 //!                 // application data being added for transport.
@@ -261,8 +259,8 @@ pub struct Framework<M> {
     machines: M,
     runtime: Vec<MachineRuntime>,
     max_padding_frac: f64,
-    nonpadding_sent_bytes: u64,
-    padding_sent_bytes: u64,
+    nonpadding_sent_packets: u64,
+    padding_sent_packets: u64,
     max_blocking_frac: f64,
     blocking_duration: Duration,
     blocking_started: Instant,
@@ -277,7 +275,7 @@ where
     /// Create a new framework instance with zero or more [`Machine`]. The max
     /// padding/blocking fractions are enforced as a total across all machines.
     /// The only way those limits can be violated are through
-    /// [`Machine::allowed_padding_bytes`] and
+    /// [`Machine::allowed_padding_packets`] and
     /// [`Machine::allowed_blocked_microsec`], respectively. The current time is
     /// handed to the framework here (and later in [`Self::trigger_events()`]) to
     /// make some types of use-cases of the framework easier (weird machines and
@@ -329,8 +327,8 @@ where
             blocking_active: false,
             blocking_started: current_time,
             blocking_duration: Duration::from_secs(0),
-            padding_sent_bytes: 0,
-            nonpadding_sent_bytes: 0,
+            padding_sent_packets: 0,
+            nonpadding_sent_packets: 0,
         })
     }
 
@@ -366,23 +364,23 @@ where
 
     fn process_event(&mut self, e: &TriggerEvent) {
         match e {
-            TriggerEvent::NonPaddingRecv { .. } => {
+            TriggerEvent::NonPaddingRecv => {
                 // no special accounting needed
                 for mi in 0..self.runtime.len() {
                     self.transition(mi, Event::NonPaddingRecv);
                 }
             }
-            TriggerEvent::PaddingRecv { .. } => {
+            TriggerEvent::PaddingRecv => {
                 // no special accounting needed
                 for mi in 0..self.runtime.len() {
                     self.transition(mi, Event::PaddingRecv);
                 }
             }
-            TriggerEvent::NonPaddingSent { bytes_sent } => {
-                self.nonpadding_sent_bytes += *bytes_sent as u64;
+            TriggerEvent::NonPaddingSent => {
+                self.nonpadding_sent_packets += 1;
 
                 for mi in 0..self.runtime.len() {
-                    self.runtime[mi].nonpadding_sent += *bytes_sent as u64;
+                    self.runtime[mi].nonpadding_sent += 1;
 
                     // If the transition leaves the state unchanged and the limit of
                     // the machine includes nonpadding sent packets, decrement the
@@ -398,12 +396,9 @@ where
                     }
                 }
             }
-            TriggerEvent::PaddingSent {
-                bytes_sent,
-                machine,
-            } => {
+            TriggerEvent::PaddingSent { machine } => {
                 // accounting is global ...
-                self.padding_sent_bytes += *bytes_sent as u64;
+                self.padding_sent_packets += 1;
 
                 // ... but the event is per-machine
                 let mi = machine.0;
@@ -414,7 +409,7 @@ where
                     return;
                 }
 
-                self.runtime[mi].padding_sent += *bytes_sent as u64;
+                self.runtime[mi].padding_sent += 1;
 
                 if self.transition(mi, Event::PaddingSent) == StateChange::Unchanged {
                     // decrement only makes sense if we didn't change state
@@ -462,12 +457,12 @@ where
             TriggerEvent::TimerEnd { machine } => {
                 self.transition(machine.0, Event::TimerEnd);
             }
-            TriggerEvent::NonPaddingQueued { .. } => {
+            TriggerEvent::NonPaddingQueued => {
                 for mi in 0..self.runtime.len() {
                     self.transition(mi, Event::NonPaddingQueued);
                 }
             }
-            TriggerEvent::PaddingQueued { machine, .. } => {
+            TriggerEvent::PaddingQueued { machine } => {
                 let mi = machine.0;
                 if mi >= self.runtime.len() {
                     return;
@@ -687,7 +682,7 @@ where
 
     fn below_limit_padding(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         // no limits apply if not made up padding count
-        if runtime.padding_sent < machine.allowed_padding_bytes {
+        if runtime.padding_sent < machine.allowed_padding_packets {
             return runtime.state_limit > 0;
         }
 
@@ -704,11 +699,11 @@ where
 
         // hit global limits?
         if self.max_padding_frac > 0.0 {
-            let total = self.padding_sent_bytes + self.nonpadding_sent_bytes;
+            let total = self.padding_sent_packets + self.nonpadding_sent_packets;
             if total == 0 {
                 return true;
             }
-            if self.padding_sent_bytes as f64 / total as f64 >= self.max_padding_frac {
+            if self.padding_sent_packets as f64 / total as f64 >= self.max_padding_frac {
                 return false;
             }
         }
@@ -797,7 +792,7 @@ mod tests {
 
         // create a simple machine
         let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
+            allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -832,7 +827,6 @@ mod tests {
         // trigger transition to next state
         _ = f.trigger_events(
             &[TriggerEvent::PaddingSent {
-                bytes_sent: 0,
                 machine: MachineId(0),
             }],
             current_time,
@@ -852,7 +846,6 @@ mod tests {
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
             &[TriggerEvent::PaddingSent {
-                bytes_sent: 0,
                 machine: MachineId(0),
             }],
             current_time,
@@ -860,7 +853,7 @@ mod tests {
         assert_eq!(f.actions[0], None);
 
         // go back to state 0
-        _ = f.trigger_events(&[TriggerEvent::PaddingRecv { bytes_recv: 0 }], current_time);
+        _ = f.trigger_events(&[TriggerEvent::PaddingRecv], current_time);
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::InjectPadding {
@@ -877,10 +870,9 @@ mod tests {
             _ = f.trigger_events(
                 &[
                     TriggerEvent::PaddingSent {
-                        bytes_sent: 0,
                         machine: MachineId(0),
                     },
-                    TriggerEvent::PaddingRecv { bytes_recv: 0 },
+                    TriggerEvent::PaddingRecv,
                 ],
                 current_time,
             );
@@ -901,12 +893,11 @@ mod tests {
             if i % 2 == 0 {
                 _ = f.trigger_events(
                     &[
-                        TriggerEvent::PaddingRecv { bytes_recv: 0 },
+                        TriggerEvent::PaddingRecv,
                         TriggerEvent::PaddingSent {
-                            bytes_sent: 0,
                             machine: MachineId(0),
                         },
-                        TriggerEvent::PaddingRecv { bytes_recv: 0 },
+                        TriggerEvent::PaddingRecv,
                     ],
                     current_time,
                 );
@@ -924,12 +915,10 @@ mod tests {
                 _ = f.trigger_events(
                     &[
                         TriggerEvent::PaddingSent {
-                            bytes_sent: 0,
                             machine: MachineId(0),
                         },
-                        TriggerEvent::PaddingRecv { bytes_recv: 0 },
+                        TriggerEvent::PaddingRecv,
                         TriggerEvent::PaddingSent {
-                            bytes_sent: 0,
                             machine: MachineId(0),
                         },
                     ],
@@ -981,7 +970,7 @@ mod tests {
 
         // machine
         let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
+            allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -993,7 +982,7 @@ mod tests {
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingSent { bytes_sent: 0 }],
+            &[TriggerEvent::NonPaddingSent],
             current_time,
         );
         assert_eq!(
@@ -1019,7 +1008,7 @@ mod tests {
         for _ in 0..10 {
             current_time = current_time.add(Duration::from_micros(1));
             _ = f.trigger_events(
-                &[TriggerEvent::NonPaddingSent { bytes_sent: 0 }],
+                &[TriggerEvent::NonPaddingSent],
                 current_time,
             );
             assert_eq!(
@@ -1106,7 +1095,7 @@ mod tests {
 
         // machine
         let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
+            allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -1119,7 +1108,6 @@ mod tests {
 
         _ = f.trigger_events(
             &[TriggerEvent::PaddingSent {
-                bytes_sent: 0,
                 machine: MachineId(0),
             }],
             current_time,
@@ -1136,7 +1124,7 @@ mod tests {
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingSent { bytes_sent: 0 }],
+            &[TriggerEvent::NonPaddingSent],
             current_time,
         );
         assert_eq!(
@@ -1213,7 +1201,7 @@ mod tests {
 
         // machine
         let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
+            allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -1226,7 +1214,6 @@ mod tests {
 
         _ = f.trigger_events(
             &[TriggerEvent::PaddingSent {
-                bytes_sent: 0,
                 machine: MachineId(0),
             }],
             current_time,
@@ -1296,7 +1283,7 @@ mod tests {
 
         // machine
         let m = Machine {
-            allowed_padding_bytes: 100 * (packet_size as u64),
+            allowed_padding_packets: 100,
             max_padding_frac: 0.5,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -1309,7 +1296,7 @@ mod tests {
 
         // transition to get the loop going
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
+            &[TriggerEvent::NonPaddingRecv],
             current_time,
         );
 
@@ -1328,7 +1315,6 @@ mod tests {
 
             _ = f.trigger_events(
                 &[TriggerEvent::PaddingSent {
-                    bytes_sent: packet_size,
                     machine: MachineId(0),
                 }],
                 current_time,
@@ -1340,9 +1326,7 @@ mod tests {
 
         // trigger and check limit again
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingRecv {
-                bytes_recv: packet_size,
-            }],
+            &[TriggerEvent::NonPaddingRecv],
             current_time,
         );
         assert_eq!(f.actions[0], None);
@@ -1351,9 +1335,7 @@ mod tests {
         // of bytes
         for _ in 0..100 {
             _ = f.trigger_events(
-                &[TriggerEvent::NonPaddingSent {
-                    bytes_sent: packet_size,
-                }],
+                &[TriggerEvent::NonPaddingSent],
                 current_time,
             );
             assert_eq!(f.actions[0], None);
@@ -1361,7 +1343,7 @@ mod tests {
 
         // send one byte of nonpadding, putting us just over the limit
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingSent { bytes_sent: 1 }],
+            &[TriggerEvent::NonPaddingSent],
             current_time,
         );
 
@@ -1411,7 +1393,7 @@ mod tests {
 
         // machines
         let m1 = Machine {
-            allowed_padding_bytes: 100 * (packet_size as u64),
+            allowed_padding_packets: 100,
             max_padding_frac: 0.0, // NOTE
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -1428,7 +1410,7 @@ mod tests {
         // any framework limits are applied (by design, see AllowedPaddingBytes)
         // trigger transition to get the loop going
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
+            &[TriggerEvent::NonPaddingRecv],
             current_time,
         );
 
@@ -1457,11 +1439,9 @@ mod tests {
             _ = f.trigger_events(
                 &[
                     TriggerEvent::PaddingSent {
-                        bytes_sent: packet_size,
                         machine: MachineId(0),
                     },
                     TriggerEvent::PaddingSent {
-                        bytes_sent: packet_size,
                         machine: MachineId(1),
                     },
                 ],
@@ -1474,12 +1454,8 @@ mod tests {
         assert_eq!(f.actions[1], None);
         _ = f.trigger_events(
             &[
-                TriggerEvent::NonPaddingRecv {
-                    bytes_recv: packet_size,
-                },
-                TriggerEvent::NonPaddingRecv {
-                    bytes_recv: packet_size,
-                },
+                TriggerEvent::NonPaddingRecv,
+                TriggerEvent::NonPaddingRecv,
             ],
             current_time,
         );
@@ -1488,16 +1464,14 @@ mod tests {
 
         // in sync?
         assert_eq!(f.runtime[0].padding_sent, f.runtime[1].padding_sent);
-        assert_eq!(f.runtime[0].padding_sent, 100 * (packet_size as u64));
+        assert_eq!(f.runtime[0].padding_sent, 100);
 
         // OK, so we've sent in total 2*100*mtu of padding using two machines. This
         // means that we should need to send at least 2*100*mtu + 1 bytes before
         // padding is scheduled again
         for _ in 0..200 {
             _ = f.trigger_events(
-                &[TriggerEvent::NonPaddingSent {
-                    bytes_sent: packet_size,
-                }],
+                &[TriggerEvent::NonPaddingSent],
                 current_time,
             );
             assert_eq!(f.actions[0], None);
@@ -1506,7 +1480,7 @@ mod tests {
 
         // the last byte should tip it over
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingSent { bytes_sent: 1 }],
+            &[TriggerEvent::NonPaddingSent],
             current_time,
         );
 
@@ -1570,7 +1544,7 @@ mod tests {
 
         // machine
         let m = Machine {
-            allowed_padding_bytes: 0,
+            allowed_padding_packets: 0,
             max_padding_frac: 0.0,
             allowed_blocked_microsec: 10, // NOTE
             max_blocking_frac: 0.5,       // NOTE
@@ -1583,7 +1557,7 @@ mod tests {
 
         // trigger self to start the blocking (triggers action)
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
+            &[TriggerEvent::NonPaddingRecv],
             current_time,
         );
 
@@ -1626,7 +1600,7 @@ mod tests {
         for _ in 0..5 {
             current_time = current_time.add(Duration::from_micros(2));
             _ = f.trigger_events(
-                &[TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }],
+                &[TriggerEvent::NonPaddingRecv],
                 current_time,
             );
             assert_eq!(f.actions[0], None);
@@ -1640,7 +1614,7 @@ mod tests {
         // push over the limit, should be allowed
         current_time = current_time.add(Duration::from_micros(2));
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }],
+            &[TriggerEvent::NonPaddingRecv],
             current_time,
         );
         assert_eq!(
@@ -1693,7 +1667,7 @@ mod tests {
 
         // machine
         let m = Machine {
-            allowed_padding_bytes: 0,
+            allowed_padding_packets: 0,
             max_padding_frac: 0.0,
             allowed_blocked_microsec: 10, // NOTE
             max_blocking_frac: 0.0,       // NOTE, 0.0 here, 0.5 in framework below
@@ -1706,7 +1680,7 @@ mod tests {
 
         // trigger self to start the blocking (triggers action)
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
+            &[TriggerEvent::NonPaddingRecv],
             current_time,
         );
 
@@ -1749,7 +1723,7 @@ mod tests {
         for _ in 0..5 {
             current_time = current_time.add(Duration::from_micros(2));
             _ = f.trigger_events(
-                &[TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }],
+                &[TriggerEvent::NonPaddingRecv],
                 current_time,
             );
             assert_eq!(f.actions[0], None);
@@ -1763,7 +1737,7 @@ mod tests {
         // push over the limit, should be allowed
         current_time = current_time.add(Duration::from_micros(2));
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingRecv { bytes_recv: 1000 }],
+            &[TriggerEvent::NonPaddingRecv],
             current_time,
         );
         assert_eq!(
@@ -1814,7 +1788,7 @@ mod tests {
 
         // machine 0
         let m0 = Machine {
-            allowed_padding_bytes: 0,
+            allowed_padding_packets: 0,
             max_padding_frac: 0.0,
             allowed_blocked_microsec: 2, // NOTE
             max_blocking_frac: 0.5,      // NOTE
@@ -1850,7 +1824,7 @@ mod tests {
 
         // machine 1
         let m1 = Machine {
-            allowed_padding_bytes: 0,
+            allowed_padding_packets: 0,
             max_padding_frac: 0.0,
             allowed_blocked_microsec: 0, // NOTE
             max_blocking_frac: 0.0,      // NOTE
@@ -1863,7 +1837,7 @@ mod tests {
 
         // trigger to make machine 0 block
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
+            &[TriggerEvent::NonPaddingRecv],
             current_time,
         );
 
@@ -1891,7 +1865,7 @@ mod tests {
 
         // ensure machine 0 can no longer block
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
+            &[TriggerEvent::NonPaddingRecv],
             current_time,
         );
 
@@ -1900,7 +1874,7 @@ mod tests {
 
         // now cause machine 1 to start blocking
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingSent { bytes_sent: 0 }],
+            &[TriggerEvent::NonPaddingSent],
             current_time,
         );
 
@@ -1925,7 +1899,7 @@ mod tests {
 
         // machine 0 should now be able to replace the blocking
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
+            &[TriggerEvent::NonPaddingRecv],
             current_time,
         );
 
@@ -1988,7 +1962,7 @@ mod tests {
 
         // machine
         let m = Machine {
-            allowed_padding_bytes: 100000, // NOTE, will not apply
+            allowed_padding_packets: 100000, // NOTE, will not apply
             max_padding_frac: 1.0,         // NOTE, will not apply
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -2001,7 +1975,7 @@ mod tests {
 
         // trigger self to start the padding
         _ = f.trigger_events(
-            &[TriggerEvent::NonPaddingSent { bytes_sent: 100 }],
+            &[TriggerEvent::NonPaddingSent],
             current_time,
         );
 
@@ -2022,7 +1996,6 @@ mod tests {
             current_time = current_time.add(Duration::from_micros(1));
             _ = f.trigger_events(
                 &[TriggerEvent::PaddingSent {
-                    bytes_sent: packet_size,
                     machine: MachineId(0),
                 }],
                 current_time,
@@ -2030,8 +2003,8 @@ mod tests {
         }
 
         // padding accounting correct
-        assert_eq!(f.runtime[0].padding_sent, (packet_size as u64) * 4);
-        assert_eq!(f.runtime[0].nonpadding_sent, 100);
+        assert_eq!(f.runtime[0].padding_sent, 4);
+        assert_eq!(f.runtime[0].nonpadding_sent, 1);
 
         // limit should be reached after 4 padding, blocking next action
         assert_eq!(f.actions[0], None);

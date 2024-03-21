@@ -64,13 +64,13 @@ impl Event {
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TriggerEvent {
     /// Received non-padding bytes.
-    NonPaddingRecv { bytes_recv: u16 },
+    NonPaddingRecv,
     /// Received padding bytes.
-    PaddingRecv { bytes_recv: u16 },
+    PaddingRecv,
     /// Sent non-padding bytes.
-    NonPaddingSent { bytes_sent: u16 },
+    NonPaddingSent,
     /// Sent padding bytes.
-    PaddingSent { bytes_sent: u16, machine: MachineId },
+    PaddingSent { machine: MachineId },
     /// Blocking of outgoing traffic started by the action from a machine.
     BlockingBegin { machine: MachineId },
     /// Blocking of outgoing traffic stopped.
@@ -80,27 +80,24 @@ pub enum TriggerEvent {
     /// A machine's timer expired.
     TimerEnd { machine: MachineId },
     /// Queued non-padding bytes.
-    NonPaddingQueued { bytes_queued: u16 },
+    NonPaddingQueued,
     /// Queued padding bytes.
-    PaddingQueued {
-        bytes_queued: u16,
-        machine: MachineId,
-    },
+    PaddingQueued { machine: MachineId },
 }
 
 impl TriggerEvent {
     /// Checks if the [`TriggerEvent`] is a particular [`Event`].
     pub fn is_event(&self, e: Event) -> bool {
         match self {
-            TriggerEvent::NonPaddingRecv { .. } => e == Event::NonPaddingRecv,
-            TriggerEvent::PaddingRecv { .. } => e == Event::PaddingRecv,
-            TriggerEvent::NonPaddingSent { .. } => e == Event::NonPaddingSent,
+            TriggerEvent::NonPaddingRecv => e == Event::NonPaddingRecv,
+            TriggerEvent::PaddingRecv => e == Event::PaddingRecv,
+            TriggerEvent::NonPaddingSent => e == Event::NonPaddingSent,
             TriggerEvent::PaddingSent { .. } => e == Event::PaddingSent,
             TriggerEvent::BlockingBegin { .. } => e == Event::BlockingBegin,
             TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
             TriggerEvent::CounterZero { .. } => e == Event::CounterZero,
             TriggerEvent::TimerEnd { .. } => e == Event::TimerEnd,
-            TriggerEvent::NonPaddingQueued { .. } => e == Event::NonPaddingQueued,
+            TriggerEvent::NonPaddingQueued => e == Event::NonPaddingQueued,
             TriggerEvent::PaddingQueued { .. } => e == Event::PaddingQueued,
         }
     }
@@ -110,16 +107,16 @@ impl fmt::Display for TriggerEvent {
     // note that we don't share the private MachineId
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TriggerEvent::NonPaddingRecv { bytes_recv } => write!(f, "rn,{}", bytes_recv),
-            TriggerEvent::PaddingRecv { bytes_recv } => write!(f, "rp,{}", bytes_recv),
-            TriggerEvent::NonPaddingSent { bytes_sent } => write!(f, "sn,{}", bytes_sent),
-            TriggerEvent::PaddingSent { bytes_sent, .. } => write!(f, "sp,{}", bytes_sent),
+            TriggerEvent::NonPaddingRecv => write!(f, "rn"),
+            TriggerEvent::PaddingRecv => write!(f, "rp"),
+            TriggerEvent::NonPaddingSent => write!(f, "sn"),
+            TriggerEvent::PaddingSent { .. } => write!(f, "sp"),
             TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
             TriggerEvent::BlockingEnd => write!(f, "be"),
             TriggerEvent::CounterZero { .. } => write!(f, "cz"),
             TriggerEvent::TimerEnd { .. } => write!(f, "te"),
-            TriggerEvent::NonPaddingQueued { bytes_queued } => write!(f, "qn,{}", bytes_queued),
-            TriggerEvent::PaddingQueued { bytes_queued, .. } => write!(f, "qp,{}", bytes_queued),
+            TriggerEvent::NonPaddingQueued => write!(f, "qn"),
+            TriggerEvent::PaddingQueued { .. } => write!(f, "qp"),
         }
     }
 }

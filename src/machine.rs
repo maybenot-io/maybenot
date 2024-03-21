@@ -23,7 +23,7 @@ use std::io::prelude::*;
 pub struct Machine {
     /// The number of bytes of padding a machine is allowed to generate as
     /// actions before other limits apply.
-    pub allowed_padding_bytes: u64,
+    pub allowed_padding_packets: u64,
     /// The maximum fraction of padding bytes to allow as actions.
     pub max_padding_frac: f64,
     /// The number of microseconds of blocking a machine is allowed to generate
@@ -40,7 +40,7 @@ impl Machine {
     /// string is 32 characters long, hex-encoded.
     pub fn name(&self) -> String {
         let mut context = Context::new(&SHA256);
-        context.update(&self.allowed_padding_bytes.to_le_bytes());
+        context.update(&self.allowed_padding_packets.to_le_bytes());
         context.update(&self.max_padding_frac.to_le_bytes());
         context.update(&self.allowed_blocked_microsec.to_le_bytes());
         context.update(&self.max_blocking_frac.to_le_bytes());
@@ -212,7 +212,7 @@ mod tests {
 
         // machine with broken state
         let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
+            allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -234,7 +234,7 @@ mod tests {
         s0.next_state = make_next_state(t, num_states);
 
         let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
+            allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -253,7 +253,7 @@ mod tests {
         s0.next_state = make_next_state(t, num_states);
 
         let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
+            allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -271,7 +271,7 @@ mod tests {
         };
 
         let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
+            allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -290,7 +290,7 @@ mod tests {
 
         // invalid machine lacking state
         let m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
+            allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
@@ -302,7 +302,7 @@ mod tests {
 
         // bad padding and blocking fractions
         let mut m = Machine {
-            allowed_padding_bytes: 1000 * 1024,
+            allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
