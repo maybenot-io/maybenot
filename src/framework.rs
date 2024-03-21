@@ -1695,6 +1695,166 @@ mod tests {
     }
 
     #[test]
+    fn framework_replace_blocking() {
+        // Plan: create two machines. #0 will exceed its blocking limit
+        // and no longer be allowed to block. #1 will then enable blocking,
+        // so #0 should now be able to overwrite that blocking regardless
+        // of its limit (special case in below_limit_blocking).
+
+        // state 0, first machine
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::NonPaddingRecv, e);
+
+        let mut s0 = State::new(t, 1);
+        // block every 2us for 2us
+        s0.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 2.0,
+            param2: 2.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s0.action = Dist {
+            dist: DistType::Uniform,
+            param1: 2.0,
+            param2: 2.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s0.action_is_block = true;
+        s0.replace = true; // NOTE
+
+        // machine 0
+        let m0 = Machine {
+            allowed_padding_bytes: 0,
+            max_padding_frac: 0.0,
+            allowed_blocked_microsec: 2, // NOTE
+            max_blocking_frac: 0.5,      // NOTE
+            states: vec![s0],
+            include_small_packets: false,
+        };
+
+        // state 0, second machine
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::NonPaddingSent, e);
+
+        let mut s0 = State::new(t, 1);
+        // block instantly for 1000us
+        s0.timeout = Dist {
+            dist: DistType::Uniform,
+            param1: 0.0,
+            param2: 0.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s0.action = Dist {
+            dist: DistType::Uniform,
+            param1: 1000.0,
+            param2: 1000.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s0.action_is_block = true;
+
+        // machine 1
+        let m1 = Machine {
+            allowed_padding_bytes: 0,
+            max_padding_frac: 0.0,
+            allowed_blocked_microsec: 0, // NOTE
+            max_blocking_frac: 0.0,      // NOTE
+            states: vec![s0],
+            include_small_packets: false,
+        };
+
+        let mut current_time = Instant::now();
+        let machines = vec![m0, m1];
+        let mut f = Framework::new(&machines, 0.0, 0.0, 1500, current_time).unwrap();
+
+        // trigger to make machine 0 block
+        _ = f.trigger_events(
+            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
+            current_time,
+        );
+
+        // verify machine 0 can block for 2us
+        assert_eq!(
+            f.actions[0],
+            Some(Action::BlockOutgoing {
+                timeout: Duration::from_micros(2),
+                duration: Duration::from_micros(2),
+                bypass: false,
+                replace: true,
+                machine: MachineId(0),
+            })
+        );
+
+        _ = f.trigger_events(
+            &[TriggerEvent::BlockingBegin {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        
+        current_time = current_time.add(Duration::from_micros(2));
+        _ = f.trigger_events(&[TriggerEvent::BlockingEnd], current_time);
+
+        // ensure machine 0 can no longer block
+        _ = f.trigger_events(
+            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
+            current_time,
+        );
+
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(2));
+
+        // now cause machine 1 to start blocking
+        _ = f.trigger_events(
+            &[TriggerEvent::NonPaddingSent { bytes_sent: 0 }],
+            current_time,
+        );
+
+        // verify machine 1 blocks as expected
+        assert_eq!(
+            f.actions[1],
+            Some(Action::BlockOutgoing {
+                timeout: Duration::from_micros(0),
+                duration: Duration::from_micros(1000),
+                bypass: false,
+                replace: false,
+                machine: MachineId(1),
+            })
+        );
+
+        _ = f.trigger_events(
+            &[TriggerEvent::BlockingBegin {
+                machine: MachineId(1),
+            }],
+            current_time,
+        );
+
+        // machine 0 should now be able to replace the blocking
+        _ = f.trigger_events(
+            &[TriggerEvent::NonPaddingRecv { bytes_recv: 0 }],
+            current_time,
+        );
+
+        assert_eq!(
+            f.actions[0],
+            Some(Action::BlockOutgoing {
+                timeout: Duration::from_micros(2),
+                duration: Duration::from_micros(2),
+                bypass: false,
+                replace: true,
+                machine: MachineId(0),
+            })
+        );
+    }
+
+    #[test]
     fn framework_machine_sampled_limit() {
         // we create a machine that samples a padding limit of 4 padding sent,
         // then should be prevented from padding further by transitioning to
