@@ -398,24 +398,13 @@ where
                     }
                 }
             }
-            TriggerEvent::PaddingSent { machine } => {
-                // accounting is global ...
+            TriggerEvent::PaddingSent => {
+                // global accounting
                 self.padding_sent_packets += 1;
 
-                // ... but the event is per-machine
-                let mi = machine.0;
-                if mi >= self.runtime.len() {
-                    // it's possible to create many instances of the framework
-                    // with different numbers of machines, so we need to check
-                    // this despite the machine being a MachineId
-                    return;
-                }
-
-                self.runtime[mi].padding_sent += 1;
-
-                if self.transition(mi, Event::PaddingSent) == StateChange::Unchanged {
-                    // decrement only makes sense if we didn't change state
-                    self.decrement_limit(mi)
+                // the event is global: tell all machines
+                for mi in 0..self.runtime.len() {
+                    self.transition(mi, Event::PaddingSent);
                 }
             }
             TriggerEvent::BlockingBegin { machine } => {
@@ -475,7 +464,14 @@ where
                 if mi >= self.runtime.len() {
                     return;
                 }
-                self.transition(mi, Event::NonPaddingQueued);
+                // we consider padding queued as enough to spend the per-machine
+                // padding budget, while the framework-wide budget is on padding
+                // actually sent (TODO: consider if this is the right choice)
+                self.runtime[mi].padding_sent += 1;
+                if self.transition(mi, Event::PaddingQueued) == StateChange::Unchanged {
+                    // decrement only makes sense if we didn't change state
+                    self.decrement_limit(mi)
+                }
             }
         };
     }
@@ -836,12 +832,7 @@ mod tests {
         assert_eq!(f.actions[0], None);
 
         // trigger transition to next state
-        _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
-                machine: MachineId(0),
-            }],
-            current_time,
-        );
+        _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::InjectPadding {
@@ -855,12 +846,7 @@ mod tests {
 
         // increase time, trigger event, make sure no further action
         current_time = current_time.add(Duration::from_micros(20));
-        _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
-                machine: MachineId(0),
-            }],
-            current_time,
-        );
+        _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
         assert_eq!(f.actions[0], None);
 
         // go back to state 0
@@ -879,12 +865,7 @@ mod tests {
         // test multiple triggers overwriting actions
         for _ in 0..10 {
             _ = f.trigger_events(
-                &[
-                    TriggerEvent::PaddingSent {
-                        machine: MachineId(0),
-                    },
-                    TriggerEvent::PaddingRecv,
-                ],
+                &[TriggerEvent::PaddingSent, TriggerEvent::PaddingRecv],
                 current_time,
             );
             assert_eq!(
@@ -905,9 +886,7 @@ mod tests {
                 _ = f.trigger_events(
                     &[
                         TriggerEvent::PaddingRecv,
-                        TriggerEvent::PaddingSent {
-                            machine: MachineId(0),
-                        },
+                        TriggerEvent::PaddingSent,
                         TriggerEvent::PaddingRecv,
                     ],
                     current_time,
@@ -925,13 +904,9 @@ mod tests {
             } else {
                 _ = f.trigger_events(
                     &[
-                        TriggerEvent::PaddingSent {
-                            machine: MachineId(0),
-                        },
+                        TriggerEvent::PaddingSent,
                         TriggerEvent::PaddingRecv,
-                        TriggerEvent::PaddingSent {
-                            machine: MachineId(0),
-                        },
+                        TriggerEvent::PaddingSent,
                     ],
                     current_time,
                 );
@@ -1111,12 +1086,7 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
-        _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
-                machine: MachineId(0),
-            }],
-            current_time,
-        );
+        _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::UpdateCounter {
@@ -1214,12 +1184,7 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
-        _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
-                machine: MachineId(0),
-            }],
-            current_time,
-        );
+        _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::UpdateTimer {
@@ -1262,7 +1227,7 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         // we use sent for checking limits
-        t.insert(Event::PaddingSent, e.clone());
+        t.insert(Event::PaddingQueued, e.clone());
         t.insert(Event::NonPaddingSent, e.clone());
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
@@ -1313,7 +1278,7 @@ mod tests {
             );
 
             _ = f.trigger_events(
-                &[TriggerEvent::PaddingSent {
+                &[TriggerEvent::PaddingQueued {
                     machine: MachineId(0),
                 }],
                 current_time,
@@ -1360,7 +1325,7 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         // we use sent for checking limits
-        t.insert(Event::PaddingSent, e.clone());
+        t.insert(Event::PaddingQueued, e.clone());
         t.insert(Event::NonPaddingSent, e.clone());
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
@@ -1396,9 +1361,9 @@ mod tests {
         let machines = vec![m1, m2];
         let mut f = Framework::new(&machines, 0.5, 0.0, current_time).unwrap();
 
-        // we have two machines that each can send 100 * mtu before their own or
-        // any framework limits are applied (by design, see AllowedPaddingBytes)
-        // trigger transition to get the loop going
+        // we have two machines that each can send 100 packets before their own
+        // or any framework limits are applied (by design, see
+        // allowed_padding_packets) trigger transition to get the loop going
         _ = f.trigger_events(&[TriggerEvent::NonPaddingRecv], current_time);
 
         // we expect 100 padding actions per machine
@@ -1425,12 +1390,14 @@ mod tests {
             );
             _ = f.trigger_events(
                 &[
-                    TriggerEvent::PaddingSent {
+                    TriggerEvent::PaddingQueued {
                         machine: MachineId(0),
                     },
-                    TriggerEvent::PaddingSent {
+                    TriggerEvent::PaddingQueued {
                         machine: MachineId(1),
                     },
+                    TriggerEvent::PaddingSent,
+                    TriggerEvent::PaddingSent,
                 ],
                 current_time,
             );
@@ -1883,7 +1850,7 @@ mod tests {
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
-        t.insert(Event::PaddingSent, e);
+        t.insert(Event::PaddingQueued, e);
 
         let mut s1 = State::new(t, num_states);
         s1.timeout_dist = Dist {
@@ -1911,7 +1878,7 @@ mod tests {
         // machine
         let m = Machine {
             allowed_padding_packets: 100000, // NOTE, will not apply
-            max_padding_frac: 1.0,           // NOTE, will not apply
+            max_padding_frac: 0.0,           // NOTE, will not apply
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
             states: vec![s0, s1],
@@ -1919,7 +1886,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 1.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         // trigger self to start the padding
         _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
@@ -1940,7 +1907,7 @@ mod tests {
             );
             current_time = current_time.add(Duration::from_micros(1));
             _ = f.trigger_events(
-                &[TriggerEvent::PaddingSent {
+                &[TriggerEvent::PaddingQueued {
                     machine: MachineId(0),
                 }],
                 current_time,

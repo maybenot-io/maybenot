@@ -73,7 +73,7 @@ pub enum TriggerEvent {
     /// Sent non-padding packet.
     NonPaddingSent,
     /// Sent padding packet.
-    PaddingSent { machine: MachineId },
+    PaddingSent,
     /// Blocking of outgoing traffic started by the action from a machine.
     BlockingBegin { machine: MachineId },
     /// Blocking of outgoing traffic stopped.
