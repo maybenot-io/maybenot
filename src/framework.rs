@@ -310,8 +310,8 @@ where
             machines.as_ref().len()
         ];
 
-        for mi in 0..runtime.len() {
-            runtime[mi].state_limit = machines.as_ref()[mi].states[0].sample_limit();
+        for (mi, r) in runtime.iter_mut().enumerate() {
+            r.state_limit = machines.as_ref()[mi].states[0].sample_limit();
         }
 
         let actions = vec![None; machines.as_ref().len()];
