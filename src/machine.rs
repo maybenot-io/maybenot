@@ -132,8 +132,7 @@ impl Machine {
                 // - pTotal < 1.0 is OK, to support a "nop" transition (self
                 // transition has implications in the framework, i.e., involving
                 // limits on padding sent in the state)
-                if p_total <= 0.0 || p_total >= 1.0005 {
-                    // 1.0005 due to rounding
+                if p_total <= 0.0 || p_total > 1.0 {
                     bail!(
                         "found invalid total probability vector {} at index {}, must be (0.0, 1.0]",
                         p_total,
