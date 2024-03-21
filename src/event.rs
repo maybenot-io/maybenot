@@ -27,6 +27,8 @@ pub enum Event {
     LimitReached,
     /// CounterZero is when a machine's counter was decremented to zero.
     CounterZero,
+    /// TimerBegin is when a machine's timer started.
+    TimerBegin,
     /// TimerEnd is when a machine's timer expired.
     TimerEnd,
     /// NonPaddingQueued is when we queued non-padding.
@@ -43,7 +45,7 @@ impl fmt::Display for Event {
 
 impl Event {
     pub fn iter() -> Iter<'static, Event> {
-        static EVENTS: [Event; 11] = [
+        static EVENTS: [Event; 12] = [
             NonPaddingRecv,
             PaddingRecv,
             NonPaddingSent,
@@ -52,6 +54,7 @@ impl Event {
             BlockingEnd,
             LimitReached,
             CounterZero,
+            TimerBegin,
             TimerEnd,
             NonPaddingQueued,
             PaddingQueued,
@@ -77,6 +80,8 @@ pub enum TriggerEvent {
     BlockingEnd,
     /// A machine's counter was decremented to zero.
     CounterZero { machine: MachineId },
+    /// A machine's timer started.
+    TimerBegin { machine: MachineId },
     /// A machine's timer expired.
     TimerEnd { machine: MachineId },
     /// Queued non-padding packet.
@@ -96,6 +101,7 @@ impl TriggerEvent {
             TriggerEvent::BlockingBegin { .. } => e == Event::BlockingBegin,
             TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
             TriggerEvent::CounterZero { .. } => e == Event::CounterZero,
+            TriggerEvent::TimerBegin { .. } => e == Event::TimerBegin,
             TriggerEvent::TimerEnd { .. } => e == Event::TimerEnd,
             TriggerEvent::NonPaddingQueued => e == Event::NonPaddingQueued,
             TriggerEvent::PaddingQueued { .. } => e == Event::PaddingQueued,
@@ -114,6 +120,7 @@ impl fmt::Display for TriggerEvent {
             TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
             TriggerEvent::BlockingEnd => write!(f, "be"),
             TriggerEvent::CounterZero { .. } => write!(f, "cz"),
+            TriggerEvent::TimerBegin { .. } => write!(f, "tb"),
             TriggerEvent::TimerEnd { .. } => write!(f, "te"),
             TriggerEvent::NonPaddingQueued => write!(f, "qn"),
             TriggerEvent::PaddingQueued { .. } => write!(f, "qp"),

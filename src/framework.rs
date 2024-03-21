@@ -188,11 +188,14 @@
 //!                 // is false, use the longest of the remaining and specified
 //!                 // durations.
 //!                 //
-//!                 // Do not schedule any events to be triggered, even if the
-//!                 // timer was set to zero - this allows for the timer to be
-//!                 // explicitly reset. If the timer was not set to zero,
-//!                 // trigger TriggerEvent::TimerEnd { machine: machine }
-//!                 // when it subsequently expires.
+//!                 // If a new timer was started, add TriggerEvent::TimerBegin {
+//!                 // machine: machine } to be triggered next loop iteration.
+//!                 //
+//!                 // Trigger TriggerEvent::TimerEnd { machine: machine } when
+//!                 // the timer expires.
+//!                 //
+//!                 // Do not trigger any event if the duration was zero: this
+//!                 // allows for the timer to be explicitly turned off.
 //!             }
 //!         }
 //!     }
@@ -454,6 +457,12 @@ where
             TriggerEvent::CounterZero { machine } => {
                 self.transition(machine.0, Event::CounterZero);
             }
+            TriggerEvent::TimerBegin { machine } => {
+                if self.transition(machine.0, Event::TimerBegin) == StateChange::Unchanged {
+                    // // decrement only makes sense if we didn't change state
+                    self.decrement_limit(machine.0)
+                }
+            }
             TriggerEvent::TimerEnd { machine } => {
                 self.transition(machine.0, Event::TimerEnd);
             }
@@ -614,6 +623,7 @@ where
         match current.action {
             Action::BlockOutgoing { .. } => self.below_limit_blocking(runtime, machine),
             Action::InjectPadding { .. } => self.below_limit_padding(runtime, machine),
+            Action::UpdateTimer { .. } => runtime.state_limit > 0,
             _ => true,
         }
     }
