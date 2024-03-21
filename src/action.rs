@@ -49,8 +49,7 @@ pub enum TriggerAction {
     /// Stop any currently scheduled action for the machine.
     Cancel { machine: MachineId },
     /// Schedule padding to be injected after the given timeout for a machine.
-    /// The size of the padding (in bytes) is specified - this will never be
-    /// larger than the MTU.
+    /// The size of the padding (in bytes) is specified.
     ///
     /// The bypass flag indicates if the padding packet MUST be sent despite
     /// active blocking of outgoing traffic. Note that this is only allowed if

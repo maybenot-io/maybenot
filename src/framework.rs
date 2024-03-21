@@ -42,15 +42,13 @@
 //! // allowed budgets. This means that it is possible to create machines that
 //! // trigger actions to block outgoing traffic indefinitely and/or send a lot
 //! // of outgoing traffic.
-//! // - The current MTU of the link being protected. It can be updated later by
-//! // triggering TriggerEvent::UpdateMTU { new_mtu: u16 }.
 //! // - The current time. For normal use, just provide the current time as
 //! // below. This is exposed mainly for testing purposes (can also be used to
 //! // make the creation of some odd types of machines easier).
 //! //
 //! // The framework validates all machines (like ::From_str() above) so it can
 //! // return an error.
-//! let mut f = Framework::new(&m, 0.0, 0.0, 1420, Instant::now()).unwrap();
+//! let mut f = Framework::new(&m, 0.0, 0.0, Instant::now()).unwrap();
 //!
 //! // Below is the main loop for operating the framework. This should run for
 //! // as long as the underlying connection the framework is attached to can
@@ -270,7 +268,6 @@ pub struct Framework<M> {
     blocking_started: Instant,
     blocking_active: bool,
     framework_start: Instant,
-    mtu: u16,
 }
 
 impl<M> Framework<M>
@@ -281,17 +278,15 @@ where
     /// padding/blocking fractions are enforced as a total across all machines.
     /// The only way those limits can be violated are through
     /// [`Machine::allowed_padding_bytes`] and
-    /// [`Machine::allowed_blocked_microsec`], respectively. The MTU is the MTU
-    /// of the underlying connection (goodput). The current time is handed to
-    /// the framework here (and later in [`Self::trigger_events()`]) to make
-    /// some types of use-cases of the framework easier (weird machines and for
-    /// simulation). Returns an error on any invalid [`Machine`] or limits not
-    /// being fractions [0, 1.0].
+    /// [`Machine::allowed_blocked_microsec`], respectively. The current time is
+    /// handed to the framework here (and later in [`Self::trigger_events()`]) to
+    /// make some types of use-cases of the framework easier (weird machines and
+    /// for simulation). Returns an error on any invalid [`Machine`] or limits
+    /// not being fractions [0, 1.0].
     pub fn new(
         machines: M,
         max_padding_frac: f64,
         max_blocking_frac: f64,
-        mtu: u16,
         current_time: Instant,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         for m in machines.as_ref() {
@@ -327,7 +322,6 @@ where
             actions,
             machines,
             runtime,
-            mtu,
             current_time,
             max_blocking_frac,
             max_padding_frac,
@@ -462,12 +456,6 @@ where
                     self.transition(mi, Event::BlockingEnd);
                 }
             }
-            TriggerEvent::UpdateMTU { new_mtu } => {
-                self.mtu = *new_mtu;
-                for mi in 0..self.runtime.len() {
-                    self.transition(mi, Event::UpdateMTU);
-                }
-            }
             TriggerEvent::CounterZero { machine } => {
                 self.transition(machine.0, Event::CounterZero);
             }
@@ -552,7 +540,7 @@ where
         match current.action {
             Action::InjectPadding { bypass, replace } => Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
-                size: current.sample_size(self.mtu as u64) as u16,
+                size: current.sample_size() as u16,
                 bypass,
                 replace,
                 machine: mi,
@@ -743,16 +731,16 @@ mod tests {
     #[test]
     fn no_machines() {
         let machines = vec![];
-        let f = Framework::new(&machines, 0.0, 0.0, 150, Instant::now());
+        let f = Framework::new(&machines, 0.0, 0.0, Instant::now());
         assert!(!f.is_err());
     }
 
     #[test]
     fn reuse_machines() {
         let machines = vec![];
-        let f1 = Framework::new(&machines, 0.0, 0.0, 150, Instant::now());
+        let f1 = Framework::new(&machines, 0.0, 0.0, Instant::now());
         assert!(!f1.is_err());
-        let f2 = Framework::new(&machines, 0.0, 0.0, 150, Instant::now());
+        let f2 = Framework::new(&machines, 0.0, 0.0, Instant::now());
         assert!(!f2.is_err());
     }
 
@@ -761,6 +749,7 @@ mod tests {
         // plan: create a machine that swaps between two states, trigger one
         // then multiple events and check the resulting actions
         let num_states = 2;
+        let packet_size: u16 = 150;
 
         // state 0: go to state 1 on PaddingSent, pad after 10 usec
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -773,6 +762,13 @@ mod tests {
             dist: DistType::Uniform,
             param1: 10.0,
             param2: 10.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s0.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: packet_size as f64,
+            param2: packet_size as f64,
             start: 0.0,
             max: 0.0,
         };
@@ -791,6 +787,13 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
+        s1.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: packet_size as f64,
+            param2: packet_size as f64,
+            start: 0.0,
+            max: 0.0,
+        };
 
         // create a simple machine
         let m = Machine {
@@ -802,9 +805,8 @@ mod tests {
         };
 
         let mut current_time = Instant::now();
-        let mtu = 150;
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         assert_eq!(f.actions.len(), 1);
 
@@ -839,7 +841,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(1),
-                size: mtu as u16,
+                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -863,7 +865,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(10),
-                size: mtu as u16,
+                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -886,7 +888,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(10),
-                    size: mtu as u16,
+                    size: packet_size,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -912,7 +914,7 @@ mod tests {
                     f.actions[0],
                     Some(TriggerAction::InjectPadding {
                         timeout: Duration::from_micros(10),
-                        size: mtu as u16,
+                        size: packet_size,
                         bypass: false,
                         replace: false,
                         machine: MachineId(0),
@@ -937,7 +939,7 @@ mod tests {
                     f.actions[0],
                     Some(TriggerAction::InjectPadding {
                         timeout: Duration::from_micros(1),
-                        size: mtu as u16,
+                        size: packet_size,
                         bypass: false,
                         replace: false,
                         machine: MachineId(0),
@@ -950,45 +952,29 @@ mod tests {
     #[test]
     fn blocking_machine() {
         // a machine that blocks for 10us, 1us after NonPaddingSent
-        let num_states = 2;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
+        e.insert(0, 1.0);
         t.insert(Event::NonPaddingSent, e);
 
-        let mut s0 = State::new(t, num_states);
+        let mut s0 = State::new(t, 1);
         s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 0.0,
-            param2: 0.0,
-            start: 0.0,
-            max: 0.0,
-        };
-
-        // state 1
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
-        t.insert(Event::NonPaddingSent, e);
-
-        let mut s1 = State::new(t, num_states);
-        s1.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 1.0,
             param2: 1.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action_dist = Dist {
+        s0.action_dist = Dist {
             dist: DistType::Uniform,
             param1: 10.0,
             param2: 10.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action = Action::BlockOutgoing {
+        s0.action = Action::BlockOutgoing {
             bypass: false,
             replace: false,
         };
@@ -999,13 +985,12 @@ mod tests {
             max_padding_frac: 1.0,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
-            states: vec![s0, s1],
+            states: vec![s0],
         };
 
         let mut current_time = Instant::now();
-        let mtu = 150;
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         _ = f.trigger_events(
             &[TriggerEvent::NonPaddingSent { bytes_sent: 0 }],
@@ -1129,9 +1114,8 @@ mod tests {
         };
 
         let mut current_time = Instant::now();
-        let mtu = 150;
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         _ = f.trigger_events(
             &[TriggerEvent::PaddingSent {
@@ -1187,6 +1171,7 @@ mod tests {
     fn timer_machine() {
         // a machine that sets the timer to 1 ms after PaddingSent
         let num_states = 2;
+        let packet_size: u16 = 150;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -1199,6 +1184,13 @@ mod tests {
             dist: DistType::Uniform,
             param1: 1.0,
             param2: 1.0,
+            start: 0.0,
+            max: 0.0,
+        };
+        s0.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: packet_size as f64,
+            param2: packet_size as f64,
             start: 0.0,
             max: 0.0,
         };
@@ -1229,9 +1221,8 @@ mod tests {
         };
 
         let mut current_time = Instant::now();
-        let mtu = 150;
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         _ = f.trigger_events(
             &[TriggerEvent::PaddingSent {
@@ -1260,7 +1251,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(1),
-                size: mtu as u16,
+                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -1275,48 +1266,46 @@ mod tests {
         // should be limited from sending any padding until at least 100*MTU
         // nonpadding bytes have been sent, given the set max padding fraction
         // of 0.5.
-        let mtu: u16 = 1000;
-        let num_states = 2;
+        let packet_size: u16 = 1000;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
-        t.insert(Event::NonPaddingRecv, e);
-
-        let s0 = State::new(t, num_states);
-
-        // state 1
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
+        e.insert(0, 1.0);
         // we use sent for checking limits
         t.insert(Event::PaddingSent, e.clone());
         t.insert(Event::NonPaddingSent, e.clone());
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
 
-        let mut s1 = State::new(t, num_states);
-        s1.timeout_dist = Dist {
+        let mut s0 = State::new(t, 1);
+        s0.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
+        s0.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: packet_size as f64,
+            param2: packet_size as f64,
+            start: 0.0,
+            max: 0.0,
+        };
 
         // machine
         let m = Machine {
-            allowed_padding_bytes: 100 * (mtu as u64),
+            allowed_padding_bytes: 100 * (packet_size as u64),
             max_padding_frac: 0.5,
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
-            states: vec![s0, s1],
+            states: vec![s0],
         };
 
         let current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, mtu, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         // transition to get the loop going
         _ = f.trigger_events(
@@ -1330,7 +1319,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(2),
-                    size: mtu as u16,
+                    size: packet_size,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -1339,7 +1328,7 @@ mod tests {
 
             _ = f.trigger_events(
                 &[TriggerEvent::PaddingSent {
-                    bytes_sent: mtu as u16,
+                    bytes_sent: packet_size,
                     machine: MachineId(0),
                 }],
                 current_time,
@@ -1352,7 +1341,7 @@ mod tests {
         // trigger and check limit again
         _ = f.trigger_events(
             &[TriggerEvent::NonPaddingRecv {
-                bytes_recv: mtu as u16,
+                bytes_recv: packet_size,
             }],
             current_time,
         );
@@ -1363,7 +1352,7 @@ mod tests {
         for _ in 0..100 {
             _ = f.trigger_events(
                 &[TriggerEvent::NonPaddingSent {
-                    bytes_sent: mtu as u16,
+                    bytes_sent: packet_size,
                 }],
                 current_time,
             );
@@ -1380,7 +1369,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(2),
-                size: mtu as u16,
+                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -1392,50 +1381,48 @@ mod tests {
     fn framework_max_padding_frac() {
         // to test the global limits of the framework we create two machines with
         // the same allowed padding, where both machines pad in parallel
-        let mtu: u16 = 1000;
-        let num_states = 2;
+        let packet_size: u16 = 1000;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
-        t.insert(Event::NonPaddingRecv, e);
-
-        let s0 = State::new(t, num_states);
-
-        // state 1
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
+        e.insert(0, 1.0);
         // we use sent for checking limits
         t.insert(Event::PaddingSent, e.clone());
         t.insert(Event::NonPaddingSent, e.clone());
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
 
-        let mut s1 = State::new(t, num_states);
-        s1.timeout_dist = Dist {
+        let mut s0 = State::new(t, 1);
+        s0.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
+        s0.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: packet_size as f64,
+            param2: packet_size as f64,
+            start: 0.0,
+            max: 0.0,
+        };
 
         // machines
         let m1 = Machine {
-            allowed_padding_bytes: 100 * (mtu as u64),
+            allowed_padding_bytes: 100 * (packet_size as u64),
             max_padding_frac: 0.0, // NOTE
             allowed_blocked_microsec: 0,
             max_blocking_frac: 0.0,
-            states: vec![s0, s1],
+            states: vec![s0],
         };
         let m2 = m1.clone();
 
         // NOTE 0.5 max_padding_frac below
         let current_time = Instant::now();
         let machines = vec![m1, m2];
-        let mut f = Framework::new(&machines, 0.5, 0.0, mtu, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.5, 0.0, current_time).unwrap();
 
         // we have two machines that each can send 100 * mtu before their own or
         // any framework limits are applied (by design, see AllowedPaddingBytes)
@@ -1451,7 +1438,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(2),
-                    size: mtu as u16,
+                    size: packet_size,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -1461,7 +1448,7 @@ mod tests {
                 f.actions[1],
                 Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(2),
-                    size: mtu as u16,
+                    size: packet_size,
                     bypass: false,
                     replace: false,
                     machine: MachineId(1),
@@ -1470,11 +1457,11 @@ mod tests {
             _ = f.trigger_events(
                 &[
                     TriggerEvent::PaddingSent {
-                        bytes_sent: mtu as u16,
+                        bytes_sent: packet_size,
                         machine: MachineId(0),
                     },
                     TriggerEvent::PaddingSent {
-                        bytes_sent: mtu as u16,
+                        bytes_sent: packet_size,
                         machine: MachineId(1),
                     },
                 ],
@@ -1488,10 +1475,10 @@ mod tests {
         _ = f.trigger_events(
             &[
                 TriggerEvent::NonPaddingRecv {
-                    bytes_recv: mtu as u16,
+                    bytes_recv: packet_size,
                 },
                 TriggerEvent::NonPaddingRecv {
-                    bytes_recv: mtu as u16,
+                    bytes_recv: packet_size,
                 },
             ],
             current_time,
@@ -1501,7 +1488,7 @@ mod tests {
 
         // in sync?
         assert_eq!(f.runtime[0].padding_sent, f.runtime[1].padding_sent);
-        assert_eq!(f.runtime[0].padding_sent, 100 * (mtu as u64));
+        assert_eq!(f.runtime[0].padding_sent, 100 * (packet_size as u64));
 
         // OK, so we've sent in total 2*100*mtu of padding using two machines. This
         // means that we should need to send at least 2*100*mtu + 1 bytes before
@@ -1509,7 +1496,7 @@ mod tests {
         for _ in 0..200 {
             _ = f.trigger_events(
                 &[TriggerEvent::NonPaddingSent {
-                    bytes_sent: mtu as u16,
+                    bytes_sent: packet_size,
                 }],
                 current_time,
             );
@@ -1527,7 +1514,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(2),
-                size: mtu as u16,
+                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -1537,7 +1524,7 @@ mod tests {
             f.actions[1],
             Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(2),
-                size: mtu as u16,
+                size: packet_size,
                 bypass: false,
                 replace: false,
                 machine: MachineId(1),
@@ -1551,41 +1538,32 @@ mod tests {
         // machine limits are applied, then the machine should be limited from
         // blocking until after 10us, given the set max blocking fraction of
         // 0.5.
-        let num_states = 2;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
-        t.insert(Event::NonPaddingRecv, e);
-
-        let s0 = State::new(t, num_states);
-
-        // state 1
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
+        e.insert(0, 1.0);
         t.insert(Event::BlockingBegin, e.clone());
         t.insert(Event::BlockingEnd, e.clone());
         t.insert(Event::NonPaddingRecv, e.clone());
 
-        let mut s1 = State::new(t, num_states);
+        let mut s0 = State::new(t, 1);
         // block every 2us for 2us
-        s1.timeout_dist = Dist {
+        s0.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action_dist = Dist {
+        s0.action_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action = Action::BlockOutgoing {
+        s0.action = Action::BlockOutgoing {
             bypass: false,
             replace: false,
         };
@@ -1596,12 +1574,12 @@ mod tests {
             max_padding_frac: 0.0,
             allowed_blocked_microsec: 10, // NOTE
             max_blocking_frac: 0.5,       // NOTE
-            states: vec![s0, s1],
+            states: vec![s0],
         };
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, 1500, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         // trigger self to start the blocking (triggers action)
         _ = f.trigger_events(
@@ -1683,41 +1661,32 @@ mod tests {
         // machine limits are applied, then the machine should be limited from
         // blocking until after 10us, given the set max blocking fraction of
         // 0.5 in the framework.
-        let num_states = 2;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
-        t.insert(Event::NonPaddingRecv, e);
-
-        let s0 = State::new(t, num_states);
-
-        // state 1
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
+        e.insert(0, 1.0);
         t.insert(Event::BlockingBegin, e.clone());
         t.insert(Event::BlockingEnd, e.clone());
         t.insert(Event::NonPaddingRecv, e.clone());
 
-        let mut s1 = State::new(t, num_states);
+        let mut s0 = State::new(t, 1);
         // block every 2us for 2us
-        s1.timeout_dist = Dist {
+        s0.timeout_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action_dist = Dist {
+        s0.action_dist = Dist {
             dist: DistType::Uniform,
             param1: 2.0,
             param2: 2.0,
             start: 0.0,
             max: 0.0,
         };
-        s1.action = Action::BlockOutgoing {
+        s0.action = Action::BlockOutgoing {
             bypass: false,
             replace: false,
         };
@@ -1728,12 +1697,12 @@ mod tests {
             max_padding_frac: 0.0,
             allowed_blocked_microsec: 10, // NOTE
             max_blocking_frac: 0.0,       // NOTE, 0.0 here, 0.5 in framework below
-            states: vec![s0, s1],
+            states: vec![s0],
         };
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.5, 1500, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.5, current_time).unwrap();
 
         // trigger self to start the blocking (triggers action)
         _ = f.trigger_events(
@@ -1890,7 +1859,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m0, m1];
-        let mut f = Framework::new(&machines, 0.0, 0.0, 1500, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         // trigger to make machine 0 block
         _ = f.trigger_events(
@@ -1978,6 +1947,7 @@ mod tests {
         // then should be prevented from padding further by transitioning to
         // self
         let num_states = 2;
+        let packet_size: u16 = 1500;
 
         // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -2001,6 +1971,13 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
+        s1.action_dist = Dist {
+            dist: DistType::Uniform,
+            param1: packet_size as f64,
+            param2: packet_size as f64,
+            start: 0.0,
+            max: 0.0,
+        };
         s1.limit_dist = Dist {
             dist: DistType::Uniform,
             param1: 4.0,
@@ -2019,9 +1996,8 @@ mod tests {
         };
 
         let mut current_time = Instant::now();
-        let mtu = 1500;
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 1.0, 0.0, mtu, current_time).unwrap();
+        let mut f = Framework::new(&machines, 1.0, 0.0, current_time).unwrap();
 
         // trigger self to start the padding
         _ = f.trigger_events(
@@ -2037,7 +2013,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::InjectPadding {
                     timeout: Duration::from_micros(1),
-                    size: mtu as u16,
+                    size: packet_size,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -2046,7 +2022,7 @@ mod tests {
             current_time = current_time.add(Duration::from_micros(1));
             _ = f.trigger_events(
                 &[TriggerEvent::PaddingSent {
-                    bytes_sent: mtu as u16,
+                    bytes_sent: packet_size,
                     machine: MachineId(0),
                 }],
                 current_time,
@@ -2054,7 +2030,7 @@ mod tests {
         }
 
         // padding accounting correct
-        assert_eq!(f.runtime[0].padding_sent, (mtu as u64) * 4);
+        assert_eq!(f.runtime[0].padding_sent, (packet_size as u64) * 4);
         assert_eq!(f.runtime[0].nonpadding_sent, 100);
 
         // limit should be reached after 4 padding, blocking next action

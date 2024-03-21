@@ -69,13 +69,10 @@ impl State {
     }
 
     /// Sample a size for a padding action.
-    pub fn sample_size(&self, mtu: u64) -> u64 {
-        if self.action_dist.dist == DistType::None {
-            return mtu;
-        }
+    pub fn sample_size(&self) -> u64 {
         let s = self.action_dist.sample().round() as u64;
-        if s > mtu {
-            return mtu;
+        if s > MAXSAMPLEDPADDING {
+            return MAXSAMPLEDPADDING;
         }
         if s == 0 {
             // never send empty padding

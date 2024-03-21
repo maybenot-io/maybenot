@@ -25,8 +25,6 @@ pub enum Event {
     BlockingEnd,
     /// LimitReached is when a limit in a state is reached (internal).
     LimitReached,
-    /// UpdateMTU is when the MTU of the protected connection was updated.
-    UpdateMTU,
     /// CounterZero is when a machine's counter was decremented to zero.
     CounterZero,
     /// TimerEnd is when a machine's timer expired.
@@ -45,7 +43,7 @@ impl fmt::Display for Event {
 
 impl Event {
     pub fn iter() -> Iter<'static, Event> {
-        static EVENTS: [Event; 12] = [
+        static EVENTS: [Event; 11] = [
             NonPaddingRecv,
             PaddingRecv,
             NonPaddingSent,
@@ -53,7 +51,6 @@ impl Event {
             BlockingBegin,
             BlockingEnd,
             LimitReached,
-            UpdateMTU,
             CounterZero,
             TimerEnd,
             NonPaddingQueued,
@@ -78,8 +75,6 @@ pub enum TriggerEvent {
     BlockingBegin { machine: MachineId },
     /// Blocking of outgoing traffic stopped.
     BlockingEnd,
-    /// The MTU of the protected connection was updated.
-    UpdateMTU { new_mtu: u16 },
     /// A machine's counter was decremented to zero.
     CounterZero { machine: MachineId },
     /// A machine's timer expired.
@@ -103,7 +98,6 @@ impl TriggerEvent {
             TriggerEvent::PaddingSent { .. } => e == Event::PaddingSent,
             TriggerEvent::BlockingBegin { .. } => e == Event::BlockingBegin,
             TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
-            TriggerEvent::UpdateMTU { .. } => e == Event::UpdateMTU,
             TriggerEvent::CounterZero { .. } => e == Event::CounterZero,
             TriggerEvent::TimerEnd { .. } => e == Event::TimerEnd,
             TriggerEvent::NonPaddingQueued { .. } => e == Event::NonPaddingQueued,
@@ -122,7 +116,6 @@ impl fmt::Display for TriggerEvent {
             TriggerEvent::PaddingSent { bytes_sent, .. } => write!(f, "sp,{}", bytes_sent),
             TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
             TriggerEvent::BlockingEnd => write!(f, "be"),
-            TriggerEvent::UpdateMTU { new_mtu } => write!(f, "um,{}", new_mtu),
             TriggerEvent::CounterZero { .. } => write!(f, "cz"),
             TriggerEvent::TimerEnd { .. } => write!(f, "te"),
             TriggerEvent::NonPaddingQueued { bytes_queued } => write!(f, "qn,{}", bytes_queued),
@@ -143,7 +136,6 @@ mod tests {
         assert_eq!(Event::BlockingBegin.to_string(), "BlockingBegin");
         assert_eq!(Event::BlockingEnd.to_string(), "BlockingEnd");
         assert_eq!(Event::LimitReached.to_string(), "LimitReached");
-        assert_eq!(Event::UpdateMTU.to_string(), "UpdateMTU");
     }
 
     #[test]

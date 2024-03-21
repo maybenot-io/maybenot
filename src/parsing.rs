@@ -20,7 +20,7 @@ const SERIALIZEDDISTSIZE: usize = 2 + 8 * 4;
 
 // helper function to iterate over all v1 events
 fn v1_events_iter() -> Iter<'static, Event> {
-    static EVENTS: [Event; 8] = [
+    static EVENTS: [Event; 7] = [
         Event::NonPaddingRecv,
         Event::PaddingRecv,
         Event::NonPaddingSent,
@@ -28,7 +28,6 @@ fn v1_events_iter() -> Iter<'static, Event> {
         Event::BlockingBegin,
         Event::BlockingEnd,
         Event::LimitReached,
-        Event::UpdateMTU,
     ];
     EVENTS.iter()
 }
@@ -84,7 +83,7 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
 
     // each state has 3 distributions + 4 flags + next_state matrix
     let expected_state_len: usize =
-        3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * v1_events_iter().len();
+        3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * (v1_events_iter().len() + 1);
     if buf[r..].len() != expected_state_len * num_states {
         bail!(format!(
             "expected {} bytes for {} states, but got {} bytes",
@@ -114,7 +113,7 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
 
 pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
     // len: 3 distributions + 4 flags + next_state
-    if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * v1_events_iter().len() {
+    if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * (v1_events_iter().len() + 1) {
         bail!("too small")
     }
 

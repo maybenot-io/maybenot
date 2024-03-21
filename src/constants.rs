@@ -12,6 +12,10 @@ pub const MAX_DECOMPRESSED_SIZE: usize = 1 << 20;
 /// microseconds.
 pub const MAXSAMPLEDTIMEOUT: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 
+/// The maximum sampled padding size in a [`State`](crate::state), set to 20,000
+/// bytes for now.
+pub const MAXSAMPLEDPADDING: u64 = 20000;
+
 /// The maximum sampled blocking duration in a [`State`](crate::state), set to a
 /// day in microseconds.
 pub const MAXSAMPLEDBLOCK: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
