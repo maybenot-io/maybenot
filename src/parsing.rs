@@ -141,7 +141,7 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
         Action::InjectPadding { bypass, replace }
     };
 
-    let limit_includes_nonpadding: bool = buf[r] == 1;
+    //let limit_includes_nonpadding: bool = buf[r] == 1;
     r += 1;
 
     // next state
@@ -168,7 +168,6 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
         action_dist,
         limit_dist,
         action,
-        limit_includes_nonpadding,
         next_state,
     })
 }

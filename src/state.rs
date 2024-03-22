@@ -27,9 +27,6 @@ pub struct State {
     pub limit_dist: Dist,
     /// The action to be taken upon transition to this state.
     pub action: Action,
-    /// A flag that specifies if the sampled limit should also be decremented on
-    /// non-padding (normal) traffic sent.
-    pub limit_includes_nonpadding: bool,
     /// A map of all possible events to associated probability vectors. This is
     /// a transition matrix, so the length of the probability vector is a
     /// function of the total number of states in a machine. The structure of
@@ -49,7 +46,6 @@ impl State {
                 bypass: false,
                 replace: false,
             },
-            limit_includes_nonpadding: false,
             next_state: make_next_state(t, num_states),
         }
     }
@@ -91,11 +87,6 @@ impl fmt::Display for State {
         write!(f, "action_dist: {}", self.action_dist)?;
         write!(f, "limit_dist: {}", self.limit_dist)?;
         write!(f, "action: {:?}", self.action)?;
-        write!(
-            f,
-            "limit_includes_nonpadding: {}",
-            self.limit_includes_nonpadding
-        )?;
 
         // next_state: iterate over every possible event in order (because
         // HashMap is not stable), if found, print event and vector

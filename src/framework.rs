@@ -388,13 +388,10 @@ where
                     // the machine includes nonpadding sent packets, decrement the
                     // limit. If the state changed, a new limit was sampled and this
                     // packet shouldn't count.
-                    if self.transition(mi, Event::NonPaddingSent) == StateChange::Unchanged {
-                        let cs = self.runtime[mi].current_state;
-                        if cs != STATE_END
-                            && self.machines.as_ref()[mi].states[cs].limit_includes_nonpadding
-                        {
-                            self.decrement_limit(mi);
-                        }
+                    if self.transition(mi, Event::NonPaddingSent) == StateChange::Unchanged
+                        && self.runtime[mi].current_state != STATE_END
+                    {
+                        self.decrement_limit(mi);
                     }
                 }
             }
