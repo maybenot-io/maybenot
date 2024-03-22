@@ -1,7 +1,6 @@
 //! A machine determines when to inject and/or block outgoing traffic. Consists
 //! of one or more [`State`] structs.
 
-use crate::action::*;
 use crate::constants::*;
 use crate::state::*;
 use flate2::read::ZlibDecoder;
@@ -98,17 +97,6 @@ impl Machine {
 
         // check each state
         for (index, state) in self.states.iter().enumerate() {
-            // validate counter actions
-            if let Action::UpdateCounter { counter, .. } = &state.action {
-                if counter >= &COUNTERS_PER_MACHINE {
-                    bail!(
-                        "found UpdateCounter w/ id {}, has to be [0, {})",
-                        counter,
-                        COUNTERS_PER_MACHINE
-                    )
-                }
-            }
-
             // validate transitions
             for next in &state.next_state {
                 if next.1.len() != self.states.len() + 2 {
@@ -263,30 +251,6 @@ mod tests {
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_ok());
-
-        // counter update action with invalid id
-        s0.action = Action::UpdateCounter {
-            counter: COUNTERS_PER_MACHINE,
-            decrement: false,
-        };
-
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0.clone()],
-        };
-
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-
-        // repair state
-        s0.action = Action::InjectPadding {
-            bypass: false,
-            replace: false,
-        };
 
         // invalid machine lacking state
         let m = Machine {

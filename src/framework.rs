@@ -70,12 +70,11 @@
 //!         // or more actions to take, up to a maximum of one action per
 //!         // machine (regardless of the number of events). It is your
 //!         // responsibility to perform those actions according to the
-//!         // specification. To do so, you will need an action timer, machine
-//!         // timer, and two counters per machine. The machine identifier
-//!         // (machine in each TriggerAction) uniquely and deterministically
-//!         // maps to a single machine running in the framework (so suitable
-//!         // as a key for a data structure storing your timers, e.g. a
-//!         // HashMap<MachineId, SomeTimerDataStructure>), and counters.
+//!         // specification. To do so, you will need two timers per machine. The
+//!         // machine identifier (machine in each TriggerAction) uniquely and
+//!         // deterministicallymaps to a single machine running in the framework
+//!         // (so suitableas a key for a data structure storing your timers, e.g.
+//!         // a HashMap<MachineId, SomeTimerDataStructure>).
 //!         match action {
 //!             TriggerAction::Cancel { machine: _, timer: _ } => {
 //!                 // Cancel the specified timer (action, machine, or both) for the
@@ -163,22 +162,6 @@
 //!                 // available to check as part of dealing with
 //!                 // TriggerAction::InjectPadding actions (see above).
 //!             }
-//!             TriggerAction::UpdateCounter {
-//!                 value: _,
-//!                 counter: _,
-//!                 decrement: _,
-//!                 machine: _,
-//!             } => {
-//!                 // Each machine has two counters - update the one specified
-//!                 // by counter (will be 0 or 1). If decrement is true, subtract
-//!                 // the given value from the current counter value; otherwise,
-//!                 // add it. If the counter value is zero:
-//!                 //
-//!                 // 1. If the counter value was already zero, do nothing.
-//!                 // 2. If the counter value has decreased to zero, add
-//!                 //    TriggerEvent::CounterZero { machine: machine } to be
-//!                 //    triggered next loop iteration.
-//!             }
 //!             TriggerAction::UpdateTimer {
 //!                 duration: _,
 //!                 replace: _,
@@ -208,6 +191,7 @@ use simple_error::bail;
 
 use crate::action::*;
 use crate::constants::*;
+use crate::counter::*;
 use crate::dist::DistType;
 use crate::event::*;
 use crate::machine::*;
@@ -239,6 +223,8 @@ struct MachineRuntime {
     nonpadding_sent: u64,
     blocking_duration: Duration,
     machine_start: Instant,
+    counter_value_a: u64,
+    counter_value_b: u64,
 }
 
 #[derive(PartialEq)]
@@ -308,6 +294,8 @@ where
                 nonpadding_sent: 0,
                 blocking_duration: Duration::from_secs(0),
                 machine_start: current_time,
+                counter_value_a: 0,
+                counter_value_b: 0,
             };
             machines.as_ref().len()
         ];
@@ -439,12 +427,9 @@ where
                     self.transition(mi, Event::BlockingEnd);
                 }
             }
-            TriggerEvent::CounterZero { machine } => {
-                self.transition(machine.0, Event::CounterZero);
-            }
             TriggerEvent::TimerBegin { machine } => {
                 if self.transition(machine.0, Event::TimerBegin) == StateChange::Unchanged {
-                    // // decrement only makes sense if we didn't change state
+                    // decrement only makes sense if we didn't change state
                     self.decrement_limit(machine.0)
                 }
             }
@@ -474,15 +459,13 @@ where
     }
 
     fn transition(&mut self, mi: usize, event: Event) -> StateChange {
-        let machine = &self.machines.as_ref()[mi];
-
         // a machine in end state cannot transition
         if self.runtime[mi].current_state == STATE_END {
             return StateChange::Unchanged;
         }
 
         // sample next state
-        let (next_state, set) = self.next_state(&self.runtime[mi], machine, event);
+        let (next_state, set) = self.next_state(&self.runtime[mi], &self.machines.as_ref()[mi], event);
 
         // if no next state on event, done
         if !set {
@@ -508,22 +491,69 @@ where
             }
             _ => {
                 // transition to same or different state?
-                if self.runtime[mi].current_state == next_state {
-                    if self.below_action_limits(&self.runtime[mi], machine) {
-                        self.actions[mi] =
-                            self.schedule_action(&self.runtime[mi], machine, MachineId(mi));
+                let state_changed = if self.runtime[mi].current_state == next_state {
+                    StateChange::Unchanged
+                } else {
+                    self.runtime[mi].current_state = next_state;
+                    self.runtime[mi].state_limit = self.machines.as_ref()[mi].states[next_state].sample_limit();
+                    StateChange::Changed
+                };
+
+                // update the counter and check if transitioned
+                let (trans, zeroed) = self.update_counter(mi);
+                if zeroed {
+                    if trans == StateChange::Changed {
+                        return trans;
+                    } else {
+                        return state_changed;
                     }
-                    return StateChange::Unchanged;
                 }
-                self.runtime[mi].current_state = next_state;
-                self.runtime[mi].state_limit = machine.states[next_state].sample_limit();
-                if self.below_action_limits(&self.runtime[mi], machine) {
+
+                if self.below_action_limits(&self.runtime[mi], &self.machines.as_ref()[mi]) {
                     self.actions[mi] =
-                        self.schedule_action(&self.runtime[mi], machine, MachineId(mi));
+                        self.schedule_action(&self.runtime[mi], &self.machines.as_ref()[mi], MachineId(mi));
                 }
-                StateChange::Changed
+
+                state_changed
             }
         }
+    }
+
+    fn update_counter(
+        &mut self,
+        mi: usize,
+    ) -> (StateChange, bool) {
+        let current = &self.machines.as_ref()[mi].states[self.runtime[mi].current_state];
+
+        if let Some(update) = &current.counter_update {
+            let value = update.sample_value();
+            let counter = if update.counter == Counter::CounterA {
+                &mut self.runtime[mi].counter_value_a
+            } else {
+                &mut self.runtime[mi].counter_value_b
+            };
+            let already_zero = *counter == 0;
+
+            match update.operation {
+                CounterOperation::Increment => {
+                    *counter = counter.saturating_add(value);
+                }
+                CounterOperation::Decrement => {
+                    *counter = counter.saturating_sub(value);
+                }
+                CounterOperation::Set => {
+                    *counter = value;
+                }
+            }
+
+            if *counter == 0 && !already_zero {
+                self.actions[mi] = None;
+                let result = self.transition(mi, Event::CounterZero);
+                return (result, true);
+            }
+        }
+        // Do nothing if counter value is unchanged or not zero
+        (StateChange::Unchanged, false)
     }
 
     fn schedule_action(
@@ -547,12 +577,6 @@ where
                 duration: Duration::from_micros(current.sample_block() as u64),
                 bypass,
                 replace,
-                machine: mi,
-            }),
-            Action::UpdateCounter { counter, decrement } => Some(TriggerAction::UpdateCounter {
-                value: current.sample_counter_value(),
-                counter,
-                decrement,
                 machine: mi,
             }),
             Action::UpdateTimer { replace } => Some(TriggerAction::UpdateTimer {
@@ -978,129 +1002,6 @@ mod tests {
                 })
             );
         }
-    }
-
-    #[test]
-    fn counter_machine() {
-        // a machine that counts PaddingSent - NonPaddingSent
-        // use counter 1 for that, increment counter 0 on CounterZero
-        let num_states = 3;
-
-        // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e0: HashMap<usize, f64> = HashMap::new();
-        e0.insert(1, 1.0);
-        let mut e1: HashMap<usize, f64> = HashMap::new();
-        e1.insert(2, 1.0);
-        t.insert(Event::PaddingSent, e0);
-        t.insert(Event::CounterZero, e1);
-
-        let mut s0 = State::new(t, num_states);
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 1.0,
-            param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s0.action = Action::UpdateCounter {
-            counter: 1,
-            decrement: true,
-        };
-
-        // state 1
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::NonPaddingSent, e);
-
-        let mut s1 = State::new(t, num_states);
-        s1.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 1.0,
-            param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s1.action = Action::UpdateCounter {
-            counter: 1,
-            decrement: false,
-        };
-
-        // state 2
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e0: HashMap<usize, f64> = HashMap::new();
-        e0.insert(0, 1.0);
-        let mut e1: HashMap<usize, f64> = HashMap::new();
-        e1.insert(1, 1.0);
-        t.insert(Event::NonPaddingSent, e0);
-        t.insert(Event::PaddingSent, e1);
-
-        let mut s2 = State::new(t, num_states);
-        s2.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 1.0,
-            param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s2.action = Action::UpdateCounter {
-            counter: 0,
-            decrement: false,
-        };
-
-        // machine
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0, s1, s2],
-        };
-
-        let mut current_time = Instant::now();
-        let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
-
-        _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
-        assert_eq!(
-            f.actions[0],
-            Some(TriggerAction::UpdateCounter {
-                value: 1,
-                counter: 1,
-                decrement: false,
-                machine: MachineId(0),
-            })
-        );
-
-        current_time = current_time.add(Duration::from_micros(20));
-        _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
-        assert_eq!(
-            f.actions[0],
-            Some(TriggerAction::UpdateCounter {
-                value: 1,
-                counter: 1,
-                decrement: true,
-                machine: MachineId(0),
-            })
-        );
-
-        current_time = current_time.add(Duration::from_micros(20));
-        _ = f.trigger_events(
-            &[TriggerEvent::CounterZero {
-                machine: MachineId(0),
-            }],
-            current_time,
-        );
-        assert_eq!(
-            f.actions[0],
-            Some(TriggerAction::UpdateCounter {
-                value: 1,
-                counter: 0,
-                decrement: false,
-                machine: MachineId(0),
-            })
-        );
     }
 
     #[test]

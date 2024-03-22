@@ -78,8 +78,6 @@ pub enum TriggerEvent {
     BlockingBegin { machine: MachineId },
     /// Blocking of outgoing traffic stopped.
     BlockingEnd,
-    /// A machine's counter was decremented to zero.
-    CounterZero { machine: MachineId },
     /// A machine's timer started.
     TimerBegin { machine: MachineId },
     /// A machine's timer expired.
@@ -100,7 +98,6 @@ impl TriggerEvent {
             TriggerEvent::PaddingSent { .. } => e == Event::PaddingSent,
             TriggerEvent::BlockingBegin { .. } => e == Event::BlockingBegin,
             TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
-            TriggerEvent::CounterZero { .. } => e == Event::CounterZero,
             TriggerEvent::TimerBegin { .. } => e == Event::TimerBegin,
             TriggerEvent::TimerEnd { .. } => e == Event::TimerEnd,
             TriggerEvent::NonPaddingQueued => e == Event::NonPaddingQueued,
@@ -119,7 +116,6 @@ impl fmt::Display for TriggerEvent {
             TriggerEvent::PaddingSent { .. } => write!(f, "sp"),
             TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
             TriggerEvent::BlockingEnd => write!(f, "be"),
-            TriggerEvent::CounterZero { .. } => write!(f, "cz"),
             TriggerEvent::TimerBegin { .. } => write!(f, "tb"),
             TriggerEvent::TimerEnd { .. } => write!(f, "te"),
             TriggerEvent::NonPaddingQueued => write!(f, "qn"),

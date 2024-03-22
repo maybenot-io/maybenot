@@ -2,6 +2,7 @@
 
 use crate::action::*;
 use crate::constants::*;
+use crate::counter::CounterUpdate;
 use crate::dist::*;
 use crate::event::*;
 use serde::Deserialize;
@@ -27,6 +28,9 @@ pub struct State {
     pub limit_dist: Dist,
     /// The action to be taken upon transition to this state.
     pub action: Action,
+    /// On transition to this state, this struct will be used to determine how to
+    /// update the containing machine's counters.
+    pub counter_update: Option<CounterUpdate>,
     /// A map of all possible events to associated probability vectors. This is
     /// a transition matrix, so the length of the probability vector is a
     /// function of the total number of states in a machine. The structure of
@@ -46,6 +50,7 @@ impl State {
                 bypass: false,
                 replace: false,
             },
+            counter_update: None,
             next_state: make_next_state(t, num_states),
         }
     }
@@ -67,12 +72,6 @@ impl State {
     /// Sample a blocking duration for a blocking action.
     pub fn sample_block(&self) -> f64 {
         self.action_dist.sample().min(MAX_SAMPLED_BLOCK)
-    }
-
-    /// Sample a value for a counter update action.
-    pub fn sample_counter_value(&self) -> u64 {
-        let s = self.action_dist.sample().round() as u64;
-        s.min(MAX_SAMPLED_COUNTER_VALUE)
     }
 
     /// Sample a duration for a timer update action.

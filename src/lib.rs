@@ -17,6 +17,7 @@
 //! [`dist`], [`event`], and [`action`] before [`state`] and finally [`machine`].
 pub mod action;
 pub mod constants;
+pub mod counter;
 pub mod dist;
 pub mod event;
 pub mod framework;

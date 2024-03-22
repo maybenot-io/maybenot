@@ -40,15 +40,6 @@ pub enum Action {
     /// The replace flag determines if the action duration should replace any
     /// existing blocking.
     BlockOutgoing { bypass: bool, replace: bool },
-    /// Increment or decrement one of the counters associated with a machine.
-    ///
-    /// The counter field indicates which of the machine's counters should be
-    /// updated. It can be used for indexing and may not exceed
-    /// [`COUNTERSPERMACHINE`](crate::constants) minus one.
-    ///
-    /// The decrement flag, when set, specifies that counter updates subtract
-    /// from the counter's current value instead of adding to it.
-    UpdateCounter { counter: usize, decrement: bool },
     /// Update the timer duration for a machine.
     ///
     /// The replace flag determines if the action duration should replace the
@@ -94,20 +85,6 @@ pub enum TriggerAction {
         duration: Duration,
         bypass: bool,
         replace: bool,
-        machine: MachineId,
-    },
-    /// Update the value of one of the counters for a machine.
-    ///
-    /// The counter field indicates which of the machine's counters should be
-    /// updated. It ranges from zero to [`COUNTERSPERMACHINE`](crate::constants)
-    /// minus one and can be used for indexing.
-    ///
-    /// The decrement flag determines whether to add to or subtract from the
-    /// current counter value.
-    UpdateCounter {
-        value: u64,
-        counter: usize,
-        decrement: bool,
         machine: MachineId,
     },
     /// Update the timer duration for a machine.
