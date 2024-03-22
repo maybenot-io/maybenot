@@ -18,7 +18,7 @@ use crate::{
 // [`State`](crate::state) in v1.
 const SERIALIZEDDISTSIZE: usize = 2 + 8 * 4;
 
-// helper function to iterate over all v1 events
+// helper function to iterate over all supported v1 events
 fn v1_events_iter() -> Iter<'static, Event> {
     static EVENTS: [Event; 7] = [
         Event::NonPaddingRecv,
@@ -136,9 +136,20 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     r += 1;
 
     let action = if action_is_block {
-        Action::BlockOutgoing { bypass, replace }
+        Action::BlockOutgoing {
+            bypass,
+            replace,
+            timeout_dist,
+            action_dist,
+            limit_dist,
+        }
     } else {
-        Action::InjectPadding { bypass, replace }
+        Action::InjectPadding {
+            bypass,
+            replace,
+            timeout_dist,
+            limit_dist,
+        }
     };
 
     //let limit_includes_nonpadding: bool = buf[r] == 1;
@@ -164,10 +175,8 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     }
 
     Ok(State {
-        timeout_dist,
-        action_dist,
-        limit_dist,
-        action,
+        action: Some(action),
+        counter_update: None,
         next_state,
     })
 }
