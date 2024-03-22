@@ -1115,6 +1115,294 @@ mod tests {
     }
 
     #[test]
+    fn counter_machine() {
+        // a machine that counts PaddingSent - NonPaddingSent
+        // use counter A for that, pad and increment counter B on CounterZero
+        let num_states = 3;
+
+        // state 0
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e0: HashMap<usize, f64> = HashMap::new();
+        e0.insert(1, 1.0);
+        let mut e1: HashMap<usize, f64> = HashMap::new();
+        e1.insert(2, 1.0);
+        t.insert(Event::PaddingSent, e0);
+        t.insert(Event::CounterZero, e1);
+
+        let mut s0 = State::new(t, num_states);
+        s0.counter_update = Some(CounterUpdate {
+            counter: Counter::CounterA,
+            operation: CounterOperation::Decrement,
+            value_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 1.0,
+                param2: 1.0,
+                start: 0.0,
+                max: 0.0,
+            },
+        });
+
+        // state 1
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::NonPaddingSent, e);
+
+        let mut s1 = State::new(t, num_states);
+        s1.counter_update = Some(CounterUpdate {
+            counter: Counter::CounterA,
+            operation: CounterOperation::Increment,
+            value_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 1.0,
+                param2: 1.0,
+                start: 0.0,
+                max: 0.0,
+            },
+        });
+
+        // state 2
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e0: HashMap<usize, f64> = HashMap::new();
+        e0.insert(0, 1.0);
+        let mut e1: HashMap<usize, f64> = HashMap::new();
+        e1.insert(1, 1.0);
+        t.insert(Event::NonPaddingSent, e0);
+        t.insert(Event::PaddingSent, e1);
+
+        let mut s2 = State::new(t, num_states);
+        s2.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
+        });
+        s2.counter_update = Some(CounterUpdate {
+            counter: Counter::CounterB,
+            operation: CounterOperation::Increment,
+            value_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 4.0,
+                param2: 4.0,
+                start: 0.0,
+                max: 0.0,
+            },
+        });
+
+        // machine
+        let m = Machine {
+            allowed_padding_packets: 1000,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1, s2],
+        };
+
+        let mut current_time = Instant::now();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+
+        _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_value_a, 1);
+
+        current_time = current_time.add(Duration::from_micros(20));
+        _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
+        assert_eq!(
+            f.actions[0],
+            Some(TriggerAction::InjectPadding {
+                timeout: Duration::from_micros(2),
+                bypass: false,
+                replace: false,
+                machine: MachineId(0),
+            })
+        );
+        assert_eq!(f.runtime[0].counter_value_a, 0);
+        assert_eq!(f.runtime[0].counter_value_b, 4);
+    }
+
+    #[test]
+    fn counter_underflow_machine() {
+        // check that underflow of counter value cannot occur
+        // ensure CounterZero is not triggered when counter is already 0
+        let num_states = 3;
+
+        // state 0, decrement counter
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e0: HashMap<usize, f64> = HashMap::new();
+        e0.insert(0, 1.0);
+        let mut e1: HashMap<usize, f64> = HashMap::new();
+        e1.insert(1, 1.0);
+        let mut e2: HashMap<usize, f64> = HashMap::new();
+        e2.insert(2, 1.0);
+        t.insert(Event::NonPaddingSent, e0);
+        t.insert(Event::NonPaddingRecv, e1);
+        t.insert(Event::CounterZero, e2);
+
+        let mut s0 = State::new(t, num_states);
+        s0.counter_update = Some(CounterUpdate {
+            counter: Counter::CounterB,
+            operation: CounterOperation::Decrement, // NOTE
+            value_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+        });
+
+        // state 1, set counter
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e0: HashMap<usize, f64> = HashMap::new();
+        e0.insert(0, 1.0);
+        let mut e1: HashMap<usize, f64> = HashMap::new();
+        e1.insert(1, 1.0);
+        let mut e2: HashMap<usize, f64> = HashMap::new();
+        e2.insert(2, 1.0);
+        t.insert(Event::NonPaddingSent, e0);
+        t.insert(Event::NonPaddingRecv, e1);
+        t.insert(Event::CounterZero, e2);
+
+        let mut s1 = State::new(t, num_states);
+        s1.counter_update = Some(CounterUpdate {
+            counter: Counter::CounterB,
+            operation: CounterOperation::Set,
+            value_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 0.0, // NOTE
+                param2: 0.0,
+                start: 0.0,
+                max: 0.0,
+            },
+        });
+
+        // state 2, pad
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e0: HashMap<usize, f64> = HashMap::new();
+        e0.insert(0, 1.0);
+        let mut e1: HashMap<usize, f64> = HashMap::new();
+        e1.insert(1, 1.0);
+        t.insert(Event::NonPaddingSent, e0);
+        t.insert(Event::NonPaddingRecv, e1);
+
+        let mut s2 = State::new(t, num_states);
+        s2.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
+        });
+
+        // machine
+        let m = Machine {
+            allowed_padding_packets: 1000,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1, s2],
+        };
+
+        let current_time = Instant::now();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+
+        // decrement counter to 0
+        _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_value_b, 0);
+
+        // set counter to 0
+        _ = f.trigger_events(&[TriggerEvent::NonPaddingRecv], current_time);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_value_b, 0);
+    }
+
+    #[test]
+    fn counter_overflow_machine() {
+        // check that overflow of counter value cannot occur
+        // set to max value, then try to add and make sure no change
+        let num_states = 2;
+
+        // state 0, increment counter
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e0: HashMap<usize, f64> = HashMap::new();
+        e0.insert(0, 1.0);
+        let mut e1: HashMap<usize, f64> = HashMap::new();
+        e1.insert(1, 1.0);
+        t.insert(Event::NonPaddingSent, e0);
+        t.insert(Event::NonPaddingRecv, e1);
+
+        let mut s0 = State::new(t, num_states);
+        s0.counter_update = Some(CounterUpdate {
+            counter: Counter::CounterA,
+            operation: CounterOperation::Increment, // NOTE
+            value_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 1000.0,
+                param2: 1000.0,
+                start: 0.0,
+                max: 0.0,
+            },
+        });
+
+        // state 1, set counter
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e0: HashMap<usize, f64> = HashMap::new();
+        e0.insert(0, 1.0);
+        let mut e1: HashMap<usize, f64> = HashMap::new();
+        e1.insert(1, 1.0);
+        t.insert(Event::NonPaddingSent, e0);
+        t.insert(Event::NonPaddingRecv, e1);
+
+        let mut s1 = State::new(t, num_states);
+        s1.counter_update = Some(CounterUpdate {
+            counter: Counter::CounterA,
+            operation: CounterOperation::Set,
+            value_dist: Dist {
+                dist: DistType::Uniform,
+                param1: u64::MAX as f64, // NOTE
+                param2: u64::MAX as f64,
+                start: 0.0,
+                max: 0.0,
+            },
+        });
+
+        // machine
+        let m = Machine {
+            allowed_padding_packets: 1000,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1],
+        };
+
+        let current_time = Instant::now();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+
+        // set counter to u64::MAX
+        _ = f.trigger_events(&[TriggerEvent::NonPaddingRecv], current_time);
+        assert_eq!(f.runtime[0].counter_value_a, u64::MAX);
+
+        // try to increment counter by 1000
+        _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
+        assert_eq!(f.runtime[0].counter_value_a, u64::MAX);
+    }
+
+    #[test]
     fn machine_max_padding_frac() {
         // We create a machine that should be allowed to send 100 padding
         // packets before machine padding limits are applied, then the machine
