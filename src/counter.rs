@@ -9,7 +9,7 @@ use crate::dist::*;
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Counter {
     CounterA,
-    CounterB
+    CounterB,
 }
 
 /// The operation applied to a [`Machine`](crate::machine)'s counters upon

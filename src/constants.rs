@@ -41,7 +41,3 @@ pub const STATE_CANCEL: usize = STATE_END - 1;
 /// The maximum number of [`States`](crate::state) a [`Machine`](crate::machine)
 /// can have.
 pub const STATE_MAX: usize = STATE_CANCEL - 1;
-
-/// The number of counters available to each machine. This limits the IDs that
-/// can be specified in an UpdateCounter [`Action`](crate::action).
-pub const COUNTERS_PER_MACHINE: usize = 2;

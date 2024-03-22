@@ -63,8 +63,8 @@
 //!     let events = [TriggerEvent::NonPaddingSent];
 //!
 //!     // Trigger the events in the framework. This takes linear time with the
-//!     // number of events but is very fast (time should be dominated by at
-//!     // most four calls to sample randomness per event per machine).
+//!     // number of events but is very fast (time should be dominated by a few
+//!     // calls to sample randomness per event per machine).
 //!     for action in f.trigger_events(&events, Instant::now()) {
 //!         // After triggering all the events, the framework will provide zero
 //!         // or more actions to take, up to a maximum of one action per
@@ -72,8 +72,8 @@
 //!         // responsibility to perform those actions according to the
 //!         // specification. To do so, you will need two timers per machine. The
 //!         // machine identifier (machine in each TriggerAction) uniquely and
-//!         // deterministicallymaps to a single machine running in the framework
-//!         // (so suitableas a key for a data structure storing your timers, e.g.
+//!         // deterministically maps to a single machine running in the framework
+//!         // (so suitable as a key for a data structure storing your timers, e.g.
 //!         // a HashMap<MachineId, SomeTimerDataStructure>).
 //!         match action {
 //!             TriggerAction::Cancel { machine: _, timer: _ } => {
@@ -111,11 +111,11 @@
 //!                 // application data (non-padding) enqueued to be sent. In both
 //!                 // cases, the replaced data MAY be of the same size as the
 //!                 // padding. Regardless of if the padding is replaced or not,
-//!                 // the events should still be triggered (steps 1/3). If enqueued
+//!                 // the events should still be triggered (steps 2/3). If enqueued
 //!                 // non-padding is sent instead of padding, then NonPaddingSent
 //!                 // should be triggered as well.
 //!                 //
-//!                 // Above, note the use-case of having bypass and replace set to
+//!                 // Above, note the use case of having bypass and replace set to
 //!                 // true. This is to support constant-rate defenses.
 //!                 //
 //!                 // Also, note that if there already is an action timer for an
@@ -265,7 +265,7 @@ where
     /// [`Machine::allowed_padding_packets`] and
     /// [`Machine::allowed_blocked_microsec`], respectively. The current time is
     /// handed to the framework here (and later in [`Self::trigger_events()`]) to
-    /// make some types of use-cases of the framework easier (weird machines and
+    /// make some types of use cases of the framework easier (weird machines and
     /// for simulation). Returns an error on any invalid [`Machine`] or limits
     /// not being fractions [0, 1.0].
     pub fn new(
@@ -468,7 +468,8 @@ where
         }
 
         // sample next state
-        let (next_state, set) = self.next_state(&self.runtime[mi], &self.machines.as_ref()[mi], event);
+        let (next_state, set) =
+            self.next_state(&self.runtime[mi], &self.machines.as_ref()[mi], event);
 
         // if no next state on event, done
         if !set {
@@ -498,7 +499,9 @@ where
                     StateChange::Unchanged
                 } else {
                     self.runtime[mi].current_state = next_state;
-                    self.runtime[mi].state_limit = if let Some(action) = self.machines.as_ref()[mi].states[next_state].action {
+                    self.runtime[mi].state_limit = if let Some(action) =
+                        self.machines.as_ref()[mi].states[next_state].action
+                    {
                         action.sample_limit()
                     } else {
                         STATE_LIMIT_MAX
@@ -517,8 +520,11 @@ where
                 }
 
                 if self.below_action_limits(&self.runtime[mi], &self.machines.as_ref()[mi]) {
-                    self.actions[mi] =
-                        self.schedule_action(&self.runtime[mi], &self.machines.as_ref()[mi], MachineId(mi));
+                    self.actions[mi] = self.schedule_action(
+                        &self.runtime[mi],
+                        &self.machines.as_ref()[mi],
+                        MachineId(mi),
+                    );
                 }
 
                 state_changed
@@ -526,10 +532,7 @@ where
         }
     }
 
-    fn update_counter(
-        &mut self,
-        mi: usize,
-    ) -> (StateChange, bool) {
+    fn update_counter(&mut self, mi: usize) -> (StateChange, bool) {
         let current = &self.machines.as_ref()[mi].states[self.runtime[mi].current_state];
 
         if let Some(update) = &current.counter_update {
@@ -574,13 +577,17 @@ where
 
         match action {
             Action::Cancel { timer } => Some(TriggerAction::Cancel { machine: mi, timer }),
-            Action::InjectPadding { bypass, replace, .. } => Some(TriggerAction::InjectPadding {
+            Action::InjectPadding {
+                bypass, replace, ..
+            } => Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(action.sample_timeout().unwrap() as u64),
                 bypass,
                 replace,
                 machine: mi,
             }),
-            Action::BlockOutgoing { bypass, replace, .. } => Some(TriggerAction::BlockOutgoing {
+            Action::BlockOutgoing {
+                bypass, replace, ..
+            } => Some(TriggerAction::BlockOutgoing {
                 timeout: Duration::from_micros(action.sample_timeout().unwrap() as u64),
                 duration: Duration::from_micros(action.sample_duration().unwrap() as u64),
                 bypass,
@@ -600,7 +607,6 @@ where
             self.runtime[mi].state_limit -= 1;
         }
         let cs = self.runtime[mi].current_state;
-
 
         if let Some(action) = self.machines.as_ref()[mi].states[cs].action {
             if !action.is_limit_none() && self.runtime[mi].state_limit == 0 {

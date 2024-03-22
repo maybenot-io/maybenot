@@ -183,7 +183,7 @@ mod tests {
         // invalid state transition
         e.insert(1, 1.0);
         t.insert(Event::PaddingSent, e);
-        
+
         let mut s0 = State::new(t, num_states);
         s0.action = Some(Action::InjectPadding {
             bypass: false,

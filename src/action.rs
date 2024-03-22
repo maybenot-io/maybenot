@@ -70,12 +70,13 @@ impl Action {
     /// Sample a timeout.
     pub fn sample_timeout(&self) -> Result<f64, Box<dyn Error + Send + Sync>> {
         match self {
-            Action::InjectPadding { timeout_dist, .. } | Action::BlockOutgoing { timeout_dist, .. } => {
+            Action::InjectPadding { timeout_dist, .. }
+            | Action::BlockOutgoing { timeout_dist, .. } => {
                 Ok(timeout_dist.sample().min(MAX_SAMPLED_TIMEOUT))
-            },
+            }
             _ => {
                 bail!("can only sample a timeout for InjectPadding and BlockOutgoing actions");
-            },
+            }
         }
     }
 
@@ -84,26 +85,28 @@ impl Action {
         match self {
             Action::BlockOutgoing { action_dist, .. } => {
                 Ok(action_dist.sample().min(MAX_SAMPLED_BLOCK_DURATION))
-            },
+            }
             Action::UpdateTimer { action_dist, .. } => {
                 Ok(action_dist.sample().min(MAX_SAMPLED_TIMER_DURATION))
-            },
+            }
             _ => {
-                bail!("can only sample a duration for BlockOutgoing and TimerUpdate actions");
-            },
+                bail!("can only sample a duration for BlockOutgoing and UpdateTimer actions");
+            }
         }
     }
 
     /// Sample a limit.
     pub fn sample_limit(&self) -> u64 {
         match self {
-            Action::InjectPadding { limit_dist, .. } | Action::BlockOutgoing { limit_dist, .. } | Action::UpdateTimer { limit_dist, .. } => {
+            Action::InjectPadding { limit_dist, .. }
+            | Action::BlockOutgoing { limit_dist, .. }
+            | Action::UpdateTimer { limit_dist, .. } => {
                 if limit_dist.dist == DistType::None {
                     return STATE_LIMIT_MAX;
                 }
                 let s = limit_dist.sample().round() as u64;
                 s.min(STATE_LIMIT_MAX)
-            },
+            }
             _ => STATE_LIMIT_MAX,
         }
     }
@@ -111,9 +114,9 @@ impl Action {
     /// Returns true if this action does not support limits or if its action dist is DistType::None.
     pub fn is_limit_none(&self) -> bool {
         match self {
-            Action::InjectPadding { limit_dist, .. } | Action::BlockOutgoing { limit_dist, .. } | Action::UpdateTimer { limit_dist, .. } => {
-                limit_dist.dist == DistType::None
-            },
+            Action::InjectPadding { limit_dist, .. }
+            | Action::BlockOutgoing { limit_dist, .. }
+            | Action::UpdateTimer { limit_dist, .. } => limit_dist.dist == DistType::None,
             _ => true,
         }
     }
