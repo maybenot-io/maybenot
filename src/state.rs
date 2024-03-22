@@ -40,6 +40,7 @@ impl State {
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "action: {:?}", self.action)?;
+        write!(f, "counter update: {:?}", self.counter_update)?;
 
         // next_state: iterate over every possible event in order (because
         // HashMap is not stable), if found, print event and vector
