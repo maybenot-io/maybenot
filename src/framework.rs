@@ -564,7 +564,7 @@ where
     ) -> Option<TriggerAction> {
         let current = &machine.states[runtime.current_state];
 
-        match current.action {
+        match current.action? {
             Action::Cancel { timer } => Some(TriggerAction::Cancel { machine: mi, timer }),
             Action::InjectPadding { bypass, replace } => Some(TriggerAction::InjectPadding {
                 timeout: Duration::from_micros(current.sample_timeout() as u64),
@@ -636,8 +636,13 @@ where
 
     fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
-        // either blocking or padding limits apply
-        match current.action {
+
+        if current.action.is_none() {
+            // This could be true, but no need for an extra call to schedule_action()
+            return false;
+        }
+
+        match current.action.unwrap() {
             Action::BlockOutgoing { .. } => self.below_limit_blocking(runtime, machine),
             Action::InjectPadding { .. } => self.below_limit_padding(runtime, machine),
             Action::UpdateTimer { .. } => runtime.state_limit > 0,
@@ -650,7 +655,7 @@ where
         // blocking action
 
         // special case: we always allow overwriting existing blocking
-        let replace = if let Action::BlockOutgoing { replace, .. } = current.action {
+        let replace = if let Some(Action::BlockOutgoing { replace, .. }) = current.action {
             replace
         } else {
             false
@@ -786,6 +791,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
+        s0.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+        });
 
         // state 1: go to state 0 on PaddingRecv, pad after 1 usec
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -801,6 +810,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
+        s1.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+        });
 
         // create a simple machine
         let m = Machine {
@@ -949,10 +962,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        s0.action = Action::BlockOutgoing {
+        s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
-        };
+        });
 
         // machine
         let m = Machine {
@@ -1023,6 +1036,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
+        s0.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+        });
 
         // state 1
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
@@ -1038,7 +1055,7 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        s1.action = Action::UpdateTimer { replace: false };
+        s1.action = Some(Action::UpdateTimer { replace: false });
 
         // machine
         let m = Machine {
@@ -1107,6 +1124,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
+        s0.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+        });
 
         // machine
         let m = Machine {
@@ -1195,6 +1216,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
+        s0.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+        });
 
         // machines
         let m1 = Machine {
@@ -1328,10 +1353,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        s0.action = Action::BlockOutgoing {
+        s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
-        };
+        });
 
         // machine
         let m = Machine {
@@ -1442,10 +1467,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        s0.action = Action::BlockOutgoing {
+        s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
-        };
+        });
 
         // machine
         let m = Machine {
@@ -1554,10 +1579,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        s0.action = Action::BlockOutgoing {
+        s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: true, // NOTE
-        };
+        });
 
         // machine 0
         let m0 = Machine {
@@ -1590,10 +1615,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        s0.action = Action::BlockOutgoing {
+        s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
-        };
+        });
 
         // machine 1
         let m1 = Machine {
@@ -1712,6 +1737,10 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
+        s1.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+        });
 
         // machine
         let m = Machine {

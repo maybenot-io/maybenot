@@ -27,7 +27,7 @@ pub struct State {
     /// repeated transitions to the same state is sampled.
     pub limit_dist: Dist,
     /// The action to be taken upon transition to this state.
-    pub action: Action,
+    pub action: Option<Action>,
     /// On transition to this state, this struct will be used to determine how to
     /// update the containing machine's counters.
     pub counter_update: Option<CounterUpdate>,
@@ -46,10 +46,7 @@ impl State {
             timeout_dist: Dist::new(),
             action_dist: Dist::new(),
             limit_dist: Dist::new(),
-            action: Action::InjectPadding {
-                bypass: false,
-                replace: false,
-            },
+            action: None,
             counter_update: None,
             next_state: make_next_state(t, num_states),
         }
