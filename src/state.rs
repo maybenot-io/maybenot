@@ -3,7 +3,6 @@
 use crate::action::*;
 use crate::constants::*;
 use crate::counter::CounterUpdate;
-use crate::dist::*;
 use crate::event::*;
 use serde::Deserialize;
 use serde::Serialize;
@@ -14,18 +13,6 @@ extern crate simple_error;
 /// A state as part of a [`Machine`](crate::machine).
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct State {
-    /// On transition to this state, this distribution will be sampled for a
-    /// timeout duration after which the action is triggered. This distribution
-    /// is ignored for timer and counter actions.
-    pub timeout_dist: Dist,
-    /// A distribution from which a value for the action is sampled. If
-    /// padding, this is the size of the padding packet; if blocking, it is
-    /// the duration of the blocking. For timer and counter actions, it is the
-    /// value to set the timer to or add/subtract from the counter.
-    pub action_dist: Dist,
-    /// A distribution from which a limit on the number of actions allowed on
-    /// repeated transitions to the same state is sampled.
-    pub limit_dist: Dist,
     /// The action to be taken upon transition to this state.
     pub action: Option<Action>,
     /// On transition to this state, this struct will be used to determine how to
@@ -43,45 +30,15 @@ impl State {
     /// and number of total states in the [`Machine`](crate::machine).
     pub fn new(t: HashMap<Event, HashMap<usize, f64>>, num_states: usize) -> Self {
         State {
-            timeout_dist: Dist::new(),
-            action_dist: Dist::new(),
-            limit_dist: Dist::new(),
             action: None,
             counter_update: None,
             next_state: make_next_state(t, num_states),
         }
     }
-
-    /// Sample a timeout.
-    pub fn sample_timeout(&self) -> f64 {
-        self.timeout_dist.sample().min(MAX_SAMPLED_TIMEOUT)
-    }
-
-    /// Sample a limit.
-    pub fn sample_limit(&self) -> u64 {
-        if self.limit_dist.dist == DistType::None {
-            return STATE_LIMIT_MAX;
-        }
-        let s = self.limit_dist.sample().round() as u64;
-        s.min(STATE_LIMIT_MAX)
-    }
-
-    /// Sample a blocking duration for a blocking action.
-    pub fn sample_block(&self) -> f64 {
-        self.action_dist.sample().min(MAX_SAMPLED_BLOCK)
-    }
-
-    /// Sample a duration for a timer update action.
-    pub fn sample_timer_duration(&self) -> f64 {
-        self.action_dist.sample().min(MAX_SAMPLED_TIMER_DURATION)
-    }
 }
 
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "timeout_dist: {}", self.timeout_dist)?;
-        write!(f, "action_dist: {}", self.action_dist)?;
-        write!(f, "limit_dist: {}", self.limit_dist)?;
         write!(f, "action: {:?}", self.action)?;
 
         // next_state: iterate over every possible event in order (because
@@ -97,6 +54,7 @@ impl fmt::Display for State {
         Ok(())
     }
 }
+
 /// A helper used to construct [`State::next_state`] based on a map of
 /// transitions ([`Event`] to probability vector) and the total number of states
 /// in the [`Machine`](crate::machine).

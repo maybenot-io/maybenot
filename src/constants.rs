@@ -10,7 +10,7 @@ pub const MAX_DECOMPRESSED_SIZE: usize = 1 << 20;
 
 /// The maximum sampled blocking duration in a [`State`](crate::state), set to a
 /// day in microseconds.
-pub const MAX_SAMPLED_BLOCK: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
+pub const MAX_SAMPLED_BLOCK_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 
 /// The maximum sampled counter value in a [`State`](crate::state), which is
 /// currently effectively unlimited in practice.

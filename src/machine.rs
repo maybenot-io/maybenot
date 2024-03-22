@@ -130,9 +130,9 @@ impl Machine {
             }
 
             // validate distribution parameters
-            state.action_dist.validate()?;
-            state.limit_dist.validate()?;
-            state.timeout_dist.validate()?;
+            //state.action_dist.validate()?;
+            //state.limit_dist.validate()?;
+            //state.timeout_dist.validate()?;
         }
 
         Ok(())
@@ -168,6 +168,7 @@ impl FromStr for Machine {
 
 #[cfg(test)]
 mod tests {
+    use crate::action::*;
     use crate::dist::*;
     use crate::event::Event;
     use crate::machine::*;
@@ -182,21 +183,20 @@ mod tests {
         // invalid state transition
         e.insert(1, 1.0);
         t.insert(Event::PaddingSent, e);
+        
         let mut s0 = State::new(t, num_states);
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 10.0,
-            param2: 10.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 10.0,
-            param2: 10.0,
-            start: 0.0,
-            max: 0.0,
-        };
+        s0.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
+        });
 
         // machine with broken state
         let m = Machine {
@@ -219,8 +219,10 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.1);
         t.insert(Event::PaddingSent, e);
+
         s0.next_state = make_next_state(t, num_states);
 
+        // machine with broken state
         let m = Machine {
             allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
@@ -228,7 +230,7 @@ mod tests {
             max_blocking_frac: 0.0,
             states: vec![s0.clone()],
         };
-
+        // we get the expected error here
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
@@ -238,6 +240,7 @@ mod tests {
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::PaddingSent, e);
+
         s0.next_state = make_next_state(t, num_states);
 
         let m = Machine {

@@ -192,7 +192,6 @@ use simple_error::bail;
 use crate::action::*;
 use crate::constants::*;
 use crate::counter::*;
-use crate::dist::DistType;
 use crate::event::*;
 use crate::machine::*;
 use std::cmp::Ordering;
@@ -301,7 +300,11 @@ where
         ];
 
         for (mi, r) in runtime.iter_mut().enumerate() {
-            r.state_limit = machines.as_ref()[mi].states[0].sample_limit();
+            let opt_action = machines.as_ref()[mi].states[0].action;
+
+            if let Some(action) = opt_action {
+                r.state_limit = action.sample_limit();
+            }
         }
 
         let actions = vec![None; machines.as_ref().len()];
@@ -495,7 +498,11 @@ where
                     StateChange::Unchanged
                 } else {
                     self.runtime[mi].current_state = next_state;
-                    self.runtime[mi].state_limit = self.machines.as_ref()[mi].states[next_state].sample_limit();
+                    self.runtime[mi].state_limit = if let Some(action) = self.machines.as_ref()[mi].states[next_state].action {
+                        action.sample_limit()
+                    } else {
+                        STATE_LIMIT_MAX
+                    };
                     StateChange::Changed
                 };
 
@@ -563,24 +570,25 @@ where
         mi: MachineId,
     ) -> Option<TriggerAction> {
         let current = &machine.states[runtime.current_state];
+        let action = current.action?;
 
-        match current.action? {
+        match action {
             Action::Cancel { timer } => Some(TriggerAction::Cancel { machine: mi, timer }),
-            Action::InjectPadding { bypass, replace } => Some(TriggerAction::InjectPadding {
-                timeout: Duration::from_micros(current.sample_timeout() as u64),
+            Action::InjectPadding { bypass, replace, .. } => Some(TriggerAction::InjectPadding {
+                timeout: Duration::from_micros(action.sample_timeout().unwrap() as u64),
                 bypass,
                 replace,
                 machine: mi,
             }),
-            Action::BlockOutgoing { bypass, replace } => Some(TriggerAction::BlockOutgoing {
-                timeout: Duration::from_micros(current.sample_timeout() as u64),
-                duration: Duration::from_micros(current.sample_block() as u64),
+            Action::BlockOutgoing { bypass, replace, .. } => Some(TriggerAction::BlockOutgoing {
+                timeout: Duration::from_micros(action.sample_timeout().unwrap() as u64),
+                duration: Duration::from_micros(action.sample_duration().unwrap() as u64),
                 bypass,
                 replace,
                 machine: mi,
             }),
-            Action::UpdateTimer { replace } => Some(TriggerAction::UpdateTimer {
-                duration: Duration::from_micros(current.sample_timer_duration() as u64),
+            Action::UpdateTimer { replace, .. } => Some(TriggerAction::UpdateTimer {
+                duration: Duration::from_micros(action.sample_duration().unwrap() as u64),
                 replace,
                 machine: mi,
             }),
@@ -593,13 +601,14 @@ where
         }
         let cs = self.runtime[mi].current_state;
 
-        if self.runtime[mi].state_limit == 0
-            && self.machines.as_ref()[mi].states[cs].limit_dist.dist != DistType::None
-        {
-            // take no action and trigger limit reached
-            self.actions[mi] = None;
-            // next, we trigger internally event LimitReached
-            self.transition(mi, Event::LimitReached);
+
+        if let Some(action) = self.machines.as_ref()[mi].states[cs].action {
+            if !action.is_limit_none() && self.runtime[mi].state_limit == 0 {
+                // take no action and trigger limit reached
+                self.actions[mi] = None;
+                // next, we trigger internally event LimitReached
+                self.transition(mi, Event::LimitReached);
+            }
         }
     }
 
@@ -784,16 +793,17 @@ mod tests {
         t.insert(Event::PaddingSent, e);
 
         let mut s0 = State::new(t, num_states);
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 10.0,
-            param2: 10.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s0.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
         });
 
         // state 1: go to state 0 on PaddingRecv, pad after 1 usec
@@ -803,16 +813,17 @@ mod tests {
         t.insert(Event::PaddingRecv, e);
 
         let mut s1 = State::new(t, num_states);
-        s1.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 1.0,
-            param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s1.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 1.0,
+                param2: 1.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
         });
 
         // create a simple machine
@@ -948,23 +959,24 @@ mod tests {
         t.insert(Event::NonPaddingSent, e);
 
         let mut s0 = State::new(t, 1);
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 1.0,
-            param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 10.0,
-            param2: 10.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 1.0,
+                param2: 1.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            action_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
         });
 
         // machine
@@ -1029,16 +1041,17 @@ mod tests {
         t.insert(Event::PaddingSent, e);
 
         let mut s0 = State::new(t, num_states);
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 1.0,
-            param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s0.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 1.0,
+                param2: 1.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
         });
 
         // state 1
@@ -1048,14 +1061,17 @@ mod tests {
         t.insert(Event::TimerEnd, e);
 
         let mut s1 = State::new(t, num_states);
-        s1.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 1000.0, // 1 ms
-            param2: 1000.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s1.action = Some(Action::UpdateTimer { replace: false });
+        s1.action = Some(Action::UpdateTimer {
+            replace: false,
+            action_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 1000.0, // 1 ms
+                param2: 1000.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
+        });
 
         // machine
         let m = Machine {
@@ -1117,16 +1133,17 @@ mod tests {
         t.insert(Event::NonPaddingRecv, e.clone());
 
         let mut s0 = State::new(t, 1);
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 2.0,
-            param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s0.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
         });
 
         // machine
@@ -1209,16 +1226,17 @@ mod tests {
         t.insert(Event::NonPaddingRecv, e.clone());
 
         let mut s0 = State::new(t, 1);
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 2.0,
-            param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s0.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
         });
 
         // machines
@@ -1339,23 +1357,24 @@ mod tests {
 
         let mut s0 = State::new(t, 1);
         // block every 2us for 2us
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 2.0,
-            param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 2.0,
-            param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            action_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
         });
 
         // machine
@@ -1453,23 +1472,24 @@ mod tests {
 
         let mut s0 = State::new(t, 1);
         // block every 2us for 2us
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 2.0,
-            param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 2.0,
-            param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            action_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
         });
 
         // machine
@@ -1565,23 +1585,24 @@ mod tests {
 
         let mut s0 = State::new(t, 1);
         // block every 2us for 2us
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 2.0,
-            param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 2.0,
-            param2: 2.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: true, // NOTE
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            action_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0,
+                param2: 2.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
         });
 
         // machine 0
@@ -1601,23 +1622,24 @@ mod tests {
 
         let mut s0 = State::new(t, 1);
         // block instantly for 1000us
-        s0.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 0.0,
-            param2: 0.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s0.action_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 1000.0,
-            param2: 1000.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 0.0,
+                param2: 0.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            action_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 1000.0,
+                param2: 1000.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
         });
 
         // machine 1
@@ -1723,23 +1745,23 @@ mod tests {
         t.insert(Event::PaddingQueued, e);
 
         let mut s1 = State::new(t, num_states);
-        s1.timeout_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 1.0,
-            param2: 1.0,
-            start: 0.0,
-            max: 0.0,
-        };
-        s1.limit_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 4.0,
-            param2: 4.0,
-            start: 0.0,
-            max: 0.0,
-        };
         s1.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 1.0,
+                param2: 1.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 4.0,
+                param2: 4.0,
+                start: 0.0,
+                max: 0.0,
+            },
         });
 
         // machine
