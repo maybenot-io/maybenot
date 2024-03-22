@@ -130,9 +130,9 @@ impl Machine {
             }
 
             // validate distribution parameters
-            //state.action_dist.validate()?;
-            //state.limit_dist.validate()?;
-            //state.timeout_dist.validate()?;
+            if let Some(action) = state.action {
+                action.validate()?;
+            }
         }
 
         Ok(())

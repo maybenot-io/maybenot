@@ -120,6 +120,41 @@ impl Action {
             _ => true,
         }
     }
+
+    /// Validate all distributions contained in this action, if any.
+    pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        match self {
+            Action::InjectPadding {
+                timeout_dist,
+                limit_dist,
+                ..
+            } => {
+                timeout_dist.validate()?;
+                limit_dist.validate()?;
+            }
+            Action::BlockOutgoing {
+                timeout_dist,
+                action_dist,
+                limit_dist,
+                ..
+            } => {
+                timeout_dist.validate()?;
+                action_dist.validate()?;
+                limit_dist.validate()?;
+            }
+            Action::UpdateTimer {
+                action_dist,
+                limit_dist,
+                ..
+            } => {
+                action_dist.validate()?;
+                limit_dist.validate()?;
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
 }
 
 /// The action to be taken by the framework user.
