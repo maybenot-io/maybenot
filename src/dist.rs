@@ -206,7 +206,7 @@ impl Dist {
             DistType::None => {}
             DistType::Uniform => {
                 if self.param1 > self.param2 {
-                    bail!("for Uniform dist, got param2 > param1")
+                    bail!("for Uniform dist, got param1 > param2")
                 }
             }
             DistType::Normal => {

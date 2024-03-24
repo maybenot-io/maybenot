@@ -223,3 +223,326 @@ pub enum TriggerAction {
         machine: MachineId,
     },
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::action::*;
+
+    #[test]
+    fn validate_cancel_action() {
+        // always valid
+
+        // action timer
+        let a = Action::Cancel {
+            timer: Timer::Action,
+        };
+
+        let r = a.validate();
+        assert!(r.is_ok());
+        assert!(a.is_limit_none());
+
+        // machine timer
+        let a = Action::Cancel {
+            timer: Timer::Machine,
+        };
+
+        let r = a.validate();
+        assert!(r.is_ok());
+        assert!(a.is_limit_none());
+
+        // all timers
+        let a = Action::Cancel { timer: Timer::All };
+
+        let r = a.validate();
+        assert!(r.is_ok());
+        assert!(a.is_limit_none());
+    }
+
+    #[test]
+    fn validate_padding_action() {
+        // valid InjectPadding action
+        let mut a = Action::InjectPadding {
+            bypass: false,
+            replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist {
+                dist: DistType::Normal,
+                param1: 50.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+        };
+
+        let r = a.validate();
+        assert!(r.is_ok());
+        assert!(!a.is_limit_none());
+
+        // timeout dist DistType::None, not allowed
+        if let Action::InjectPadding { timeout_dist, .. } = &mut a {
+            *timeout_dist = Dist::new();
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+
+        // invalid timeout dist, not allowed
+        if let Action::InjectPadding { timeout_dist, .. } = &mut a {
+            *timeout_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 15.0, // NOTE param1 > param2
+                param2: 5.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+
+        // repair timeout dist
+        if let Action::InjectPadding { timeout_dist, .. } = &mut a {
+            *timeout_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        // limit dist DistType::None, this is OK
+        if let Action::InjectPadding { limit_dist, .. } = &mut a {
+            *limit_dist = Dist::new();
+        }
+
+        let r = a.validate();
+        assert!(r.is_ok());
+        assert!(a.is_limit_none());
+
+        // invalid limit dist, not allowed
+        if let Action::InjectPadding { limit_dist, .. } = &mut a {
+            *limit_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 15.0, // NOTE param1 > param2
+                param2: 5.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_blocking_action() {
+        // valid BlockOutgoing action
+        let mut a = Action::BlockOutgoing {
+            bypass: false,
+            replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            action_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist {
+                dist: DistType::Normal,
+                param1: 50.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+        };
+
+        let r = a.validate();
+        assert!(r.is_ok());
+        assert!(!a.is_limit_none());
+
+        // timeout dist DistType::None, not allowed
+        if let Action::BlockOutgoing { timeout_dist, .. } = &mut a {
+            *timeout_dist = Dist::new();
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+
+        // invalid timeout dist, not allowed
+        if let Action::BlockOutgoing { timeout_dist, .. } = &mut a {
+            *timeout_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 15.0, // NOTE param1 > param2
+                param2: 5.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+
+        // repair timeout dist
+        if let Action::BlockOutgoing { timeout_dist, .. } = &mut a {
+            *timeout_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        // action dist DistType::None, not allowed
+        if let Action::BlockOutgoing { action_dist, .. } = &mut a {
+            *action_dist = Dist::new();
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+
+        // invalid action dist, not allowed
+        if let Action::BlockOutgoing { action_dist, .. } = &mut a {
+            *action_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 15.0, // NOTE param1 > param2
+                param2: 5.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+
+        // repair action dist
+        if let Action::BlockOutgoing { action_dist, .. } = &mut a {
+            *action_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        // limit dist DistType::None, this is OK
+        if let Action::BlockOutgoing { limit_dist, .. } = &mut a {
+            *limit_dist = Dist::new();
+        }
+
+        let r = a.validate();
+        assert!(r.is_ok());
+        assert!(a.is_limit_none());
+
+        // invalid limit dist, not allowed
+        if let Action::BlockOutgoing { limit_dist, .. } = &mut a {
+            *limit_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 15.0, // NOTE param1 > param2
+                param2: 5.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_update_timer_action() {
+        // valid UpdateTimer action
+        let mut a = Action::UpdateTimer {
+            replace: true,
+            action_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist {
+                dist: DistType::Normal,
+                param1: 50.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+        };
+
+        let r = a.validate();
+        assert!(r.is_ok());
+        assert!(!a.is_limit_none());
+
+        // action dist DistType::None, not allowed
+        if let Action::UpdateTimer { action_dist, .. } = &mut a {
+            *action_dist = Dist::new();
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+
+        // invalid action dist, not allowed
+        if let Action::UpdateTimer { action_dist, .. } = &mut a {
+            *action_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 15.0, // NOTE param1 > param2
+                param2: 5.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+
+        // repair action dist
+        if let Action::UpdateTimer { action_dist, .. } = &mut a {
+            *action_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        // limit dist DistType::None, this is OK
+        if let Action::UpdateTimer { limit_dist, .. } = &mut a {
+            *limit_dist = Dist::new();
+        }
+
+        let r = a.validate();
+        assert!(r.is_ok());
+        assert!(a.is_limit_none());
+
+        // invalid limit dist, not allowed
+        if let Action::UpdateTimer { limit_dist, .. } = &mut a {
+            *limit_dist = Dist {
+                dist: DistType::Uniform,
+                param1: 15.0, // NOTE param1 > param2
+                param2: 5.0,
+                start: 0.0,
+                max: 0.0,
+            };
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+    }
+}
