@@ -130,8 +130,12 @@ impl Machine {
             }
 
             // validate distribution parameters
-            if let Some(action) = state.action {
+            // check that required distributions are present
+            if let Some(action) = &state.action {
                 action.validate()?;
+            }
+            if let Some(counter_update) = &state.counter_update {
+                counter_update.validate()?;
             }
         }
 

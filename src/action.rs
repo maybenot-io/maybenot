@@ -67,7 +67,7 @@ pub enum Action {
 }
 
 impl Action {
-    /// Sample a timeout.
+    /// Sample a timeout for a padding or blocking action.
     pub fn sample_timeout(&self) -> Result<f64, Box<dyn Error + Send + Sync>> {
         match self {
             Action::InjectPadding { timeout_dist, .. }
@@ -80,7 +80,7 @@ impl Action {
         }
     }
 
-    /// Sample a duration for a blocking or timer action.
+    /// Sample a duration for a blocking or timer update action.
     pub fn sample_duration(&self) -> Result<f64, Box<dyn Error + Send + Sync>> {
         match self {
             Action::BlockOutgoing { action_dist, .. } => {
@@ -111,7 +111,9 @@ impl Action {
         }
     }
 
-    /// Returns true if this action does not support limits or if its action dist is DistType::None.
+    /// Returns true if this action does not have a limit dist or if
+    /// its limit dist is DistType::None. In both cases, sample_limit()
+    /// will return STATE_LIMIT_MAX.
     pub fn is_limit_none(&self) -> bool {
         match self {
             Action::InjectPadding { limit_dist, .. }
@@ -122,6 +124,7 @@ impl Action {
     }
 
     /// Validate all distributions contained in this action, if any.
+    /// Also ensure that required distributions are not DistType::None.
     pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         match self {
             Action::InjectPadding {
@@ -130,6 +133,9 @@ impl Action {
                 ..
             } => {
                 timeout_dist.validate()?;
+                if timeout_dist.dist == DistType::None {
+                    bail!("must specify a timeout dist for InjectPadding actions");
+                }
                 limit_dist.validate()?;
             }
             Action::BlockOutgoing {
@@ -139,7 +145,13 @@ impl Action {
                 ..
             } => {
                 timeout_dist.validate()?;
+                if timeout_dist.dist == DistType::None {
+                    bail!("must specify a timeout dist for BlockOutgoing actions");
+                }
                 action_dist.validate()?;
+                if action_dist.dist == DistType::None {
+                    bail!("must specify an action dist for BlockOutgoing actions");
+                }
                 limit_dist.validate()?;
             }
             Action::UpdateTimer {
@@ -148,6 +160,9 @@ impl Action {
                 ..
             } => {
                 action_dist.validate()?;
+                if action_dist.dist == DistType::None {
+                    bail!("must specify an action dist for UpdateTimer actions");
+                }
                 limit_dist.validate()?;
             }
             _ => {}

@@ -1,9 +1,11 @@
 //! Counters as part of a [`Machine`](crate::machine).
 
 use serde::{Deserialize, Serialize};
+use simple_error::bail;
 
 use crate::constants::*;
 use crate::dist::*;
+use std::error::Error;
 
 /// The two counters that are part of each [`Machine`](crate::machine).
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
@@ -25,9 +27,10 @@ pub enum CounterOperation {
 }
 
 /// A specification of how a [`Machine`](crate::machine)'s counters should be
-/// updated when transitioning to a state. Consists of a [`CounterOperation`] and
-/// a distribution to sample values from to update the relevant counter.
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+/// updated when transitioning to a [`State`](crate::machine). Consists of a
+/// [`Counter`], a [`CounterOperation`] to be applied to the counter, and a
+/// distribution to sample values from when updating the counter.
+#[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CounterUpdate {
     /// Which counter to update.
     pub counter: Counter,
@@ -42,5 +45,14 @@ impl CounterUpdate {
     pub fn sample_value(&self) -> u64 {
         let s = self.value_dist.sample() as u64;
         s.min(MAX_SAMPLED_COUNTER_VALUE)
+    }
+
+    // Validate the value dist and ensure that it is not DistType::None.
+    pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.value_dist.validate()?;
+        if self.value_dist.dist == DistType::None {
+            bail!("must specify a value dist for CounterUpdate");
+        }
+        Ok(())
     }
 }
