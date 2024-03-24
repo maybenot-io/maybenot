@@ -173,6 +173,7 @@ impl FromStr for Machine {
 #[cfg(test)]
 mod tests {
     use crate::action::*;
+    use crate::counter::*;
     use crate::dist::*;
     use crate::event::Event;
     use crate::machine::*;
@@ -270,6 +271,57 @@ mod tests {
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
+
+        // invalid action in state
+        s0.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 2.0, // NOTE param1 > param2
+                param2: 1.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
+        });
+
+        // machine with broken state
+        let m = Machine {
+            allowed_padding_packets: 1000,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0.clone()],
+        };
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // repair state
+        s0.action = None;
+
+        // invalid counter update in state
+        s0.counter_update = Some(CounterUpdate {
+            counter: Counter::CounterA,
+            operation: CounterOperation::Set,
+            value_dist: Dist::new(), // NOTE DistType::None
+        });
+
+        // machine with broken state
+        let m = Machine {
+            allowed_padding_packets: 1000,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0.clone()],
+        };
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // repair state
+        s0.counter_update = None;
 
         // bad padding and blocking fractions
         let mut m = Machine {
