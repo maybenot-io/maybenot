@@ -180,9 +180,103 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
-    fn validate_machine() {
+    fn machine_name_generation() {
         let num_states = 1;
 
+        // state 0
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::PaddingSent, e);
+
+        let s0 = State::new(t, num_states);
+
+        // machine
+        let m = Machine {
+            allowed_padding_packets: 1000,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0],
+        };
+
+        // name generation should be deterministic
+        assert_eq!(m.name(), m.name());
+    }
+
+    #[test]
+    fn validate_machine_limits() {
+        let num_states = 1;
+
+        // state 0
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        e.insert(0, 1.0);
+        t.insert(Event::PaddingSent, e);
+
+        let s0 = State::new(t, num_states);
+
+        // machine
+        let mut m = Machine {
+            allowed_padding_packets: 1000,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0],
+        };
+
+        // max padding frac
+        m.max_padding_frac = -0.1;
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        m.max_padding_frac = 1.1;
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        m.max_padding_frac = 0.5;
+        let r = m.validate();
+        assert!(r.is_ok());
+
+        // max blocking frac
+        m.max_blocking_frac = -0.1;
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        m.max_blocking_frac = 1.1;
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        m.max_blocking_frac = 0.5;
+        let r = m.validate();
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn validate_machine_num_states() {
+        // invalid machine lacking state
+        let m = Machine {
+            allowed_padding_packets: 1000,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![],
+        };
+
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_machine_probability() {
+        let num_states = 1;
+
+        // set total probability too low
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         // invalid state transition
@@ -190,18 +284,6 @@ mod tests {
         t.insert(Event::PaddingSent, e);
 
         let mut s0 = State::new(t, num_states);
-        s0.action = Some(Action::InjectPadding {
-            bypass: false,
-            replace: false,
-            timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 10.0,
-                param2: 10.0,
-                start: 0.0,
-                max: 0.0,
-            },
-            limit_dist: Dist::new(),
-        });
 
         // machine with broken state
         let m = Machine {
@@ -219,9 +301,10 @@ mod tests {
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
-        // try setting total probability too high
+        // try setting one probability too high
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
+        // invalid state transition
         e.insert(0, 1.1);
         t.insert(Event::PaddingSent, e);
 
@@ -240,14 +323,67 @@ mod tests {
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
-        // repair state
+        // try setting total probability too high
+        let num_states = 2;
+
+        // state 0
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        // invalid state transition
+        e.insert(0, 0.5);
+        e.insert(1, 0.6);
+        t.insert(Event::PaddingSent, e);
+
+        s0.next_state = make_next_state(t, num_states);
+
+        // state 1
+        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
+        let mut e: HashMap<usize, f64> = HashMap::new();
+        // invalid state transition
+        e.insert(1, 1.0);
+        t.insert(Event::PaddingRecv, e);
+
+        let s1 = State::new(t, num_states);
+
+        // machine with broken state
+        let m = Machine {
+            allowed_padding_packets: 1000,
+            max_padding_frac: 1.0,
+            allowed_blocked_microsec: 0,
+            max_blocking_frac: 0.0,
+            states: vec![s0, s1],
+        };
+        // we get the expected error here
+        let r = m.validate();
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_machine_distributions() {
+        let num_states = 1;
+
+        // state 0
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(0, 1.0);
         t.insert(Event::PaddingSent, e);
 
-        s0.next_state = make_next_state(t, num_states);
+        let mut s0 = State::new(t, num_states);
+        s0.action = Some(Action::InjectPadding {
+            bypass: false,
+            replace: false,
+            timeout_dist: Dist {
+                dist: DistType::Uniform,
+                param1: 10.0,
+                param2: 10.0,
+                start: 0.0,
+                max: 0.0,
+            },
+            limit_dist: Dist::new(),
+        });
 
+        // valid machine
         let m = Machine {
             allowed_padding_packets: 1000,
             max_padding_frac: 1.0,
@@ -259,18 +395,6 @@ mod tests {
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_ok());
-
-        // invalid machine lacking state
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![],
-        };
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
 
         // invalid action in state
         s0.action = Some(Action::InjectPadding {
@@ -294,6 +418,7 @@ mod tests {
             max_blocking_frac: 0.0,
             states: vec![s0.clone()],
         };
+
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
@@ -319,46 +444,5 @@ mod tests {
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
-
-        // repair state
-        s0.counter_update = None;
-
-        // bad padding and blocking fractions
-        let mut m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0.clone()],
-        };
-
-        m.max_padding_frac = -0.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-        m.max_padding_frac = 1.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-        m.max_padding_frac = 0.5;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_ok());
-
-        m.max_blocking_frac = -0.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-        m.max_blocking_frac = 1.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-        m.max_blocking_frac = 0.5;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_ok());
-
-        // name generation should be deterministic
-        assert_eq!(m.name(), m.name());
     }
 }
