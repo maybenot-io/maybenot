@@ -218,8 +218,8 @@ impl MachineId {
 struct MachineRuntime {
     current_state: usize,
     state_limit: u64,
-    padding_sent: u64,
-    nonpadding_sent: u64,
+    padding_queued: u64,
+    nonpadding_queued: u64,
     blocking_duration: Duration,
     machine_start: Instant,
     counter_value_a: u64,
@@ -246,8 +246,8 @@ pub struct Framework<M> {
     machines: M,
     runtime: Vec<MachineRuntime>,
     max_padding_frac: f64,
-    nonpadding_sent_packets: u64,
-    padding_sent_packets: u64,
+    nonpadding_queued_packets: u64,
+    padding_queued_packets: u64,
     max_blocking_frac: f64,
     blocking_duration: Duration,
     blocking_started: Instant,
@@ -289,8 +289,8 @@ where
             MachineRuntime {
                 current_state: 0,
                 state_limit: 0,
-                padding_sent: 0,
-                nonpadding_sent: 0,
+                padding_queued: 0,
+                nonpadding_queued: 0,
                 blocking_duration: Duration::from_secs(0),
                 machine_start: current_time,
                 counter_value_a: 0,
@@ -320,8 +320,8 @@ where
             blocking_active: false,
             blocking_started: current_time,
             blocking_duration: Duration::from_secs(0),
-            padding_sent_packets: 0,
-            nonpadding_sent_packets: 0,
+            padding_queued_packets: 0,
+            nonpadding_queued_packets: 0,
         })
     }
 
@@ -370,26 +370,12 @@ where
                 }
             }
             TriggerEvent::NonPaddingSent => {
-                self.nonpadding_sent_packets += 1;
-
+                // accounting is based on queued, not sent
                 for mi in 0..self.runtime.len() {
-                    self.runtime[mi].nonpadding_sent += 1;
-
-                    // If the transition leaves the state unchanged and the limit of
-                    // the machine includes nonpadding sent packets, decrement the
-                    // limit. If the state changed, a new limit was sampled and this
-                    // packet shouldn't count.
-                    if self.transition(mi, Event::NonPaddingSent) == StateChange::Unchanged
-                        && self.runtime[mi].current_state != STATE_END
-                    {
-                        self.decrement_limit(mi);
-                    }
+                    self.transition(mi, Event::NonPaddingSent);
                 }
             }
             TriggerEvent::PaddingSent => {
-                // global accounting
-                self.padding_sent_packets += 1;
-
                 // the event is global: tell all machines
                 for mi in 0..self.runtime.len() {
                     self.transition(mi, Event::PaddingSent);
@@ -405,11 +391,12 @@ where
                 // blocking is a global event
                 for mi in 0..self.runtime.len() {
                     if self.transition(mi, Event::BlockingBegin) == StateChange::Unchanged
+                        && self.runtime[mi].current_state != STATE_END
                         && mi == machine.0
                     {
                         // decrement only makes sense if we didn't
                         // change state and for the machine in question
-                        self.decrement_limit(mi)
+                        self.decrement_limit(mi);
                     }
                 }
             }
@@ -431,31 +418,53 @@ where
                 }
             }
             TriggerEvent::TimerBegin { machine } => {
-                if self.transition(machine.0, Event::TimerBegin) == StateChange::Unchanged {
-                    // decrement only makes sense if we didn't change state
-                    self.decrement_limit(machine.0)
-                }
-            }
-            TriggerEvent::TimerEnd { machine } => {
-                self.transition(machine.0, Event::TimerEnd);
-            }
-            TriggerEvent::NonPaddingQueued => {
-                for mi in 0..self.runtime.len() {
-                    self.transition(mi, Event::NonPaddingQueued);
-                }
-            }
-            TriggerEvent::PaddingQueued { machine } => {
                 let mi = machine.0;
                 if mi >= self.runtime.len() {
                     return;
                 }
-                // we consider padding queued as enough to spend the per-machine
-                // padding budget, while the framework-wide budget is on padding
-                // actually sent (TODO: consider if this is the right choice)
-                self.runtime[mi].padding_sent += 1;
-                if self.transition(mi, Event::PaddingQueued) == StateChange::Unchanged {
+                if self.transition(mi, Event::TimerBegin) == StateChange::Unchanged
+                    && self.runtime[mi].current_state != STATE_END
+                {
                     // decrement only makes sense if we didn't change state
-                    self.decrement_limit(mi)
+                    self.decrement_limit(machine.0);
+                }
+            }
+            TriggerEvent::TimerEnd { machine } => {
+                let mi = machine.0;
+                if mi >= self.runtime.len() {
+                    return;
+                }
+                self.transition(mi, Event::TimerEnd);
+            }
+            TriggerEvent::NonPaddingQueued => {
+                self.nonpadding_queued_packets += 1;
+
+                for mi in 0..self.runtime.len() {
+                    self.runtime[mi].nonpadding_queued += 1;
+
+                    // If the transition leaves the state unchanged, decrement the
+                    // limit. If the state changed, a new limit was sampled and this
+                    // packet shouldn't count.
+                    if self.transition(mi, Event::NonPaddingQueued) == StateChange::Unchanged
+                        && self.runtime[mi].current_state != STATE_END
+                    {
+                        self.decrement_limit(mi);
+                    }
+                }
+            }
+            TriggerEvent::PaddingQueued { machine } => {
+                self.padding_queued_packets += 1;
+
+                let mi = machine.0;
+                if mi >= self.runtime.len() {
+                    return;
+                }
+                self.runtime[mi].padding_queued += 1;
+                if self.transition(mi, Event::PaddingQueued) == StateChange::Unchanged
+                    && self.runtime[mi].current_state != STATE_END
+                {
+                    // decrement only makes sense if we didn't change state
+                    self.decrement_limit(mi);
                 }
             }
         };
@@ -729,28 +738,28 @@ where
 
     fn below_limit_padding(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         // no limits apply if not made up padding count
-        if runtime.padding_sent < machine.allowed_padding_packets {
+        if runtime.padding_queued < machine.allowed_padding_packets {
             return runtime.state_limit > 0;
         }
 
         // hit machine limits?
         if machine.max_padding_frac > 0.0 {
-            let total = runtime.nonpadding_sent + runtime.padding_sent;
+            let total = runtime.nonpadding_queued + runtime.padding_queued;
             if total == 0 {
                 return true;
             }
-            if runtime.padding_sent as f64 / total as f64 >= machine.max_padding_frac {
+            if runtime.padding_queued as f64 / total as f64 >= machine.max_padding_frac {
                 return false;
             }
         }
 
         // hit global limits?
         if self.max_padding_frac > 0.0 {
-            let total = self.padding_sent_packets + self.nonpadding_sent_packets;
+            let total = self.padding_queued_packets + self.nonpadding_queued_packets;
             if total == 0 {
                 return true;
             }
-            if self.padding_sent_packets as f64 / total as f64 >= self.max_padding_frac {
+            if self.padding_queued_packets as f64 / total as f64 >= self.max_padding_frac {
                 return false;
             }
         }
@@ -1440,7 +1449,7 @@ mod tests {
         e.insert(0, 1.0);
         // we use sent for checking limits
         t.insert(Event::PaddingQueued, e.clone());
-        t.insert(Event::NonPaddingSent, e.clone());
+        t.insert(Event::NonPaddingQueued, e.clone());
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
 
@@ -1505,12 +1514,12 @@ mod tests {
         // verify that no padding is scheduled until we've sent the same amount
         // of bytes
         for _ in 0..100 {
-            _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
+            _ = f.trigger_events(&[TriggerEvent::NonPaddingQueued], current_time);
             assert_eq!(f.actions[0], None);
         }
 
         // send one byte of nonpadding, putting us just over the limit
-        _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NonPaddingQueued], current_time);
 
         assert_eq!(
             f.actions[0],
@@ -1534,7 +1543,7 @@ mod tests {
         e.insert(0, 1.0);
         // we use sent for checking limits
         t.insert(Event::PaddingQueued, e.clone());
-        t.insert(Event::NonPaddingSent, e.clone());
+        t.insert(Event::NonPaddingQueued, e.clone());
         // recv as an event to check without adding bytes sent
         t.insert(Event::NonPaddingRecv, e.clone());
 
@@ -1619,20 +1628,20 @@ mod tests {
         assert_eq!(f.actions[1], None);
 
         // in sync?
-        assert_eq!(f.runtime[0].padding_sent, f.runtime[1].padding_sent);
-        assert_eq!(f.runtime[0].padding_sent, 100);
+        assert_eq!(f.runtime[0].padding_queued, f.runtime[1].padding_queued);
+        assert_eq!(f.runtime[0].padding_queued, 100);
 
         // OK, so we've sent in total 2*100*mtu of padding using two machines. This
         // means that we should need to send at least 2*100*mtu + 1 bytes before
         // padding is scheduled again
         for _ in 0..200 {
-            _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
+            _ = f.trigger_events(&[TriggerEvent::NonPaddingQueued], current_time);
             assert_eq!(f.actions[0], None);
             assert_eq!(f.actions[1], None);
         }
 
         // the last byte should tip it over
-        _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NonPaddingQueued], current_time);
 
         assert_eq!(
             f.actions[0],
@@ -2059,7 +2068,7 @@ mod tests {
         let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
         let mut e: HashMap<usize, f64> = HashMap::new();
         e.insert(1, 1.0);
-        t.insert(Event::NonPaddingSent, e);
+        t.insert(Event::NonPaddingQueued, e);
 
         let s0 = State::new(t, num_states);
 
@@ -2105,7 +2114,7 @@ mod tests {
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         // trigger self to start the padding
-        _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NonPaddingQueued], current_time);
 
         assert_eq!(f.runtime[0].state_limit, 4);
 
@@ -2130,8 +2139,8 @@ mod tests {
         }
 
         // padding accounting correct
-        assert_eq!(f.runtime[0].padding_sent, 4);
-        assert_eq!(f.runtime[0].nonpadding_sent, 1);
+        assert_eq!(f.runtime[0].padding_queued, 4);
+        assert_eq!(f.runtime[0].nonpadding_queued, 1);
 
         // limit should be reached after 4 padding, blocking next action
         assert_eq!(f.actions[0], None);
