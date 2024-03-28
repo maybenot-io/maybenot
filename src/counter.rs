@@ -1,7 +1,6 @@
 //! Counters as part of a [`Machine`](crate::machine).
 
 use serde::{Deserialize, Serialize};
-use simple_error::bail;
 
 use crate::constants::*;
 use crate::dist::*;
@@ -50,9 +49,6 @@ impl CounterUpdate {
     // Validate the value dist and ensure that it is not DistType::None.
     pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.value_dist.validate()?;
-        if self.value_dist.dist == DistType::None {
-            bail!("must specify a value dist for CounterUpdate");
-        }
         Ok(())
     }
 }
@@ -68,9 +64,10 @@ mod tests {
             counter: Counter::CounterA,
             operation: CounterOperation::Increment,
             value_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 10.0,
-                param2: 10.0,
+                dist: DistType::Uniform {
+                    low: 10.0,
+                    high: 10.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
@@ -79,17 +76,12 @@ mod tests {
         let r = cu.validate();
         assert!(r.is_ok());
 
-        // counter update with DistType::None
-        cu.value_dist = Dist::new();
-
-        let r = cu.validate();
-        assert!(r.is_err());
-
         // counter update with invalid dist
         cu.value_dist = Dist {
-            dist: DistType::Uniform,
-            param1: 15.0, // NOTE param1 > param2
-            param2: 5.0,
+            dist: DistType::Uniform {
+                low: 15.0, // NOTE param1 > param2
+                high: 5.0,
+            },
             start: 0.0,
             max: 0.0,
         };

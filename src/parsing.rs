@@ -135,22 +135,31 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     let replace: bool = buf[r] == 1;
     r += 1;
 
-    let action = if action_is_block {
-        Action::BlockOutgoing {
-            bypass,
-            replace,
-            timeout_dist,
-            action_dist,
-            limit_dist,
-        }
+    let action: Option<Action>;
+    if timeout_dist.is_none() {
+        action = None;
     } else {
-        Action::InjectPadding {
-            bypass,
-            replace,
-            timeout_dist,
-            limit_dist,
-        }
-    };
+        let timeout_dist = timeout_dist.unwrap();
+        if action_is_block {
+            if action_dist.is_none() {
+                bail!("action dist is None")
+            }
+            action = Some(Action::BlockOutgoing {
+                bypass,
+                replace,
+                timeout_dist,
+                action_dist: action_dist.unwrap(),
+                limit_dist,
+            });
+        } else {
+            action = Some(Action::InjectPadding {
+                bypass,
+                replace,
+                timeout_dist,
+                limit_dist,
+            });
+        };
+    }
 
     //let limit_includes_nonpadding: bool = buf[r] == 1;
     r += 1;
@@ -175,32 +184,76 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     }
 
     Ok(State {
-        action: Some(action),
+        action,
         counter_update: None,
         next_state,
     })
 }
 
-fn parse_dist(buf: Vec<u8>) -> Result<Dist, Box<dyn Error + Send + Sync>> {
+fn parse_dist(buf: Vec<u8>) -> Result<Option<Dist>, Box<dyn Error + Send + Sync>> {
     if buf.len() < SERIALIZEDDISTSIZE {
         bail!("too small")
     }
 
-    let mut d: Dist = Dist {
-        dist: DistType::None,
-        param1: 0.0,
-        param2: 0.0,
-        start: 0.0,
-        max: 0.0,
-    };
+    let type_buf = LittleEndian::read_u16(&buf[..2]);
+    let param1 = LittleEndian::read_f64(&buf[2..10]);
+    let param2 = LittleEndian::read_f64(&buf[10..18]);
+    let dist_type = buf_to_dist_type(type_buf, param1, param2);
+    let start = LittleEndian::read_f64(&buf[18..26]);
+    let max = LittleEndian::read_f64(&buf[26..34]);
 
-    d.dist = DistType::from(LittleEndian::read_u16(&buf[..2]));
-    d.param1 = LittleEndian::read_f64(&buf[2..10]);
-    d.param2 = LittleEndian::read_f64(&buf[10..18]);
-    d.start = LittleEndian::read_f64(&buf[18..26]);
-    d.max = LittleEndian::read_f64(&buf[26..34]);
+    if dist_type.is_none() {
+        return Ok(None);
+    }
 
-    Ok(d)
+    Ok(Some(Dist {
+        dist: dist_type.unwrap(),
+        start,
+        max,
+    }))
+}
+
+fn buf_to_dist_type(buf: u16, param1: f64, param2: f64) -> Option<DistType> {
+    match buf {
+        // same as DistType::None before
+        0 => None,
+        1 => Some(DistType::Uniform {
+            low: param1,
+            high: param2,
+        }),
+        2 => Some(DistType::Normal {
+            mean: param1,
+            stdev: param2,
+        }),
+        3 => Some(DistType::LogNormal {
+            mu: param1,
+            sigma: param2,
+        }),
+        4 => Some(DistType::Binomial {
+            trials: param1 as u64,
+            probability: param2,
+        }),
+        5 => Some(DistType::Geometric { probability: 0.0 }),
+        6 => Some(DistType::Pareto {
+            scale: param1,
+            shape: param2,
+        }),
+        7 => Some(DistType::Poisson { lambda: 0.0 }),
+        8 => Some(DistType::Weibull {
+            scale: param1,
+            shape: param2,
+        }),
+        9 => Some(DistType::Gamma {
+            scale: param1,
+            shape: param2,
+        }),
+        10 => Some(DistType::Beta {
+            alpha: param1,
+            beta: param2,
+        }),
+        // same as DistType::None before
+        _ => None,
+    }
 }
 
 #[cfg(test)]

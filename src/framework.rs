@@ -609,7 +609,7 @@ where
         let cs = self.runtime[mi].current_state;
 
         if let Some(action) = self.machines.as_ref()[mi].states[cs].action {
-            if !action.is_limit_none() && self.runtime[mi].state_limit == 0 {
+            if self.runtime[mi].state_limit == 0 && action.has_limit() {
                 // take no action and trigger limit reached
                 self.actions[mi] = None;
                 // next, we trigger internally event LimitReached
@@ -803,13 +803,14 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 10.0,
-                param2: 10.0,
+                dist: DistType::Uniform {
+                    low: 10.0,
+                    high: 10.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // state 1: go to state 0 on PaddingRecv, pad after 1 usec
@@ -823,13 +824,15 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 1.0,
-                param2: 1.0,
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // create a simple machine
@@ -969,20 +972,22 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 1.0,
-                param2: 1.0,
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
             action_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 10.0,
-                param2: 10.0,
+                dist: DistType::Uniform {
+                    low: 10.0,
+                    high: 10.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // machine
@@ -1051,13 +1056,15 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 1.0,
-                param2: 1.0,
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // state 1
@@ -1070,13 +1077,14 @@ mod tests {
         s1.action = Some(Action::UpdateTimer {
             replace: false,
             action_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 1000.0, // 1 ms
-                param2: 1000.0,
+                dist: DistType::Uniform {
+                    low: 1000.0,
+                    high: 1000.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // machine
@@ -1140,9 +1148,10 @@ mod tests {
             counter: Counter::CounterA,
             operation: CounterOperation::Decrement,
             value_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 1.0,
-                param2: 1.0,
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
@@ -1159,9 +1168,10 @@ mod tests {
             counter: Counter::CounterA,
             operation: CounterOperation::Increment,
             value_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 1.0,
-                param2: 1.0,
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
@@ -1181,21 +1191,23 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
         s2.counter_update = Some(CounterUpdate {
             counter: Counter::CounterB,
             operation: CounterOperation::Increment,
             value_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 4.0,
-                param2: 4.0,
+                dist: DistType::Uniform {
+                    low: 4.0,
+                    high: 4.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
@@ -1256,9 +1268,11 @@ mod tests {
             counter: Counter::CounterB,
             operation: CounterOperation::Decrement, // NOTE
             value_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 10.0,
-                param2: 10.0,
+                dist: DistType::Uniform {
+                    low: 10.0,
+                    high: 10.0,
+                },
+
                 start: 0.0,
                 max: 0.0,
             },
@@ -1281,9 +1295,10 @@ mod tests {
             counter: Counter::CounterB,
             operation: CounterOperation::Set,
             value_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 0.0, // NOTE
-                param2: 0.0,
+                dist: DistType::Uniform {
+                    low: 0.0, // NOTE
+                    high: 0.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
@@ -1303,13 +1318,14 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // machine
@@ -1356,9 +1372,10 @@ mod tests {
             counter: Counter::CounterA,
             operation: CounterOperation::Increment, // NOTE
             value_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 1000.0,
-                param2: 1000.0,
+                dist: DistType::Uniform {
+                    low: 1000.0,
+                    high: 1000.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
@@ -1378,9 +1395,10 @@ mod tests {
             counter: Counter::CounterA,
             operation: CounterOperation::Set,
             value_dist: Dist {
-                dist: DistType::Uniform,
-                param1: u64::MAX as f64, // NOTE
-                param2: u64::MAX as f64,
+                dist: DistType::Uniform {
+                    low: u64::MAX as f64, // NOTE
+                    high: u64::MAX as f64,
+                },
                 start: 0.0,
                 max: 0.0,
             },
@@ -1431,13 +1449,14 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // machine
@@ -1524,13 +1543,14 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // machines
@@ -1655,20 +1675,22 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
             action_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // machine
@@ -1770,20 +1792,24 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
+
                 start: 0.0,
                 max: 0.0,
             },
             action_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
+
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // machine
@@ -1883,20 +1909,22 @@ mod tests {
             bypass: false,
             replace: true, // NOTE
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
             action_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 2.0,
-                param2: 2.0,
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // machine 0
@@ -1920,20 +1948,23 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 0.0,
-                param2: 0.0,
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+
                 start: 0.0,
                 max: 0.0,
             },
             action_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 1000.0,
-                param2: 1000.0,
+                dist: DistType::Uniform {
+                    low: 1000.0,
+                    high: 1000.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist::new(),
+            limit_dist: None,
         });
 
         // machine 1
@@ -2043,19 +2074,21 @@ mod tests {
             bypass: false,
             replace: false,
             timeout_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 1.0,
-                param2: 1.0,
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Dist {
-                dist: DistType::Uniform,
-                param1: 4.0,
-                param2: 4.0,
+            limit_dist: Some(Dist {
+                dist: DistType::Uniform {
+                    low: 4.0,
+                    high: 4.0,
+                },
                 start: 0.0,
                 max: 0.0,
-            },
+            }),
         });
 
         // machine
