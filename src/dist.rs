@@ -14,7 +14,6 @@ use simple_error::bail;
 /// different distributions. Some are probably useless and some are probably
 /// missing. Uses the [`rand_distr`] crate for sampling.
 #[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
-#[repr(u16)]
 pub enum DistType {
     /// Uniformly random [low, high). If low == high, constant.
     Uniform {
