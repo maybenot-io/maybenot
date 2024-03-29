@@ -17,7 +17,7 @@ pub struct State {
     pub action: Option<Action>,
     /// On transition to this state, this struct will be used to determine how to
     /// update the containing machine's counters.
-    pub counter_update: Option<CounterUpdate>,
+    pub counter: Option<CounterUpdate>,
     /// A map of all possible events to associated probability vectors. This is
     /// a transition matrix, so the length of the probability vector is a
     /// function of the total number of states in a machine. The structure of
@@ -31,7 +31,7 @@ impl State {
     pub fn new(t: HashMap<Event, HashMap<usize, f64>>, num_states: usize) -> Self {
         State {
             action: None,
-            counter_update: None,
+            counter: None,
             next_state: make_next_state(t, num_states),
         }
     }
@@ -40,7 +40,7 @@ impl State {
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "action: {:?}", self.action)?;
-        write!(f, "counter update: {:?}", self.counter_update)?;
+        write!(f, "counter update: {:?}", self.counter)?;
 
         // next_state: iterate over every possible event in order (because
         // HashMap is not stable), if found, print event and vector

@@ -80,7 +80,7 @@
 //!                 // Cancel the specified timer (action, machine, or both) for the
 //!                 // machine in question.
 //!             }
-//!             TriggerAction::InjectPadding {
+//!             TriggerAction::SendPadding {
 //!                 timeout: _,
 //!                 bypass: _,
 //!                 replace: _,
@@ -134,7 +134,7 @@
 //!             } => {
 //!                 // Set an action timer with the specified timeout, overwriting
 //!                 // any existing action timer for the machine (be it to block or
-//!                 // inject). On expiry, do the following (all or nothing):
+//!                 // send padding). On expiry, do the following (all or nothing):
 //!                 //
 //!                 // 1. If no blocking is currently taking place (globally
 //!                 //    across all machines, so for this instance of the
@@ -160,7 +160,7 @@
 //!                 // If bypass is true and blocking was activated, extended, or
 //!                 // replaced in step 1, then a bypass flag MUST be set and be
 //!                 // available to check as part of dealing with
-//!                 // TriggerAction::InjectPadding actions (see above).
+//!                 // TriggerAction::SendPadding actions (see above).
 //!             }
 //!             TriggerAction::UpdateTimer {
 //!                 duration: _,
@@ -236,10 +236,9 @@ enum StateChange {
 ///
 /// An instance of the [`Framework`] repeatedly takes as *input* one or more
 /// [`TriggerEvent`] describing the encrypted traffic going over an encrypted
-/// channel, and produces as *output* zero or more [`TriggerAction`], such as
-/// to inject *padding* traffic or *block* outgoing traffic. One or more
-/// [`Machine`] determine what [`TriggerAction`] to take based on
-/// [`TriggerEvent`].
+/// channel, and produces as *output* zero or more [`TriggerAction`], such as to
+/// *send padding* traffic or *block outgoing* traffic. One or more [`Machine`]
+/// determine what [`TriggerAction`] to take based on [`TriggerEvent`].
 pub struct Framework<M> {
     actions: Vec<Option<TriggerAction>>,
     current_time: Instant,
@@ -544,9 +543,9 @@ where
     fn update_counter(&mut self, mi: usize) -> (StateChange, bool) {
         let current = &self.machines.as_ref()[mi].states[self.runtime[mi].current_state];
 
-        if let Some(update) = &current.counter_update {
+        if let Some(update) = &current.counter {
             let value = update.sample_value();
-            let counter = if update.counter == Counter::CounterA {
+            let counter = if update.counter == Counter::A {
                 &mut self.runtime[mi].counter_value_a
             } else {
                 &mut self.runtime[mi].counter_value_b
@@ -554,13 +553,13 @@ where
             let already_zero = *counter == 0;
 
             match update.operation {
-                CounterOperation::Increment => {
+                Operation::Increment => {
                     *counter = counter.saturating_add(value);
                 }
-                CounterOperation::Decrement => {
+                Operation::Decrement => {
                     *counter = counter.saturating_sub(value);
                 }
-                CounterOperation::Set => {
+                Operation::Set => {
                     *counter = value;
                 }
             }
@@ -586,9 +585,9 @@ where
 
         match action {
             Action::Cancel { timer } => Some(TriggerAction::Cancel { machine: mi, timer }),
-            Action::InjectPadding {
+            Action::SendPadding {
                 bypass, replace, ..
-            } => Some(TriggerAction::InjectPadding {
+            } => Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(action.sample_timeout().unwrap() as u64),
                 bypass,
                 replace,
@@ -668,7 +667,7 @@ where
 
         match current.action.unwrap() {
             Action::BlockOutgoing { .. } => self.below_limit_blocking(runtime, machine),
-            Action::InjectPadding { .. } => self.below_limit_padding(runtime, machine),
+            Action::SendPadding { .. } => self.below_limit_padding(runtime, machine),
             Action::UpdateTimer { .. } => runtime.state_limit > 0,
             _ => true,
         }
@@ -808,10 +807,10 @@ mod tests {
         t.insert(Event::PaddingSent, e);
 
         let mut s0 = State::new(t, num_states);
-        s0.action = Some(Action::InjectPadding {
+        s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -819,7 +818,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // state 1: go to state 0 on PaddingRecv, pad after 1 usec
@@ -829,10 +828,10 @@ mod tests {
         t.insert(Event::PaddingRecv, e);
 
         let mut s1 = State::new(t, num_states);
-        s1.action = Some(Action::InjectPadding {
+        s1.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -841,7 +840,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // create a simple machine
@@ -882,7 +881,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::InjectPadding {
+            Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(1),
                 bypass: false,
                 replace: false,
@@ -899,7 +898,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::PaddingRecv], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::InjectPadding {
+            Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(10),
                 bypass: false,
                 replace: false,
@@ -915,7 +914,7 @@ mod tests {
             );
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::InjectPadding {
+                Some(TriggerAction::SendPadding {
                     timeout: Duration::from_micros(10),
                     bypass: false,
                     replace: false,
@@ -937,7 +936,7 @@ mod tests {
                 );
                 assert_eq!(
                     f.actions[0],
-                    Some(TriggerAction::InjectPadding {
+                    Some(TriggerAction::SendPadding {
                         timeout: Duration::from_micros(10),
                         bypass: false,
                         replace: false,
@@ -955,7 +954,7 @@ mod tests {
                 );
                 assert_eq!(
                     f.actions[0],
-                    Some(TriggerAction::InjectPadding {
+                    Some(TriggerAction::SendPadding {
                         timeout: Duration::from_micros(1),
                         bypass: false,
                         replace: false,
@@ -980,7 +979,7 @@ mod tests {
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -988,7 +987,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            action_dist: Dist {
+            duration: Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -996,7 +995,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // machine
@@ -1061,10 +1060,10 @@ mod tests {
         t.insert(Event::PaddingSent, e);
 
         let mut s0 = State::new(t, num_states);
-        s0.action = Some(Action::InjectPadding {
+        s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -1073,7 +1072,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // state 1
@@ -1085,7 +1084,7 @@ mod tests {
         let mut s1 = State::new(t, num_states);
         s1.action = Some(Action::UpdateTimer {
             replace: false,
-            action_dist: Dist {
+            duration: Dist {
                 dist: DistType::Uniform {
                     low: 1000.0,
                     high: 1000.0,
@@ -1093,7 +1092,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // machine
@@ -1128,7 +1127,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::InjectPadding {
+            Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(1),
                 bypass: false,
                 replace: false,
@@ -1153,10 +1152,10 @@ mod tests {
         t.insert(Event::CounterZero, e1);
 
         let mut s0 = State::new(t, num_states);
-        s0.counter_update = Some(CounterUpdate {
-            counter: Counter::CounterA,
-            operation: CounterOperation::Decrement,
-            value_dist: Dist {
+        s0.counter = Some(CounterUpdate {
+            counter: Counter::A,
+            operation: Operation::Decrement,
+            value: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -1173,10 +1172,10 @@ mod tests {
         t.insert(Event::NonPaddingSent, e);
 
         let mut s1 = State::new(t, num_states);
-        s1.counter_update = Some(CounterUpdate {
-            counter: Counter::CounterA,
-            operation: CounterOperation::Increment,
-            value_dist: Dist {
+        s1.counter = Some(CounterUpdate {
+            counter: Counter::A,
+            operation: Operation::Increment,
+            value: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -1196,10 +1195,10 @@ mod tests {
         t.insert(Event::PaddingSent, e1);
 
         let mut s2 = State::new(t, num_states);
-        s2.action = Some(Action::InjectPadding {
+        s2.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
@@ -1207,12 +1206,12 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
-        s2.counter_update = Some(CounterUpdate {
-            counter: Counter::CounterB,
-            operation: CounterOperation::Increment,
-            value_dist: Dist {
+        s2.counter = Some(CounterUpdate {
+            counter: Counter::B,
+            operation: Operation::Increment,
+            value: Dist {
                 dist: DistType::Uniform {
                     low: 4.0,
                     high: 4.0,
@@ -1243,7 +1242,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NonPaddingSent], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::InjectPadding {
+            Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
                 bypass: false,
                 replace: false,
@@ -1273,15 +1272,14 @@ mod tests {
         t.insert(Event::CounterZero, e2);
 
         let mut s0 = State::new(t, num_states);
-        s0.counter_update = Some(CounterUpdate {
-            counter: Counter::CounterB,
-            operation: CounterOperation::Decrement, // NOTE
-            value_dist: Dist {
+        s0.counter = Some(CounterUpdate {
+            counter: Counter::B,
+            operation: Operation::Decrement, // NOTE
+            value: Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
                 },
-
                 start: 0.0,
                 max: 0.0,
             },
@@ -1300,10 +1298,10 @@ mod tests {
         t.insert(Event::CounterZero, e2);
 
         let mut s1 = State::new(t, num_states);
-        s1.counter_update = Some(CounterUpdate {
-            counter: Counter::CounterB,
-            operation: CounterOperation::Set,
-            value_dist: Dist {
+        s1.counter = Some(CounterUpdate {
+            counter: Counter::B,
+            operation: Operation::Set,
+            value: Dist {
                 dist: DistType::Uniform {
                     low: 0.0, // NOTE
                     high: 0.0,
@@ -1323,10 +1321,10 @@ mod tests {
         t.insert(Event::NonPaddingRecv, e1);
 
         let mut s2 = State::new(t, num_states);
-        s2.action = Some(Action::InjectPadding {
+        s2.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
@@ -1334,7 +1332,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // machine
@@ -1377,10 +1375,10 @@ mod tests {
         t.insert(Event::NonPaddingRecv, e1);
 
         let mut s0 = State::new(t, num_states);
-        s0.counter_update = Some(CounterUpdate {
-            counter: Counter::CounterA,
-            operation: CounterOperation::Increment, // NOTE
-            value_dist: Dist {
+        s0.counter = Some(CounterUpdate {
+            counter: Counter::A,
+            operation: Operation::Increment, // NOTE
+            value: Dist {
                 dist: DistType::Uniform {
                     low: 1000.0,
                     high: 1000.0,
@@ -1400,10 +1398,10 @@ mod tests {
         t.insert(Event::NonPaddingRecv, e1);
 
         let mut s1 = State::new(t, num_states);
-        s1.counter_update = Some(CounterUpdate {
-            counter: Counter::CounterA,
-            operation: CounterOperation::Set,
-            value_dist: Dist {
+        s1.counter = Some(CounterUpdate {
+            counter: Counter::A,
+            operation: Operation::Set,
+            value: Dist {
                 dist: DistType::Uniform {
                     low: u64::MAX as f64, // NOTE
                     high: u64::MAX as f64,
@@ -1454,10 +1452,10 @@ mod tests {
         t.insert(Event::NonPaddingRecv, e.clone());
 
         let mut s0 = State::new(t, 1);
-        s0.action = Some(Action::InjectPadding {
+        s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
@@ -1465,7 +1463,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // machine
@@ -1488,7 +1486,7 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::InjectPadding {
+                Some(TriggerAction::SendPadding {
                     timeout: Duration::from_micros(2),
                     bypass: false,
                     replace: false,
@@ -1523,7 +1521,7 @@ mod tests {
 
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::InjectPadding {
+            Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
                 bypass: false,
                 replace: false,
@@ -1548,10 +1546,10 @@ mod tests {
         t.insert(Event::NonPaddingRecv, e.clone());
 
         let mut s0 = State::new(t, 1);
-        s0.action = Some(Action::InjectPadding {
+        s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
@@ -1559,7 +1557,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // machines
@@ -1586,7 +1584,7 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::InjectPadding {
+                Some(TriggerAction::SendPadding {
                     timeout: Duration::from_micros(2),
                     bypass: false,
                     replace: false,
@@ -1595,7 +1593,7 @@ mod tests {
             );
             assert_eq!(
                 f.actions[1],
-                Some(TriggerAction::InjectPadding {
+                Some(TriggerAction::SendPadding {
                     timeout: Duration::from_micros(2),
                     bypass: false,
                     replace: false,
@@ -1645,7 +1643,7 @@ mod tests {
 
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::InjectPadding {
+            Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
                 bypass: false,
                 replace: false,
@@ -1654,7 +1652,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[1],
-            Some(TriggerAction::InjectPadding {
+            Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
                 bypass: false,
                 replace: false,
@@ -1683,7 +1681,7 @@ mod tests {
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
@@ -1691,7 +1689,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            action_dist: Dist {
+            duration: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
@@ -1699,7 +1697,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // machine
@@ -1800,7 +1798,7 @@ mod tests {
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
@@ -1809,7 +1807,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            action_dist: Dist {
+            duration: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
@@ -1818,7 +1816,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // machine
@@ -1917,7 +1915,7 @@ mod tests {
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: true, // NOTE
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
@@ -1925,7 +1923,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            action_dist: Dist {
+            duration: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
@@ -1933,7 +1931,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // machine 0
@@ -1956,7 +1954,7 @@ mod tests {
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 0.0,
                     high: 0.0,
@@ -1965,7 +1963,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            action_dist: Dist {
+            duration: Dist {
                 dist: DistType::Uniform {
                     low: 1000.0,
                     high: 1000.0,
@@ -1973,7 +1971,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // machine 1
@@ -2079,10 +2077,10 @@ mod tests {
         t.insert(Event::PaddingQueued, e);
 
         let mut s1 = State::new(t, num_states);
-        s1.action = Some(Action::InjectPadding {
+        s1.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -2090,7 +2088,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Some(Dist {
+            limit: Some(Dist {
                 dist: DistType::Uniform {
                     low: 4.0,
                     high: 4.0,
@@ -2122,7 +2120,7 @@ mod tests {
         for _ in 0..4 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::InjectPadding {
+                Some(TriggerAction::SendPadding {
                     timeout: Duration::from_micros(1),
                     bypass: false,
                     replace: false,
