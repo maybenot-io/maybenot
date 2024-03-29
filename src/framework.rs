@@ -1155,14 +1155,14 @@ mod tests {
         s0.counter = Some(CounterUpdate {
             counter: Counter::A,
             operation: Operation::Decrement,
-            value: Dist {
+            value: Some(Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
                 },
                 start: 0.0,
                 max: 0.0,
-            },
+            }),
         });
 
         // state 1
@@ -1175,14 +1175,14 @@ mod tests {
         s1.counter = Some(CounterUpdate {
             counter: Counter::A,
             operation: Operation::Increment,
-            value: Dist {
+            value: Some(Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
                 },
                 start: 0.0,
                 max: 0.0,
-            },
+            }),
         });
 
         // state 2
@@ -1211,14 +1211,14 @@ mod tests {
         s2.counter = Some(CounterUpdate {
             counter: Counter::B,
             operation: Operation::Increment,
-            value: Dist {
+            value: Some(Dist {
                 dist: DistType::Uniform {
                     low: 4.0,
                     high: 4.0,
                 },
                 start: 0.0,
                 max: 0.0,
-            },
+            }),
         });
 
         // machine
@@ -1275,14 +1275,14 @@ mod tests {
         s0.counter = Some(CounterUpdate {
             counter: Counter::B,
             operation: Operation::Decrement, // NOTE
-            value: Dist {
+            value: Some(Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
                 },
                 start: 0.0,
                 max: 0.0,
-            },
+            }),
         });
 
         // state 1, set counter
@@ -1301,14 +1301,14 @@ mod tests {
         s1.counter = Some(CounterUpdate {
             counter: Counter::B,
             operation: Operation::Set,
-            value: Dist {
+            value: Some(Dist {
                 dist: DistType::Uniform {
                     low: 0.0, // NOTE
                     high: 0.0,
                 },
                 start: 0.0,
                 max: 0.0,
-            },
+            }),
         });
 
         // state 2, pad
@@ -1378,14 +1378,14 @@ mod tests {
         s0.counter = Some(CounterUpdate {
             counter: Counter::A,
             operation: Operation::Increment, // NOTE
-            value: Dist {
+            value: Some(Dist {
                 dist: DistType::Uniform {
                     low: 1000.0,
                     high: 1000.0,
                 },
                 start: 0.0,
                 max: 0.0,
-            },
+            }),
         });
 
         // state 1, set counter
@@ -1401,14 +1401,14 @@ mod tests {
         s1.counter = Some(CounterUpdate {
             counter: Counter::A,
             operation: Operation::Set,
-            value: Dist {
+            value: Some(Dist {
                 dist: DistType::Uniform {
                     low: u64::MAX as f64, // NOTE
                     high: u64::MAX as f64,
                 },
                 start: 0.0,
                 max: 0.0,
-            },
+            }),
         });
 
         // machine

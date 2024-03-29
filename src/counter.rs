@@ -35,20 +35,28 @@ pub struct CounterUpdate {
     pub counter: Counter,
     /// The operation to apply to the counter upon a state transition.
     pub operation: Operation,
-    /// A distribution from which a value is sampled to update the counter.
-    pub value: Dist,
+    /// If set, sample the value to update from a distribution. If not set,
+    /// value is 1.
+    pub value: Option<Dist>,
 }
 
 impl CounterUpdate {
     /// Sample a value to update the counter with.
     pub fn sample_value(&self) -> u64 {
-        let s = self.value.sample() as u64;
-        s.min(MAX_SAMPLED_COUNTER_VALUE)
+        match self.value {
+            Some(value) => {
+                let s = value.sample() as u64;
+                s.min(MAX_SAMPLED_COUNTER_VALUE)
+            }
+            None => 1,
+        }
     }
 
-    // Validate the value dist and ensure that it is not DistType::None.
+    // Validate the value dist.
     pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        self.value.validate()?;
+        if self.value.is_some() {
+            self.value.unwrap().validate()?;
+        }
         Ok(())
     }
 }
@@ -63,30 +71,34 @@ mod tests {
         let mut cu = CounterUpdate {
             counter: Counter::A,
             operation: Operation::Increment,
-            value: Dist {
+            value: Some(Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
                 },
                 start: 0.0,
                 max: 0.0,
-            },
+            }),
         };
 
         let r = cu.validate();
         assert!(r.is_ok());
 
         // counter update with invalid dist
-        cu.value = Dist {
+        cu.value = Some(Dist {
             dist: DistType::Uniform {
                 low: 15.0, // NOTE param1 > param2
                 high: 5.0,
             },
             start: 0.0,
             max: 0.0,
-        };
+        });
 
         let r = cu.validate();
         assert!(r.is_err());
+
+        // counter with empty dist
+        cu.value = None;
+        assert_eq!(cu.sample_value(), 1);
     }
 }
