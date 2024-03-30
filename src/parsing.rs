@@ -21,10 +21,12 @@ const SERIALIZED_DIST_SIZE: usize = 2 + 8 * 4;
 // helper function to iterate over all supported v1 events
 fn v1_events_iter() -> Iter<'static, Event> {
     static EVENTS: [Event; 7] = [
-        Event::NonPaddingRecv,
+        Event::NormalRecv,
         Event::PaddingRecv,
-        Event::NonPaddingSent,
-        Event::PaddingSent,
+        // was in v1 NonPaddingSent
+        Event::NormalQueued,
+        // was in v1 PaddingSent
+        Event::PaddingQueued,
         Event::BlockingBegin,
         Event::BlockingEnd,
         Event::LimitReached,
@@ -64,7 +66,7 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
 
     let mut r: usize = 0;
     // 4 8-byte values
-    let allowed_padding_bytes = LittleEndian::read_u64(&buf[r..r + 8]);
+    let allowed_padding_packets = LittleEndian::read_u64(&buf[r..r + 8]);
     r += 8;
     let max_padding_frac = LittleEndian::read_f64(&buf[r..r + 8]);
     r += 8;
@@ -101,7 +103,7 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
     }
 
     let m = Machine {
-        allowed_padding_packets: allowed_padding_bytes,
+        allowed_padding_packets,
         max_padding_frac,
         allowed_blocked_microsec,
         max_blocking_frac,
