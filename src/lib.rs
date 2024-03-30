@@ -4,8 +4,9 @@
 //! Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or
 //! Tor. While the connections are encrypted, *patterns* in the encrypted
 //! communication may still leak information about the underlying plaintext
-//! being communicated with encryption. Maybenot is a framework for creating
-//! defenses that hide such patterns.
+//! being communicated with encryption. Maybenot is a framework for creating and
+//! executing defenses that hide such patterns. Defenses are implemented as
+//! probabilistic state machines.
 //!
 //! If you want to use Maybenot, see [`framework`] for details. As a user, that
 //! is typically all that you need and the other modules can be ignored. Note
@@ -13,8 +14,9 @@
 //! [`framework`]) using the [`core::str::FromStr`] trait.
 //!
 //! If you want to build machines for the [`framework`], take a look at all the
-//! modules. For top-down, start with [`machine`]. For bottom-down, start with
-//! [`dist`], [`event`], and [`action`] before [`state`] and finally [`machine`].
+//! modules. For top-down, start with [`machine`]. For bottom-up, start with
+//! [`dist`], [`event`], and [`action`] before [`state`] and finally
+//! [`machine`].
 pub mod action;
 pub mod constants;
 pub mod counter;

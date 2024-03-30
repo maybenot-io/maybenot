@@ -4,9 +4,9 @@
 //! Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or
 //! Tor. While the connections are encrypted, *patterns* in the encrypted
 //! communication may still leak information about the underlying plaintext
-//! being communicated with encryption. Maybenot is a framework for creating
-//! defenses that hide such patterns.
-//!
+//! being communicated with encryption. Maybenot is a framework for creating and
+//! executing defenses that hide such patterns. Defenses are implemented as
+//! probabilistic state machines.
 //!
 //! ## Example usage
 //! ```
@@ -59,10 +59,11 @@
 //!     // triggered in the framework. Below we just set one example event. How
 //!     // you wait and collect events is likely going to be a bottleneck. If
 //!     // you have to consider dropping events, it is better to drop older
-//!     // events than newer.
+//!     // events than newer. Ideally, it should be possible to process all
+//!     // events one-by-one.
 //!     let events = [TriggerEvent::NormalSent];
 //!
-//!     // Trigger the events in the framework. This takes linear time with the
+//!     // Trigger the event(s) in the framework. This takes linear time with the
 //!     // number of events but is very fast (time should be dominated by a few
 //!     // calls to sample randomness per event per machine).
 //!     for action in f.trigger_events(&events, Instant::now()) {
@@ -94,25 +95,24 @@
 //!                 // 3. When any padding packet actually is sent over the network,
 //!                 //    trigger TriggerEvent::PaddingSent.
 //!                 //
-//!                 // Above, "send" should mimic as close as possible normal
-//!                 // application data being added for transport.
+//!                 // Above, "queue" and "send" should mimic as close as possible
+//!                 // a normal packet being sent.
 //!                 //
 //!                 // If bypass is true, then the padding MUST be sent even if there
 //!                 // is active blocking of outgoing traffic AND the active blocking
 //!                 // had the bypass flag set. If the active blocking had bypass set
 //!                 // to false, then the padding MUST NOT be sent. This is to support
-//!                 // completely fail closed defenses.
+//!                 // completely fail-closed defenses.
 //!                 //
 //!                 // If replace is true, then the padding MAY be replaced by
-//!                 // other data. The other data could be in the form of an
-//!                 // encrypted packet queued to be sent, which is either padding
-//!                 // or non-padding (ideally, the user of the framework cannot
+//!                 // another packet. The other packet could be an encrypted packet
+//!                 // already queued but not already sent, containing either
+//!                 // padding or normal data (ideally, the user of the framework cannot
 //!                 // tell, because encrypted). The other data could also be
-//!                 // application data (non-padding) enqueued to be sent. In both
-//!                 // cases, the replaced data MAY be of the same size as the
-//!                 // padding. Regardless of if the padding is replaced or not,
-//!                 // the events should still be triggered (steps 2/3). If enqueued
-//!                 // non-padding is sent instead of padding, then NormalSent
+//!                 // normal data about to be turned into a normal packet and enqueued.
+//!                 // Regardless of if the padding is replaced or not, the events
+//!                 // should still be triggered (steps 2/3). If enqueued
+//!                 // normal is sent instead of padding, then the NormalSent event
 //!                 // should be triggered as well.
 //!                 //
 //!                 // Above, note the use case of having bypass and replace set to
@@ -134,7 +134,7 @@
 //!             } => {
 //!                 // Set an action timer with the specified timeout, overwriting
 //!                 // any existing action timer for the machine (be it to block or
-//!                 // send padding). On expiry, do the following (all or nothing):
+//!                 // to send padding). On expiry, do the following (all or nothing):
 //!                 //
 //!                 // 1. If no blocking is currently taking place (globally
 //!                 //    across all machines, so for this instance of the
@@ -146,16 +146,14 @@
 //!                 //    If replace is false, pick the longest duration of
 //!                 //    the specified duration and the *remaining* duration to
 //!                 //    block already in place.
-//!                 // 2. Add TriggerEvent::BlockingBegin { machine: machine }
-//!                 //    to be triggered next loop iteration (regardless of
-//!                 //    logic outcome in 1, from the point of view of the
-//!                 //    machine, blocking is now taking place).
+//!                 // 2. Trigger TriggerEvent::BlockingBegin { machine: machine }
+//!                 //    regardless of  logic outcome in 1. (From the point of view
+//!                 //    of the machine, blocking is now taking place).
 //!                 //
 //!                 // Note that blocking is global across all machines, since
 //!                 // the intent is to block all outgoing traffic. Further, you
-//!                 // MUST ensure that when blocking ends, you add
-//!                 // TriggerEvent::BlockingEnd to be triggered next loop
-//!                 // iteration.
+//!                 // MUST ensure that when blocking ends, you trigger
+//!                 // TriggerEvent::BlockingEnd.
 //!                 //
 //!                 // If bypass is true and blocking was activated, extended, or
 //!                 // replaced in step 1, then a bypass flag MUST be set and be
@@ -173,8 +171,7 @@
 //!                 // durations.
 //!                 //
 //!                 // If a new timer is started or an existing timer replaced,
-//!                 // add TriggerEvent::TimerBegin { machine: machine } to be
-//!                 // triggered next loop iteration.
+//!                 // trigger TriggerEvent::TimerBegin { machine: machine }.
 //!                 //
 //!                 // Trigger TriggerEvent::TimerEnd { machine: machine } when
 //!                 // the timer expires.
