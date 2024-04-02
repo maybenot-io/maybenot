@@ -123,8 +123,8 @@ impl State {
         if let Some(action) = &self.action {
             action.validate()?;
         }
-        if let Some(counter_update) = &self.counter_update {
-            counter_update.validate()?;
+        if let Some(counter) = &self.counter {
+            counter.validate()?;
         }
 
         Ok(())
