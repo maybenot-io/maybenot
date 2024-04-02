@@ -4,36 +4,184 @@ use crate::action::*;
 use crate::constants::*;
 use crate::counter::CounterUpdate;
 use crate::event::*;
+use enum_map::{enum_map, EnumMap};
 use serde::Deserialize;
+use serde::Deserializer;
 use serde::Serialize;
+use serde::Serializer;
+use serde_with::DeserializeAs;
+use serde_with::SerializeAs;
+use simple_error::bail;
 use std::collections::HashMap;
+use std::error::Error;
 use std::fmt;
+use vose_alias::VoseAlias;
 extern crate simple_error;
+
+/// A state index and probability for a transition.
+#[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct StateTransition {
+    /// The index of the state to transition to. Must be less than the number
+    /// of states in the corresponding machine, or STATE_CANCEL or STATE_END.
+    pub state: usize,
+    /// The probability of taking this transition, must be (0.0, 1.0].
+    pub probability: f32,
+}
+
+impl StateTransition {
+    /// Validate that this state transition specifies a valid state and that
+    /// its probability is in the range (0.0, 1.0].
+    pub fn validate(&self, num_states: usize) -> Result<(), Box<dyn Error + Send + Sync>> {
+        if self.state >= num_states && self.state != STATE_CANCEL && self.state != STATE_END {
+            bail!("found invalid state index {}", &self.state);
+        }
+
+        if self.probability <= 0.0 || self.probability > 1.0 {
+            bail!(
+                "found probability {}, has to be (0.0, 1.0]",
+                &self.probability
+            );
+        }
+
+        Ok(())
+    }
+}
 
 /// A state as part of a [`Machine`](crate::machine).
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     /// The action to be taken upon transition to this state.
     pub action: Option<Action>,
-    /// On transition to this state, this struct will be used to determine how to
-    /// update the containing machine's counters.
+    /// On transition to this state, this struct will be used to determine how
+    /// to update the containing machine's counters.
     pub counter_update: Option<CounterUpdate>,
-    /// A map of all possible events to associated probability vectors. This is
-    /// a transition matrix, so the length of the probability vector is a
-    /// function of the total number of states in a machine. The structure of
-    /// the map is created by [`make_next_state()`].
-    pub next_state: HashMap<Event, Vec<f64>>,
+    /// A map of [`Event`] to state transition vector specifying the possible
+    /// transitions out of this state.
+    transitions: HashMap<Event, Vec<StateTransition>>,
+}
+
+/// A wrapper for [`State`] to support the internal alias table.
+#[derive(PartialEq, Debug, Clone)]
+pub(crate) struct StateWrapper {
+    /// The state that is wrapped by this struct.
+    pub(crate) state: State,
+    /// A data structure that allows the Vose-Alias method to be used for
+    /// sampling the next state. Probabilities sum to 1.0: any remaining
+    /// probabilities up to 1.0 are filled with STATE_NOP.
+    next_state: EnumMap<Event, Option<VoseAlias<usize>>>,
 }
 
 impl State {
-    /// Create a new [`State`] with the given map of transitions ([`Event`] to probability vector)
-    /// and number of total states in the [`Machine`](crate::machine).
-    pub fn new(t: HashMap<Event, HashMap<usize, f64>>, num_states: usize) -> Self {
+    /// Create a new [`State`] with the given map of transitions ([`Event`] to
+    /// state transition vector) and number of total states in the
+    /// [`Machine`](crate::machine).
+    pub fn new(t: EnumMap<Event, Vec<StateTransition>>) -> Self {
+        let mut transitions: HashMap<Event, Vec<StateTransition>> = HashMap::new();
+        for event in Event::iter() {
+            if !t[*event].is_empty() {
+                transitions.insert(*event, t[*event].clone());
+            }
+        }
+
         State {
+            transitions,
             action: None,
             counter_update: None,
-            next_state: make_next_state(t, num_states),
         }
+    }
+
+    /// Validate that this state has acceptable individual and total transition
+    /// probabilities, all required distributions are present, and distribution
+    /// parameters are permissible. Create next_state if it is not present.
+    pub fn validate(&self, num_states: usize) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // validate transition probabilities
+        for event in Event::iter() {
+            if !self.transitions.contains_key(event) || self.transitions[event].is_empty() {
+                continue;
+            }
+            let probmap = &self.transitions[event];
+
+            let mut probability_sum: f32 = 0.0;
+
+            // go over the set states
+            for trans in probmap {
+                trans.validate(num_states)?;
+                probability_sum += trans.probability;
+            }
+
+            if probability_sum <= 0.0 || probability_sum > 1.0 {
+                bail!(
+                    "found invalid total probability vector {} for {}, must be (0.0, 1.0]",
+                    &probability_sum,
+                    &event
+                );
+            }
+        }
+
+        // validate distribution parameters
+        // check that required distributions are present
+        if let Some(action) = &self.action {
+            action.validate()?;
+        }
+        if let Some(counter_update) = &self.counter_update {
+            counter_update.validate()?;
+        }
+
+        Ok(())
+    }
+
+    /// Construct an alias table based on a map of transitions
+    /// ([`Event`] to [`StateTransition`] vector) and the total number of
+    /// states in the [`Machine`](crate::machine). Validate state first.
+    pub(self) fn make_next_state(&self) -> EnumMap<Event, Option<VoseAlias<usize>>> {
+        let mut r: EnumMap<Event, Option<VoseAlias<usize>>> = enum_map! { _ => None };
+        for event in Event::iter() {
+            if !self.transitions.contains_key(event) || self.transitions[event].is_empty() {
+                continue;
+            }
+            let probmap = &self.transitions[event];
+
+            let mut element_vector: Vec<usize> = vec![];
+            let mut probability_vector: Vec<f32> = vec![];
+            let mut probability_sum: f32 = 0.0;
+
+            // go over the set states
+            for trans in probmap {
+                element_vector.push(trans.state);
+                probability_vector.push(trans.probability);
+                probability_sum += trans.probability;
+            }
+
+            if probability_sum < 1.0 {
+                element_vector.push(STATE_NOP);
+                probability_vector.push(1.0 - probability_sum);
+            }
+
+            r[*event] = Some(VoseAlias::new(element_vector, probability_vector));
+        }
+
+        r
+    }
+}
+
+impl StateWrapper {
+    pub(crate) fn new(
+        state: State,
+        num_states: usize,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        state.validate(num_states)?;
+        let next_state = state.make_next_state();
+
+        Ok(StateWrapper { state, next_state })
+    }
+
+    /// Sample a state to transition to given an [`Event`].
+    pub(crate) fn sample_state(&self, event: Event) -> Option<usize> {
+        let next = &self.next_state[event];
+        if let Some(alias_table) = next {
+            return Some(alias_table.sample());
+        };
+        None
     }
 }
 
@@ -46,9 +194,9 @@ impl fmt::Display for State {
         // HashMap is not stable), if found, print event and vector
         write!(f, "next_state: ")?;
         for event in Event::iter() {
-            if self.next_state.contains_key(event) {
+            if !self.transitions[event].is_empty() {
                 write!(f, "{:?}: ", event)?;
-                write!(f, "{:?}", self.next_state.get(event).unwrap())?;
+                write!(f, "{:?}", self.transitions[event])?;
             }
         }
 
@@ -56,44 +204,27 @@ impl fmt::Display for State {
     }
 }
 
-/// A helper used to construct [`State::next_state`] based on a map of
-/// transitions ([`Event`] to probability vector) and the total number of states
-/// in the [`Machine`](crate::machine).
-pub fn make_next_state(
-    t: HashMap<Event, HashMap<usize, f64>>,
-    num_states: usize,
-) -> HashMap<Event, Vec<f64>> {
-    let mut r = HashMap::new();
-    for event in Event::iter() {
-        if !t.contains_key(event) {
-            continue;
-        }
-        let probmap = t.get(event).unwrap();
-        let mut res: Vec<f64> = vec![];
-
-        // go over the set states
-        for i in 0..num_states {
-            if probmap.contains_key(&i) {
-                res.push(*probmap.get(&i).unwrap());
-            } else {
-                res.push(0.0);
-            }
-        }
-
-        // set StateCancel and StateEnd
-        if probmap.contains_key(&STATE_CANCEL) {
-            res.push(*probmap.get(&STATE_CANCEL).unwrap());
-        } else {
-            res.push(0.0);
-        }
-        if probmap.contains_key(&STATE_END) {
-            res.push(*probmap.get(&STATE_END).unwrap());
-        } else {
-            res.push(0.0);
-        }
-
-        r.insert(*event, res);
+impl SerializeAs<StateWrapper> for State {
+    fn serialize_as<S>(value: &StateWrapper, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        State::serialize(&value.state, serializer)
     }
+}
 
-    r
+impl<'de> DeserializeAs<'de, StateWrapper> for State {
+    fn deserialize_as<D>(deserializer: D) -> Result<StateWrapper, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let r = StateWrapper::new(State::deserialize(deserializer)?, STATE_MAX);
+
+        match r {
+            Ok(val) => Ok(val),
+            _ => Err(<D::Error as serde::de::Error>::custom(
+                "failed to parse state",
+            )),
+        }
+    }
 }

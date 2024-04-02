@@ -4,12 +4,13 @@ use serde::{Deserialize, Serialize};
 
 use self::Event::*;
 use crate::framework::MachineId;
+use enum_map::Enum;
 use std::fmt;
 use std::hash::Hash;
 use std::slice::Iter;
 
 /// An Event may trigger a [`State`](crate::state) transition.
-#[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Enum, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Event {
     /// NonPaddingRecv is when we received non-padding.
     NonPaddingRecv,

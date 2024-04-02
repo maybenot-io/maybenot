@@ -1,17 +1,20 @@
-use std::{collections::HashMap, error::Error, io::Read};
+use std::{error::Error, io::Read};
 
 use byteorder::{ByteOrder, LittleEndian};
+use enum_map::{enum_map, EnumMap};
 use flate2::read::ZlibDecoder;
 use hex::decode;
 use simple_error::{bail, map_err_with};
+use std::cmp::Ordering;
 use std::slice::Iter;
 
 use crate::{
     action::Action,
+    constants::{STATE_CANCEL, STATE_END},
     dist::{Dist, DistType},
     event::Event,
     machine::Machine,
-    state::State,
+    state::{State, StateTransition},
 };
 
 // The size (in bytes) of a serialized distribution for a
@@ -100,15 +103,13 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
         states.push(s);
     }
 
-    let m = Machine {
-        allowed_padding_packets: allowed_padding_bytes,
+    Machine::new(
+        allowed_padding_bytes,
         max_padding_frac,
         allowed_blocked_microsec,
         max_blocking_frac,
         states,
-    };
-    m.validate()?;
-    Ok(m)
+    )
 }
 
 pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
@@ -165,29 +166,31 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     r += 1;
 
     // next state
-    let mut next_state: HashMap<Event, Vec<f64>> = HashMap::new();
-    for event in v1_events_iter() {
-        let mut m = vec![];
+    let mut transitions: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
 
-        let mut all_zeroes = true;
-        for _ in 0..num_states + 2 {
+    for event in v1_events_iter() {
+        for i in 0..num_states + 2 {
             let v = LittleEndian::read_f64(&buf[r..r + 8]);
-            m.push(v);
             r += 8; // for f64
+
             if v != 0.0 {
-                all_zeroes = false;
+                let state = match i.cmp(&(num_states)) {
+                    Ordering::Less => i,
+                    Ordering::Equal => STATE_CANCEL,
+                    Ordering::Greater => STATE_END,
+                };
+
+                transitions[*event].push(StateTransition {
+                    state,
+                    probability: v as f32,
+                });
             }
-        }
-        if !all_zeroes {
-            next_state.insert(*event, m);
         }
     }
 
-    Ok(State {
-        action,
-        counter_update: None,
-        next_state,
-    })
+    let mut s = State::new(transitions);
+    s.action = action;
+    Ok(s)
 }
 
 fn parse_dist(buf: Vec<u8>) -> Result<Option<Dist>, Box<dyn Error + Send + Sync>> {

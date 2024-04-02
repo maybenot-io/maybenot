@@ -194,7 +194,6 @@ use crate::constants::*;
 use crate::counter::*;
 use crate::event::*;
 use crate::machine::*;
-use std::cmp::Ordering;
 use std::error::Error;
 use std::time::Duration;
 use std::time::Instant;
@@ -300,7 +299,7 @@ where
         ];
 
         for (mi, r) in runtime.iter_mut().enumerate() {
-            let opt_action = machines.as_ref()[mi].states[0].action;
+            let opt_action = machines.as_ref()[mi].states[0].state.action;
 
             if let Some(action) = opt_action {
                 r.state_limit = action.sample_limit();
@@ -477,13 +476,19 @@ where
         }
 
         // sample next state
-        let (next_state, set) =
-            self.next_state(&self.runtime[mi], &self.machines.as_ref()[mi], event);
+        let next_state;
+        // new block for immutable ref, makes things less ugly
+        {
+            let machine = &self.machines.as_ref()[mi];
+            let state = &machine.states[self.runtime[mi].current_state];
+            next_state = state.sample_state(event);
+        }
 
         // if no next state on event, done
-        if !set {
+        if next_state.is_none() || next_state.unwrap() == STATE_NOP {
             return StateChange::Unchanged;
         }
+        let next_state = next_state.unwrap();
 
         // we got a next state, act on it
         match next_state {
@@ -509,7 +514,7 @@ where
                 } else {
                     self.runtime[mi].current_state = next_state;
                     self.runtime[mi].state_limit = if let Some(action) =
-                        self.machines.as_ref()[mi].states[next_state].action
+                        self.machines.as_ref()[mi].states[next_state].state.action
                     {
                         action.sample_limit()
                     } else {
@@ -544,7 +549,7 @@ where
     fn update_counter(&mut self, mi: usize) -> (StateChange, bool) {
         let current = &self.machines.as_ref()[mi].states[self.runtime[mi].current_state];
 
-        if let Some(update) = &current.counter_update {
+        if let Some(update) = &current.state.counter_update {
             let value = update.sample_value();
             let counter = if update.counter == Counter::CounterA {
                 &mut self.runtime[mi].counter_value_a
@@ -582,7 +587,7 @@ where
         mi: MachineId,
     ) -> Option<TriggerAction> {
         let current = &machine.states[runtime.current_state];
-        let action = current.action?;
+        let action = current.state.action?;
 
         match action {
             Action::Cancel { timer } => Some(TriggerAction::Cancel { machine: mi, timer }),
@@ -617,7 +622,7 @@ where
         }
         let cs = self.runtime[mi].current_state;
 
-        if let Some(action) = self.machines.as_ref()[mi].states[cs].action {
+        if let Some(action) = self.machines.as_ref()[mi].states[cs].state.action {
             if self.runtime[mi].state_limit == 0 && action.has_limit() {
                 // take no action and trigger limit reached
                 self.actions[mi] = None;
@@ -627,46 +632,15 @@ where
         }
     }
 
-    fn next_state(
-        &self,
-        runtime: &MachineRuntime,
-        machine: &Machine,
-        event: Event,
-    ) -> (usize, bool) {
-        if !machine.states[runtime.current_state]
-            .next_state
-            .contains_key(&event)
-        {
-            return (0, false);
-        }
-        let next_prob = &machine.states[runtime.current_state].next_state[&event];
-
-        let p = rand::random::<f64>();
-        let mut total = 0.0;
-        for i in 0..next_prob.len() {
-            total += next_prob[i];
-            if p <= total {
-                // some events are machine-defined, others framework pseudo-states
-                match next_prob.len().cmp(&(i + 2)) {
-                    Ordering::Greater => return (i, true),
-                    Ordering::Less => return (STATE_END, true),
-                    Ordering::Equal => return (STATE_CANCEL, true),
-                }
-            }
-        }
-
-        (STATE_NOP, false)
-    }
-
     fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
 
-        if current.action.is_none() {
+        if current.state.action.is_none() {
             // This could be true, but no need for an extra call to schedule_action()
             return false;
         }
 
-        match current.action.unwrap() {
+        match current.state.action.unwrap() {
             Action::BlockOutgoing { .. } => self.below_limit_blocking(runtime, machine),
             Action::InjectPadding { .. } => self.below_limit_padding(runtime, machine),
             Action::UpdateTimer { .. } => runtime.state_limit > 0,
@@ -679,7 +653,7 @@ where
         // blocking action
 
         // special case: we always allow overwriting existing blocking
-        let replace = if let Some(Action::BlockOutgoing { replace, .. }) = current.action {
+        let replace = if let Some(Action::BlockOutgoing { replace, .. }) = current.state.action {
             replace
         } else {
             false
@@ -774,7 +748,7 @@ mod tests {
     use crate::dist::*;
     use crate::framework::*;
     use crate::state::*;
-    use std::collections::HashMap;
+    use enum_map::{enum_map, EnumMap};
     use std::ops::Add;
     use std::time::Duration;
     use std::time::Instant;
@@ -799,15 +773,15 @@ mod tests {
     fn trigger_events_actions() {
         // plan: create a machine that swaps between two states, trigger one
         // then multiple events and check the resulting actions
-        let num_states = 2;
 
         // state 0: go to state 1 on PaddingSent, pad after 10 usec
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
-        t.insert(Event::PaddingSent, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, num_states);
+        let mut s0 = State::new(t);
         s0.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
@@ -823,12 +797,13 @@ mod tests {
         });
 
         // state 1: go to state 0 on PaddingRecv, pad after 1 usec
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::PaddingRecv, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingRecv].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s1 = State::new(t, num_states);
+        let mut s1 = State::new(t);
         s1.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
@@ -845,13 +820,7 @@ mod tests {
         });
 
         // create a simple machine
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0, s1],
-        };
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -971,12 +940,13 @@ mod tests {
         // a machine that blocks for 10us, 1us after NonPaddingSent
 
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::NonPaddingSent, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, 1);
+        let mut s0 = State::new(t);
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
@@ -1000,13 +970,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0],
-        };
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1052,15 +1016,15 @@ mod tests {
     #[test]
     fn timer_machine() {
         // a machine that sets the timer to 1 ms after PaddingSent
-        let num_states = 2;
 
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
-        t.insert(Event::PaddingSent, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, num_states);
+        let mut s0 = State::new(t);
         s0.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
@@ -1077,12 +1041,13 @@ mod tests {
         });
 
         // state 1
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::TimerEnd, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::TimerEnd].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s1 = State::new(t, num_states);
+        let mut s1 = State::new(t);
         s1.action = Some(Action::UpdateTimer {
             replace: false,
             action_dist: Dist {
@@ -1097,13 +1062,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0, s1],
-        };
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1141,18 +1100,19 @@ mod tests {
     fn counter_machine() {
         // a machine that counts PaddingSent - NonPaddingSent
         // use counter A for that, pad and increment counter B on CounterZero
-        let num_states = 3;
 
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e0: HashMap<usize, f64> = HashMap::new();
-        e0.insert(1, 1.0);
-        let mut e1: HashMap<usize, f64> = HashMap::new();
-        e1.insert(2, 1.0);
-        t.insert(Event::PaddingSent, e0);
-        t.insert(Event::CounterZero, e1);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
+        t[Event::CounterZero].push(StateTransition {
+            state: 2,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, num_states);
+        let mut s0 = State::new(t);
         s0.counter_update = Some(CounterUpdate {
             counter: Counter::CounterA,
             operation: CounterOperation::Decrement,
@@ -1167,12 +1127,13 @@ mod tests {
         });
 
         // state 1
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::NonPaddingSent, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s1 = State::new(t, num_states);
+        let mut s1 = State::new(t);
         s1.counter_update = Some(CounterUpdate {
             counter: Counter::CounterA,
             operation: CounterOperation::Increment,
@@ -1187,15 +1148,17 @@ mod tests {
         });
 
         // state 2
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e0: HashMap<usize, f64> = HashMap::new();
-        e0.insert(0, 1.0);
-        let mut e1: HashMap<usize, f64> = HashMap::new();
-        e1.insert(1, 1.0);
-        t.insert(Event::NonPaddingSent, e0);
-        t.insert(Event::PaddingSent, e1);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::PaddingSent].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
 
-        let mut s2 = State::new(t, num_states);
+        let mut s2 = State::new(t);
         s2.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
@@ -1223,13 +1186,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0, s1, s2],
-        };
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1258,21 +1215,23 @@ mod tests {
     fn counter_underflow_machine() {
         // check that underflow of counter value cannot occur
         // ensure CounterZero is not triggered when counter is already 0
-        let num_states = 3;
 
         // state 0, decrement counter
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e0: HashMap<usize, f64> = HashMap::new();
-        e0.insert(0, 1.0);
-        let mut e1: HashMap<usize, f64> = HashMap::new();
-        e1.insert(1, 1.0);
-        let mut e2: HashMap<usize, f64> = HashMap::new();
-        e2.insert(2, 1.0);
-        t.insert(Event::NonPaddingSent, e0);
-        t.insert(Event::NonPaddingRecv, e1);
-        t.insert(Event::CounterZero, e2);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::NonPaddingRecv].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
+        t[Event::CounterZero].push(StateTransition {
+            state: 2,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, num_states);
+        let mut s0 = State::new(t);
         s0.counter_update = Some(CounterUpdate {
             counter: Counter::CounterB,
             operation: CounterOperation::Decrement, // NOTE
@@ -1288,18 +1247,21 @@ mod tests {
         });
 
         // state 1, set counter
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e0: HashMap<usize, f64> = HashMap::new();
-        e0.insert(0, 1.0);
-        let mut e1: HashMap<usize, f64> = HashMap::new();
-        e1.insert(1, 1.0);
-        let mut e2: HashMap<usize, f64> = HashMap::new();
-        e2.insert(2, 1.0);
-        t.insert(Event::NonPaddingSent, e0);
-        t.insert(Event::NonPaddingRecv, e1);
-        t.insert(Event::CounterZero, e2);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::NonPaddingRecv].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
+        t[Event::CounterZero].push(StateTransition {
+            state: 2,
+            probability: 1.0,
+        });
 
-        let mut s1 = State::new(t, num_states);
+        let mut s1 = State::new(t);
         s1.counter_update = Some(CounterUpdate {
             counter: Counter::CounterB,
             operation: CounterOperation::Set,
@@ -1314,15 +1276,17 @@ mod tests {
         });
 
         // state 2, pad
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e0: HashMap<usize, f64> = HashMap::new();
-        e0.insert(0, 1.0);
-        let mut e1: HashMap<usize, f64> = HashMap::new();
-        e1.insert(1, 1.0);
-        t.insert(Event::NonPaddingSent, e0);
-        t.insert(Event::NonPaddingRecv, e1);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::NonPaddingRecv].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
 
-        let mut s2 = State::new(t, num_states);
+        let mut s2 = State::new(t);
         s2.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
@@ -1338,13 +1302,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0, s1, s2],
-        };
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
 
         let current_time = Instant::now();
         let machines = vec![m];
@@ -1365,18 +1323,19 @@ mod tests {
     fn counter_overflow_machine() {
         // check that overflow of counter value cannot occur
         // set to max value, then try to add and make sure no change
-        let num_states = 2;
 
         // state 0, increment counter
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e0: HashMap<usize, f64> = HashMap::new();
-        e0.insert(0, 1.0);
-        let mut e1: HashMap<usize, f64> = HashMap::new();
-        e1.insert(1, 1.0);
-        t.insert(Event::NonPaddingSent, e0);
-        t.insert(Event::NonPaddingRecv, e1);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::NonPaddingRecv].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, num_states);
+        let mut s0 = State::new(t);
         s0.counter_update = Some(CounterUpdate {
             counter: Counter::CounterA,
             operation: CounterOperation::Increment, // NOTE
@@ -1391,15 +1350,17 @@ mod tests {
         });
 
         // state 1, set counter
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e0: HashMap<usize, f64> = HashMap::new();
-        e0.insert(0, 1.0);
-        let mut e1: HashMap<usize, f64> = HashMap::new();
-        e1.insert(1, 1.0);
-        t.insert(Event::NonPaddingSent, e0);
-        t.insert(Event::NonPaddingRecv, e1);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::NonPaddingRecv].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
 
-        let mut s1 = State::new(t, num_states);
+        let mut s1 = State::new(t);
         s1.counter_update = Some(CounterUpdate {
             counter: Counter::CounterA,
             operation: CounterOperation::Set,
@@ -1414,13 +1375,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0, s1],
-        };
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]).unwrap();
 
         let current_time = Instant::now();
         let machines = vec![m];
@@ -1444,16 +1399,23 @@ mod tests {
         // of 0.5.
 
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        // we use sent for checking limits
-        t.insert(Event::PaddingQueued, e.clone());
-        t.insert(Event::NonPaddingQueued, e.clone());
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        // we use queued for checking limits
+        t[Event::PaddingQueued].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::NonPaddingQueued].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
         // recv as an event to check without adding bytes sent
-        t.insert(Event::NonPaddingRecv, e.clone());
+        t[Event::NonPaddingRecv].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, 1);
+        let mut s0 = State::new(t);
         s0.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
@@ -1469,13 +1431,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine {
-            allowed_padding_packets: 100,
-            max_padding_frac: 0.5,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0],
-        };
+        let m = Machine::new(100, 0.5, 0, 0.0, vec![s0]).unwrap();
 
         let current_time = Instant::now();
         let machines = vec![m];
@@ -1538,16 +1494,23 @@ mod tests {
         // the same allowed padding, where both machines pad in parallel
 
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        // we use sent for checking limits
-        t.insert(Event::PaddingQueued, e.clone());
-        t.insert(Event::NonPaddingQueued, e.clone());
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        // we use queued for checking limits
+        t[Event::PaddingQueued].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::NonPaddingQueued].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
         // recv as an event to check without adding bytes sent
-        t.insert(Event::NonPaddingRecv, e.clone());
+        t[Event::NonPaddingRecv].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, 1);
+        let mut s0 = State::new(t);
         s0.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
@@ -1563,13 +1526,7 @@ mod tests {
         });
 
         // machines
-        let m1 = Machine {
-            allowed_padding_packets: 100,
-            max_padding_frac: 0.0, // NOTE
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0],
-        };
+        let m1 = Machine::new(100, 0.0, 0, 0.0, vec![s0]).unwrap();
         let m2 = m1.clone();
 
         // NOTE 0.5 max_padding_frac below
@@ -1671,14 +1628,21 @@ mod tests {
         // 0.5.
 
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::BlockingBegin, e.clone());
-        t.insert(Event::BlockingEnd, e.clone());
-        t.insert(Event::NonPaddingRecv, e.clone());
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::BlockingBegin].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::BlockingEnd].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::NonPaddingRecv].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, 1);
+        let mut s0 = State::new(t);
         // block every 2us for 2us
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
@@ -1703,13 +1667,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine {
-            allowed_padding_packets: 0,
-            max_padding_frac: 0.0,
-            allowed_blocked_microsec: 10, // NOTE
-            max_blocking_frac: 0.5,       // NOTE
-            states: vec![s0],
-        };
+        let m = Machine::new(0, 0.0, 10, 0.5, vec![s0]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1788,14 +1746,21 @@ mod tests {
         // 0.5 in the framework.
 
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::BlockingBegin, e.clone());
-        t.insert(Event::BlockingEnd, e.clone());
-        t.insert(Event::NonPaddingRecv, e.clone());
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::BlockingBegin].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::BlockingEnd].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
+        t[Event::NonPaddingRecv].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, 1);
+        let mut s0 = State::new(t);
         // block every 2us for 2us
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
@@ -1822,13 +1787,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine {
-            allowed_padding_packets: 0,
-            max_padding_frac: 0.0,
-            allowed_blocked_microsec: 10, // NOTE
-            max_blocking_frac: 0.0,       // NOTE, 0.0 here, 0.5 in framework below
-            states: vec![s0],
-        };
+        let m = Machine::new(0, 0.0, 10, 0.0, vec![s0]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1907,12 +1866,13 @@ mod tests {
         // of its limit (special case in below_limit_blocking).
 
         // state 0, first machine
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::NonPaddingRecv, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingRecv].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, 1);
+        let mut s0 = State::new(t);
         // block every 2us for 2us
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
@@ -1937,21 +1897,16 @@ mod tests {
         });
 
         // machine 0
-        let m0 = Machine {
-            allowed_padding_packets: 0,
-            max_padding_frac: 0.0,
-            allowed_blocked_microsec: 2, // NOTE
-            max_blocking_frac: 0.5,      // NOTE
-            states: vec![s0],
-        };
+        let m0 = Machine::new(0, 0.0, 2, 0.5, vec![s0]).unwrap();
 
         // state 0, second machine
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::NonPaddingSent, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, 1);
+        let mut s0 = State::new(t);
         // block instantly for 1000us
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
@@ -1977,13 +1932,7 @@ mod tests {
         });
 
         // machine 1
-        let m1 = Machine {
-            allowed_padding_packets: 0,
-            max_padding_frac: 0.0,
-            allowed_blocked_microsec: 0, // NOTE
-            max_blocking_frac: 0.0,      // NOTE
-            states: vec![s0],
-        };
+        let m1 = Machine::new(0, 0.0, 0, 0.0, vec![s0]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m0, m1];
@@ -2062,23 +2011,24 @@ mod tests {
         // we create a machine that samples a padding limit of 4 padding sent,
         // then should be prevented from padding further by transitioning to
         // self
-        let num_states = 2;
 
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
-        t.insert(Event::NonPaddingQueued, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::NonPaddingQueued].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
 
-        let s0 = State::new(t, num_states);
+        let s0 = State::new(t);
 
         // state 1
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(1, 1.0);
-        t.insert(Event::PaddingQueued, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingQueued].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
 
-        let mut s1 = State::new(t, num_states);
+        let mut s1 = State::new(t);
         s1.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
@@ -2101,13 +2051,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine {
-            allowed_padding_packets: 100000, // NOTE, will not apply
-            max_padding_frac: 0.0,           // NOTE, will not apply
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0, s1],
-        };
+        let m = Machine::new(100000, 0.0, 0, 0.0, vec![s0, s1]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];

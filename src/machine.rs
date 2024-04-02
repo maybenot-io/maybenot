@@ -7,6 +7,7 @@ use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use simple_error::bail;
 use std::error::Error;
 use std::str::FromStr;
@@ -18,6 +19,7 @@ use std::io::prelude::*;
 
 /// A probabilistic state machine (Rabin automaton) consisting of one or more
 /// [`State`] that determine when to inject and/or block outgoing traffic.
+#[serde_as]
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct Machine {
     /// The number of padding packets the machine is allowed to generate as
@@ -31,10 +33,39 @@ pub struct Machine {
     /// The maximum fraction of blocking (microseconds) to allow as actions.
     pub max_blocking_frac: f64,
     /// The states that make up the machine.
-    pub states: Vec<State>,
+    #[serde_as(as = "Vec<State>")]
+    pub(crate) states: Vec<StateWrapper>,
 }
 
 impl Machine {
+    /// Create a new [`Machine`] with the given limits and states. Returns an
+    /// error if the machine or any of its states are invalid.
+    pub fn new(
+        allowed_padding_packets: u64,
+        max_padding_frac: f64,
+        allowed_blocked_microsec: u64,
+        max_blocking_frac: f64,
+        states: Vec<State>,
+    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let num_states = states.len();
+        let mut wrapped = vec![];
+
+        for s in states.iter() {
+            wrapped.push(StateWrapper::new(s.clone(), num_states)?);
+        }
+
+        let machine = Machine {
+            allowed_padding_packets,
+            max_padding_frac,
+            allowed_blocked_microsec,
+            max_blocking_frac,
+            states: wrapped,
+        };
+        machine.validate()?;
+
+        Ok(machine)
+    }
+
     /// Get a unique and deterministic string that represents the machine. The
     /// string is 32 characters long, hex-encoded.
     pub fn name(&self) -> String {
@@ -95,50 +126,6 @@ impl Machine {
             )
         }
 
-        // check each state
-        for (index, state) in self.states.iter().enumerate() {
-            // validate transitions
-            for next in &state.next_state {
-                if next.1.len() != self.states.len() + 2 {
-                    bail!(
-                        "found too small next_state vector, expected {}, got {}",
-                        self.states.len() + 2,
-                        next.1.len()
-                    )
-                }
-
-                let mut p_total = 0.0;
-                for p in next.1 {
-                    if !(&0.0..=&1.0).contains(&p) {
-                        bail!("found probability {}, has to be [0.0, 1.0]", &p)
-                    }
-                    p_total += p;
-                }
-
-                // we are (0.0, 1.0] here, because:
-                // - if pTotal <= 0.0, then we shouldn't have an entry in NextState
-                // - pTotal < 1.0 is OK, to support a "nop" transition (self
-                // transition has implications in the framework, i.e., involving
-                // limits on padding sent in the state)
-                if p_total <= 0.0 || p_total > 1.0 {
-                    bail!(
-                        "found invalid total probability vector {} at index {}, must be (0.0, 1.0]",
-                        p_total,
-                        index
-                    )
-                }
-            }
-
-            // validate distribution parameters
-            // check that required distributions are present
-            if let Some(action) = &state.action {
-                action.validate()?;
-            }
-            if let Some(counter_update) = &state.counter_update {
-                counter_update.validate()?;
-            }
-        }
-
         Ok(())
     }
 }
@@ -176,28 +163,21 @@ mod tests {
     use crate::dist::*;
     use crate::event::Event;
     use crate::machine::*;
-    use std::collections::HashMap;
+    use enum_map::{enum_map, EnumMap};
 
     #[test]
     fn machine_name_generation() {
-        let num_states = 1;
-
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::PaddingSent, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let s0 = State::new(t, num_states);
+        let s0 = State::new(t);
 
         // machine
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0],
-        };
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0]).unwrap();
 
         // name generation should be deterministic
         assert_eq!(m.name(), m.name());
@@ -205,24 +185,17 @@ mod tests {
 
     #[test]
     fn validate_machine_limits() {
-        let num_states = 1;
-
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::PaddingSent, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let s0 = State::new(t, num_states);
+        let s0 = State::new(t);
 
         // machine
-        let mut m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0],
-        };
+        let mut m = Machine::new(1000, 1.0, 0, 0.0, vec![s0]).unwrap();
 
         // max padding frac
         m.max_padding_frac = -0.1;
@@ -258,117 +231,82 @@ mod tests {
     #[test]
     fn validate_machine_num_states() {
         // invalid machine lacking state
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![],
-        };
+        let r = Machine::new(1000, 1.0, 0, 0.0, vec![]);
 
-        let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
     }
 
     #[test]
     fn validate_machine_probability() {
-        let num_states = 1;
+        // out of bounds index
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
 
-        // set total probability too low
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        // invalid state transition
-        e.insert(1, 1.0);
-        t.insert(Event::PaddingSent, e);
-
-        let mut s0 = State::new(t, num_states);
+        let s0 = State::new(t);
 
         // machine with broken state
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0.clone()],
-        };
-        // while we get an error here, as intended, the error is not the
-        // expected one, because make_next_state() actually ignores the
-        // transition to the non-existing state as it makes the probability
-        // matrix based on num_states
-        let r = m.validate();
+        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]);
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
         // try setting one probability too high
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        // invalid state transition
-        e.insert(0, 1.1);
-        t.insert(Event::PaddingSent, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.1,
+        });
 
-        s0.next_state = make_next_state(t, num_states);
+        let s0 = State::new(t);
 
         // machine with broken state
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0.clone()],
-        };
-        // we get the expected error here
-        let r = m.validate();
+        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]);
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
         // try setting total probability too high
-        let num_states = 2;
 
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        // invalid state transition
-        e.insert(0, 0.5);
-        e.insert(1, 0.6);
-        t.insert(Event::PaddingSent, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(StateTransition {
+            state: 0,
+            probability: 0.5,
+        });
+        t[Event::PaddingSent].push(StateTransition {
+            state: 1,
+            probability: 0.6,
+        });
 
-        s0.next_state = make_next_state(t, num_states);
+        let s0 = State::new(t);
 
         // state 1
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        // invalid state transition
-        e.insert(1, 1.0);
-        t.insert(Event::PaddingRecv, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingRecv].push(StateTransition {
+            state: 1,
+            probability: 1.0,
+        });
 
-        let s1 = State::new(t, num_states);
+        let s1 = State::new(t);
 
         // machine with broken state
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0, s1],
-        };
-        // we get the expected error here
-        let r = m.validate();
+        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]);
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
     }
 
     #[test]
     fn validate_machine_distributions() {
-        let num_states = 1;
-
         // state 0
-        let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-        let mut e: HashMap<usize, f64> = HashMap::new();
-        e.insert(0, 1.0);
-        t.insert(Event::PaddingSent, e);
+        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(StateTransition {
+            state: 0,
+            probability: 1.0,
+        });
 
-        let mut s0 = State::new(t, num_states);
+        let mut s0 = State::new(t);
         s0.action = Some(Action::InjectPadding {
             bypass: false,
             replace: false,
@@ -384,13 +322,7 @@ mod tests {
         });
 
         // valid machine
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0.clone()],
-        };
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]).unwrap();
 
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
@@ -412,15 +344,8 @@ mod tests {
         });
 
         // machine with broken state
-        let m = Machine {
-            allowed_padding_packets: 1000,
-            max_padding_frac: 1.0,
-            allowed_blocked_microsec: 0,
-            max_blocking_frac: 0.0,
-            states: vec![s0.clone()],
-        };
+        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]);
 
-        let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
     }
