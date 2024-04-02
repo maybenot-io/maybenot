@@ -52,9 +52,9 @@ impl StateTransition {
 pub struct State {
     /// The action to be taken upon transition to this state.
     pub action: Option<Action>,
-    /// On transition to this state, this struct will be used to determine how
-    /// to update the containing machine's counters.
-    pub counter_update: Option<CounterUpdate>,
+    /// On transition to this state, this struct will be used to determine how to
+    /// update the containing machine's counters.
+    pub counter: Option<CounterUpdate>,
     /// A map of [`Event`] to state transition vector specifying the possible
     /// transitions out of this state.
     transitions: HashMap<Event, Vec<StateTransition>>,
@@ -86,7 +86,7 @@ impl State {
         State {
             transitions,
             action: None,
-            counter_update: None,
+            counter: None,
         }
     }
 
@@ -188,7 +188,7 @@ impl StateWrapper {
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "action: {:?}", self.action)?;
-        write!(f, "counter update: {:?}", self.counter_update)?;
+        write!(f, "counter update: {:?}", self.counter)?;
 
         // next_state: iterate over every possible event in order (because
         // HashMap is not stable), if found, print event and vector

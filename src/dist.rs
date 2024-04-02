@@ -95,10 +95,8 @@ impl fmt::Display for DistType {
     }
 }
 
-/// A distribution used in a [`State`](crate::state). Ugly struct for the sake
-/// of serializability with a type and two parameters that depend on the type of
-/// the dist. Also has an optional starting value and max value enforced after
-/// sampling.
+/// A distribution used in a [`State`](crate::state). Can be sampled to get a
+/// value. The value is clamped to the range [start, max] if both are set.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Dist {
     /// The type of distribution.
@@ -190,14 +188,14 @@ impl Dist {
     /// Sample the distribution. May panic if not valid (see [`Self::validate()`]).
     pub fn sample(self) -> f64 {
         let mut r: f64 = 0.0;
-        r = r.max(self.distsample() + self.start);
+        r = r.max(self.dist_sample() + self.start);
         if self.max > 0.0 {
             return r.min(self.max);
         }
         r
     }
 
-    fn distsample(self) -> f64 {
+    fn dist_sample(self) -> f64 {
         match self.dist {
             DistType::Uniform { low, high } => {
                 // special common case for handcrafted machines, also not
@@ -233,7 +231,7 @@ impl Dist {
                 .unwrap()
                 .sample(&mut rand::thread_rng()),
             DistType::Gamma { scale, shape } => {
-                // note order below in inversed from others for some reason in
+                // note order below inverted from others for some reason in
                 // rand_distr
                 Gamma::new(shape, scale)
                     .unwrap()

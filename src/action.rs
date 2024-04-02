@@ -21,29 +21,31 @@ pub enum Timer {
     All,
 }
 
-/// An Action happens upon transition to a [`State`](crate::state).
+/// An Action happens upon transition to a [`State`](crate::state). All actions
+/// (except Cancel) can be limited. The limit is the maximum number of times the
+/// action can be taken upon repeated transitions to the same state.
 #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Action {
     /// Cancel a timer.
     Cancel { timer: Timer },
-    /// Schedule padding to be injected.
+    /// Schedule padding to be sent after a timeout.
     ///
     /// The bypass flag determines if the padding packet MUST bypass any
     /// existing blocking that was triggered with the bypass flag set.
     ///
     /// The replace flag determines if the padding packet MAY be replaced by a
     /// non-padding packet queued at the time the padding packet would be sent.
-    InjectPadding {
+    SendPadding {
         bypass: bool,
         replace: bool,
-        timeout_dist: Dist,
-        limit_dist: Option<Dist>,
+        timeout: Dist,
+        limit: Option<Dist>,
     },
-    /// Schedule blocking of outgoing traffic.
+    /// Schedule blocking of outgoing traffic after a timeout.
     ///
-    /// The bypass flag determines if padding actions are allowed to bypass
-    /// this blocking action. This allows for machines that can fail closed
-    /// (never bypass blocking) while simultaneously providing support for
+    /// The bypass flag determines if padding actions are allowed to bypass this
+    /// blocking action. This allows for machines that can fail closed (never
+    /// bypass blocking) while simultaneously providing support for
     /// constant-rate defenses, when set along with the replace flag.
     ///
     /// The replace flag determines if the action duration should replace any
@@ -51,9 +53,9 @@ pub enum Action {
     BlockOutgoing {
         bypass: bool,
         replace: bool,
-        timeout_dist: Dist,
-        action_dist: Dist,
-        limit_dist: Option<Dist>,
+        timeout: Dist,
+        duration: Dist,
+        limit: Option<Dist>,
     },
     /// Update the timer duration for a machine.
     ///
@@ -61,8 +63,8 @@ pub enum Action {
     /// current timer duration, if the timer has already been set.
     UpdateTimer {
         replace: bool,
-        action_dist: Dist,
-        limit_dist: Option<Dist>,
+        duration: Dist,
+        limit: Option<Dist>,
     },
 }
 
@@ -70,12 +72,11 @@ impl Action {
     /// Sample a timeout for a padding or blocking action.
     pub fn sample_timeout(&self) -> Result<f64, Box<dyn Error + Send + Sync>> {
         match self {
-            Action::InjectPadding { timeout_dist, .. }
-            | Action::BlockOutgoing { timeout_dist, .. } => {
-                Ok(timeout_dist.sample().min(MAX_SAMPLED_TIMEOUT))
+            Action::SendPadding { timeout, .. } | Action::BlockOutgoing { timeout, .. } => {
+                Ok(timeout.sample().min(MAX_SAMPLED_TIMEOUT))
             }
             _ => {
-                bail!("can only sample a timeout for InjectPadding and BlockOutgoing actions");
+                bail!("can only sample a timeout for SendPadding and BlockOutgoing actions");
             }
         }
     }
@@ -83,11 +84,11 @@ impl Action {
     /// Sample a duration for a blocking or timer update action.
     pub fn sample_duration(&self) -> Result<f64, Box<dyn Error + Send + Sync>> {
         match self {
-            Action::BlockOutgoing { action_dist, .. } => {
-                Ok(action_dist.sample().min(MAX_SAMPLED_BLOCK_DURATION))
+            Action::BlockOutgoing { duration, .. } => {
+                Ok(duration.sample().min(MAX_SAMPLED_BLOCK_DURATION))
             }
-            Action::UpdateTimer { action_dist, .. } => {
-                Ok(action_dist.sample().min(MAX_SAMPLED_TIMER_DURATION))
+            Action::UpdateTimer { duration, .. } => {
+                Ok(duration.sample().min(MAX_SAMPLED_TIMER_DURATION))
             }
             _ => {
                 bail!("can only sample a duration for BlockOutgoing and UpdateTimer actions");
@@ -98,13 +99,13 @@ impl Action {
     /// Sample a limit.
     pub fn sample_limit(&self) -> u64 {
         match self {
-            Action::InjectPadding { limit_dist, .. }
-            | Action::BlockOutgoing { limit_dist, .. }
-            | Action::UpdateTimer { limit_dist, .. } => {
-                if limit_dist.is_none() {
+            Action::SendPadding { limit, .. }
+            | Action::BlockOutgoing { limit, .. }
+            | Action::UpdateTimer { limit, .. } => {
+                if limit.is_none() {
                     return STATE_LIMIT_MAX;
                 }
-                let s = limit_dist.unwrap().sample().round() as u64;
+                let s = limit.unwrap().sample().round() as u64;
                 s.min(STATE_LIMIT_MAX)
             }
             _ => STATE_LIMIT_MAX,
@@ -114,9 +115,9 @@ impl Action {
     /// Check if the action has a limit distribution.
     pub fn has_limit(&self) -> bool {
         match self {
-            Action::InjectPadding { limit_dist, .. }
-            | Action::BlockOutgoing { limit_dist, .. }
-            | Action::UpdateTimer { limit_dist, .. } => limit_dist.is_some(),
+            Action::SendPadding { limit, .. }
+            | Action::BlockOutgoing { limit, .. }
+            | Action::UpdateTimer { limit, .. } => limit.is_some(),
             _ => false,
         }
     }
@@ -125,36 +126,30 @@ impl Action {
     /// Also ensure that required distributions are not DistType::None.
     pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         match self {
-            Action::InjectPadding {
-                timeout_dist,
-                limit_dist,
-                ..
-            } => {
-                timeout_dist.validate()?;
-                if limit_dist.is_some() {
-                    limit_dist.unwrap().validate()?;
+            Action::SendPadding { timeout, limit, .. } => {
+                timeout.validate()?;
+                if limit.is_some() {
+                    limit.unwrap().validate()?;
                 }
             }
             Action::BlockOutgoing {
-                timeout_dist,
-                action_dist,
-                limit_dist,
+                timeout,
+                duration,
+                limit,
                 ..
             } => {
-                timeout_dist.validate()?;
-                action_dist.validate()?;
-                if limit_dist.is_some() {
-                    limit_dist.unwrap().validate()?;
+                timeout.validate()?;
+                duration.validate()?;
+                if limit.is_some() {
+                    limit.unwrap().validate()?;
                 }
             }
             Action::UpdateTimer {
-                action_dist,
-                limit_dist,
-                ..
+                duration, limit, ..
             } => {
-                action_dist.validate()?;
-                if limit_dist.is_some() {
-                    limit_dist.unwrap().validate()?;
+                duration.validate()?;
+                if limit.is_some() {
+                    limit.unwrap().validate()?;
                 }
             }
             _ => {}
@@ -182,7 +177,7 @@ pub enum TriggerAction {
     /// If the bypass and replace flags are both set to true AND the active
     /// blocking may be bypassed, then non-padding packets MAY replace the
     /// padding packet AND bypass the active blocking.
-    InjectPadding {
+    SendPadding {
         timeout: Duration,
         bypass: bool,
         replace: bool,
@@ -249,11 +244,11 @@ mod tests {
 
     #[test]
     fn validate_padding_action() {
-        // valid InjectPadding action
-        let mut a = Action::InjectPadding {
+        // valid SendPadding action
+        let mut a = Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -261,7 +256,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Some(Dist {
+            limit: Some(Dist {
                 dist: DistType::Normal {
                     mean: 50.0,
                     stdev: 10.0,
@@ -275,8 +270,8 @@ mod tests {
         assert!(r.is_ok());
 
         // invalid timeout dist, not allowed
-        if let Action::InjectPadding { timeout_dist, .. } = &mut a {
-            *timeout_dist = Dist {
+        if let Action::SendPadding { timeout, .. } = &mut a {
+            *timeout = Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
                     high: 5.0,
@@ -290,8 +285,8 @@ mod tests {
         assert!(r.is_err());
 
         // repair timeout dist
-        if let Action::InjectPadding { timeout_dist, .. } = &mut a {
-            *timeout_dist = Dist {
+        if let Action::SendPadding { timeout, .. } = &mut a {
+            *timeout = Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -302,8 +297,8 @@ mod tests {
         }
 
         // invalid limit dist, not allowed
-        if let Action::InjectPadding { limit_dist, .. } = &mut a {
-            *limit_dist = Some(Dist {
+        if let Action::SendPadding { limit, .. } = &mut a {
+            *limit = Some(Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
                     high: 5.0,
@@ -323,7 +318,7 @@ mod tests {
         let mut a = Action::BlockOutgoing {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -331,7 +326,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            action_dist: Dist {
+            duration: Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -339,7 +334,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Some(Dist {
+            limit: Some(Dist {
                 dist: DistType::Normal {
                     mean: 50.0,
                     stdev: 10.0,
@@ -353,8 +348,8 @@ mod tests {
         assert!(r.is_ok());
 
         // invalid timeout dist, not allowed
-        if let Action::BlockOutgoing { timeout_dist, .. } = &mut a {
-            *timeout_dist = Dist {
+        if let Action::BlockOutgoing { timeout, .. } = &mut a {
+            *timeout = Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
                     high: 5.0,
@@ -369,8 +364,8 @@ mod tests {
         assert!(r.is_err());
 
         // repair timeout dist
-        if let Action::BlockOutgoing { timeout_dist, .. } = &mut a {
-            *timeout_dist = Dist {
+        if let Action::BlockOutgoing { timeout, .. } = &mut a {
+            *timeout = Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -381,8 +376,8 @@ mod tests {
         }
 
         // invalid action dist, not allowed
-        if let Action::BlockOutgoing { action_dist, .. } = &mut a {
-            *action_dist = Dist {
+        if let Action::BlockOutgoing { duration, .. } = &mut a {
+            *duration = Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
                     high: 5.0,
@@ -396,8 +391,8 @@ mod tests {
         assert!(r.is_err());
 
         // repair action dist
-        if let Action::BlockOutgoing { action_dist, .. } = &mut a {
-            *action_dist = Dist {
+        if let Action::BlockOutgoing { duration, .. } = &mut a {
+            *duration = Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -408,8 +403,8 @@ mod tests {
         }
 
         // invalid limit dist, not allowed
-        if let Action::BlockOutgoing { limit_dist, .. } = &mut a {
-            *limit_dist = Some(Dist {
+        if let Action::BlockOutgoing { limit, .. } = &mut a {
+            *limit = Some(Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
                     high: 5.0,
@@ -428,7 +423,7 @@ mod tests {
         // valid UpdateTimer action
         let mut a = Action::UpdateTimer {
             replace: true,
-            action_dist: Dist {
+            duration: Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -436,7 +431,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: Some(Dist {
+            limit: Some(Dist {
                 dist: DistType::Normal {
                     mean: 50.0,
                     stdev: 10.0,
@@ -450,8 +445,8 @@ mod tests {
         assert!(r.is_ok());
 
         // invalid action dist, not allowed
-        if let Action::UpdateTimer { action_dist, .. } = &mut a {
-            *action_dist = Dist {
+        if let Action::UpdateTimer { duration, .. } = &mut a {
+            *duration = Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
                     high: 5.0,
@@ -465,8 +460,8 @@ mod tests {
         assert!(r.is_err());
 
         // repair action dist
-        if let Action::UpdateTimer { action_dist, .. } = &mut a {
-            *action_dist = Dist {
+        if let Action::UpdateTimer { duration, .. } = &mut a {
+            *duration = Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -477,8 +472,8 @@ mod tests {
         }
 
         // invalid limit dist, not allowed
-        if let Action::UpdateTimer { limit_dist, .. } = &mut a {
-            *limit_dist = Some(Dist {
+        if let Action::UpdateTimer { limit, .. } = &mut a {
+            *limit = Some(Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
                     high: 5.0,

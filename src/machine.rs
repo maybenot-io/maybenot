@@ -307,10 +307,10 @@ mod tests {
         });
 
         let mut s0 = State::new(t);
-        s0.action = Some(Action::InjectPadding {
+        s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
                     high: 10.0,
@@ -318,7 +318,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // valid machine
@@ -329,10 +329,10 @@ mod tests {
         assert!(r.is_ok());
 
         // invalid action in state
-        s0.action = Some(Action::InjectPadding {
+        s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
-            timeout_dist: Dist {
+            timeout: Dist {
                 dist: DistType::Uniform {
                     low: 2.0, // NOTE param1 > param2
                     high: 1.0,
@@ -340,7 +340,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            limit_dist: None,
+            limit: None,
         });
 
         // machine with broken state

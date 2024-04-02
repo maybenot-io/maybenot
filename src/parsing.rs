@@ -19,15 +19,17 @@ use crate::{
 
 // The size (in bytes) of a serialized distribution for a
 // [`State`](crate::state) in v1.
-const SERIALIZEDDISTSIZE: usize = 2 + 8 * 4;
+const SERIALIZED_DIST_SIZE: usize = 2 + 8 * 4;
 
 // helper function to iterate over all supported v1 events
 fn v1_events_iter() -> Iter<'static, Event> {
     static EVENTS: [Event; 7] = [
-        Event::NonPaddingRecv,
+        Event::NormalRecv,
         Event::PaddingRecv,
-        Event::NonPaddingSent,
-        Event::PaddingSent,
+        // was in v1 NonPaddingSent
+        Event::NormalQueued,
+        // was in v1 PaddingSent
+        Event::PaddingQueued,
         Event::BlockingBegin,
         Event::BlockingEnd,
         Event::LimitReached,
@@ -67,7 +69,7 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
 
     let mut r: usize = 0;
     // 4 8-byte values
-    let allowed_padding_bytes = LittleEndian::read_u64(&buf[r..r + 8]);
+    let allowed_padding_packets = LittleEndian::read_u64(&buf[r..r + 8]);
     r += 8;
     let max_padding_frac = LittleEndian::read_f64(&buf[r..r + 8]);
     r += 8;
@@ -86,7 +88,7 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
 
     // each state has 3 distributions + 4 flags + next_state matrix
     let expected_state_len: usize =
-        3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * (v1_events_iter().len() + 1);
+        3 * SERIALIZED_DIST_SIZE + 4 + (num_states + 2) * 8 * (v1_events_iter().len() + 1);
     if buf[r..].len() != expected_state_len * num_states {
         bail!(format!(
             "expected {} bytes for {} states, but got {} bytes",
@@ -104,7 +106,7 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
     }
 
     Machine::new(
-        allowed_padding_bytes,
+        allowed_padding_packets,
         max_padding_frac,
         allowed_blocked_microsec,
         max_blocking_frac,
@@ -114,19 +116,20 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
 
 pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
     // len: 3 distributions + 4 flags + next_state
-    if buf.len() < 3 * SERIALIZEDDISTSIZE + 4 + (num_states + 2) * 8 * (v1_events_iter().len() + 1)
+    if buf.len()
+        < 3 * SERIALIZED_DIST_SIZE + 4 + (num_states + 2) * 8 * (v1_events_iter().len() + 1)
     {
         bail!("too small")
     }
 
     // distributions
     let mut r: usize = 0;
-    let action_dist = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec())?;
-    r += SERIALIZEDDISTSIZE;
-    let limit_dist = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec())?;
-    r += SERIALIZEDDISTSIZE;
-    let timeout_dist = parse_dist(buf[r..r + SERIALIZEDDISTSIZE].to_vec())?;
-    r += SERIALIZEDDISTSIZE;
+    let duration = parse_dist(buf[r..r + SERIALIZED_DIST_SIZE].to_vec())?;
+    r += SERIALIZED_DIST_SIZE;
+    let limit = parse_dist(buf[r..r + SERIALIZED_DIST_SIZE].to_vec())?;
+    r += SERIALIZED_DIST_SIZE;
+    let timeout = parse_dist(buf[r..r + SERIALIZED_DIST_SIZE].to_vec())?;
+    r += SERIALIZED_DIST_SIZE;
 
     // flags
     let action_is_block: bool = buf[r] == 1;
@@ -137,27 +140,27 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     r += 1;
 
     let action: Option<Action>;
-    if timeout_dist.is_none() {
+    if timeout.is_none() {
         action = None;
     } else {
-        let timeout_dist = timeout_dist.unwrap();
+        let timeout = timeout.unwrap();
         if action_is_block {
-            if action_dist.is_none() {
+            if duration.is_none() {
                 bail!("action dist is None")
             }
             action = Some(Action::BlockOutgoing {
                 bypass,
                 replace,
-                timeout_dist,
-                action_dist: action_dist.unwrap(),
-                limit_dist,
+                timeout,
+                duration: duration.unwrap(),
+                limit,
             });
         } else {
-            action = Some(Action::InjectPadding {
+            action = Some(Action::SendPadding {
                 bypass,
                 replace,
-                timeout_dist,
-                limit_dist,
+                timeout,
+                limit,
             });
         };
     }
@@ -194,7 +197,7 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
 }
 
 fn parse_dist(buf: Vec<u8>) -> Result<Option<Dist>, Box<dyn Error + Send + Sync>> {
-    if buf.len() < SERIALIZEDDISTSIZE {
+    if buf.len() < SERIALIZED_DIST_SIZE {
         bail!("too small")
     }
 
