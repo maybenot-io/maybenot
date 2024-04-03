@@ -7,6 +7,7 @@ use crate::constants::*;
 use crate::dist::*;
 use crate::framework::MachineId;
 use std::error::Error;
+use std::fmt;
 use std::hash::Hash;
 use std::time::Duration;
 
@@ -66,6 +67,12 @@ pub enum Action {
         duration: Dist,
         limit: Option<Dist>,
     },
+}
+
+impl fmt::Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:#?}", self)
+    }
 }
 
 impl Action {
@@ -209,6 +216,12 @@ pub enum TriggerAction {
         replace: bool,
         machine: MachineId,
     },
+}
+
+impl fmt::Display for TriggerAction {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:#?}", self)
+    }
 }
 
 #[cfg(test)]

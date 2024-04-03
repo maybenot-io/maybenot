@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::constants::*;
 use crate::dist::*;
 use std::error::Error;
+use std::fmt;
 
 /// The two counters that are part of each [`Machine`](crate::machine).
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
@@ -38,6 +39,12 @@ pub struct CounterUpdate {
     /// If set, sample the value to update from a distribution. If not set,
     /// value is 1.
     pub value: Option<Dist>,
+}
+
+impl fmt::Display for CounterUpdate {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:#?}", self)
+    }
 }
 
 impl CounterUpdate {

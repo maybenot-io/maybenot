@@ -28,6 +28,12 @@ pub struct StateTransition {
     pub probability: f32,
 }
 
+impl fmt::Display for StateTransition {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}: {:.4}", self.state, self.probability)
+    }
+}
+
 impl StateTransition {
     /// Validate that this state transition specifies a valid state and that
     /// its probability is in the range (0.0, 1.0].
@@ -188,16 +194,27 @@ impl StateWrapper {
 
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "action: {:?}", self.action)?;
-        write!(f, "counter update: {:?}", self.counter)?;
+        if let Some(action) = self.action {
+            write!(f, "action: {}\n", action)?;
+        } else {
+            write!(f, "action: None\n")?;
+        }
+        if let Some(counter) = self.counter {
+            write!(f, "counter: {}\n", counter)?;
+        } else {
+            write!(f, "counter: None\n")?;
+        }
 
         // next_state: iterate over every possible event in order (because
         // HashMap is not stable), if found, print event and vector
         write!(f, "next_state: ")?;
         for event in Event::iter() {
             if !self.transitions[event].is_empty() {
-                write!(f, "{:?}: ", event)?;
-                write!(f, "{:?}", self.transitions[event])?;
+                write!(f, "{}: ", event)?;
+                for trans in self.transitions[event].iter() {
+                    write!(f, " * {}", trans)?;
+                }
+                write!(f, "")?;
             }
         }
 
