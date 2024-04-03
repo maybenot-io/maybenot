@@ -219,8 +219,7 @@ impl Dist {
                 .sample(&mut rand::thread_rng()) as f64,
             DistType::Geometric { probability } => Geometric::new(probability)
                 .unwrap()
-                .sample(&mut rand::thread_rng())
-                as f64,
+                .sample(&mut rand::thread_rng()) as f64,
             DistType::Pareto { scale, shape } => Pareto::new(scale, shape)
                 .unwrap()
                 .sample(&mut rand::thread_rng()),
@@ -532,5 +531,43 @@ mod tests {
 
         let r = d.validate();
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn sample_clamp() {
+        // make sure start and max are applied
+
+        // start: uniform 0, ensure sampled value is != 0
+        let d = Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 5.0,
+            max: 0.0,
+        };
+        assert_eq!(d.sample(), 5.0);
+
+        // max: uniform 10, ensure sampled value is < 10
+        let d = Dist {
+            dist: DistType::Uniform {
+                low: 10.0,
+                high: 10.0,
+            },
+            start: 0.0,
+            max: 5.0,
+        };
+        assert_eq!(d.sample(), 5.0);
+
+        // finally, make sure values < 0.0 cannot be sampled
+        let d = Dist {
+            dist: DistType::Uniform {
+                low: -20.0,
+                high: -10.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+        assert_eq!(d.sample(), 0.0);
     }
 }
