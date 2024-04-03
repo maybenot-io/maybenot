@@ -249,7 +249,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn validate_dist() {
+    fn validate_uniform_dist() {
         // valid dist
         let d = Dist {
             dist: DistType::Uniform {
@@ -268,6 +268,263 @@ mod tests {
             dist: DistType::Uniform {
                 low: 15.0,
                 high: 5.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_normal_dist() {
+        // valid dist
+        let d = Dist {
+            dist: DistType::Normal {
+                mean: 100.0,
+                stdev: 15.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_ok());
+
+        // dist with infinite variance
+        let d = Dist {
+            dist: DistType::Normal {
+                mean: 100.0,
+                stdev: f64::INFINITY,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_lognormal_dist() {
+        // valid dist
+        let d = Dist {
+            dist: DistType::LogNormal {
+                mu: 100.0,
+                sigma: 15.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_ok());
+
+        // dist with infinite variance
+        let d = Dist {
+            dist: DistType::LogNormal {
+                mu: 100.0,
+                sigma: f64::INFINITY,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_binomial_dist() {
+        // valid dist
+        let d = Dist {
+            dist: DistType::Binomial {
+                trials: 10,
+                probability: 0.5,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_ok());
+
+        // dist with invalid probability
+        let d = Dist {
+            dist: DistType::Binomial {
+                trials: 10,
+                probability: 1.1,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_geometric_dist() {
+        // valid dist
+        let d = Dist {
+            dist: DistType::Geometric {
+                probability: 0.5,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_ok());
+
+        // dist with invalid probability
+        let d = Dist {
+            dist: DistType::Geometric {
+                probability: 1.1,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_pareto_dist() {
+        // valid dist
+        let d = Dist {
+            dist: DistType::Pareto {
+                scale: 1.0,
+                shape: 0.5,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_ok());
+
+        // dist with negative scale
+        let d = Dist {
+            dist: DistType::Pareto {
+                scale: -1.0,
+                shape: 0.5,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_poisson_dist() {
+        // valid dist
+        let d = Dist {
+            dist: DistType::Poisson {
+                lambda: 1.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_ok());
+
+        // dist with negative lambda
+        let d = Dist {
+            dist: DistType::Poisson {
+                lambda: -1.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_weibull_dist() {
+        // valid dist
+        let d = Dist {
+            dist: DistType::Weibull {
+                scale: 1.0,
+                shape: 0.5,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_ok());
+
+        // dist with negative shape
+        let d = Dist {
+            dist: DistType::Weibull {
+                scale: 1.0,
+                shape: -0.5,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_gamma_dist() {
+        // valid dist
+        let d = Dist {
+            dist: DistType::Gamma {
+                scale: 1.0,
+                shape: 0.5,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_ok());
+
+        // dist with negative shape
+        let d = Dist {
+            dist: DistType::Gamma {
+                scale: 1.0,
+                shape: -0.5,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_beta_dist() {
+        // valid dist
+        let d = Dist {
+            dist: DistType::Beta {
+                alpha: 1.0,
+                beta: 0.5,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_ok());
+
+        // dist with negative beta
+        let d = Dist {
+            dist: DistType::Beta {
+                alpha: 1.0,
+                beta: -0.5,
             },
             start: 0.0,
             max: 0.0,
