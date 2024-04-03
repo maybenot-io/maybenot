@@ -209,7 +209,7 @@ impl fmt::Display for State {
         // HashMap is not stable), if found, print event and vector
         write!(f, "next_state: ")?;
         for event in Event::iter() {
-            if !self.transitions[event].is_empty() {
+            if self.transitions.contains_key(event) && !self.transitions[event].is_empty() {
                 write!(f, "{}: ", event)?;
                 for trans in self.transitions[event].iter() {
                     write!(f, " * {}", trans)?;

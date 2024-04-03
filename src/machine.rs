@@ -80,7 +80,7 @@ impl Machine {
         // deterministic print (which is not pretty, but works) for each state,
         // then hash that.
         for state in &self.states {
-            context.update(format!("{:?}", state.state).as_bytes());
+            context.update(format!("{}", state.state).as_bytes());
         }
 
         let d = context.finish();
