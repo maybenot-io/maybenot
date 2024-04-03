@@ -80,7 +80,7 @@ impl Machine {
         // deterministic print (which is not pretty, but works) for each state,
         // then hash that.
         for state in &self.states {
-            context.update(format!("{:?}", state).as_bytes());
+            context.update(format!("{:?}", state.state).as_bytes());
         }
 
         let d = context.finish();
@@ -115,15 +115,22 @@ impl Machine {
         }
 
         // sane number of states
-        if self.states.is_empty() {
+        let num_states = self.states.len();
+
+        if num_states == 0 {
             bail!("a machine must have at least one state")
         }
-        if self.states.len() > STATE_MAX {
+        if num_states > STATE_MAX {
             bail!(
                 "too many states, max is {}, found {}",
                 STATE_MAX,
                 self.states.len()
             )
+        }
+
+        // validate all states
+        for s in self.states.iter() {
+            s.state.validate(num_states)?;
         }
 
         Ok(())
@@ -151,9 +158,9 @@ impl FromStr for Machine {
         let mut decoder = ZlibDecoder::new(compressed.as_slice());
         let mut buf = vec![0; MAX_DECOMPRESSED_SIZE];
         let bytes_read = decoder.read(&mut buf)?;
-        let m: Machine = bincode::deserialize(&buf[..bytes_read]).unwrap();
-        m.validate()?;
-        Ok(m)
+
+        let r = bincode::deserialize(&buf[..bytes_read]);
+        Ok(r?)
     }
 }
 

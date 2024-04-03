@@ -56,7 +56,6 @@ pub fn parse_v1_machine(s: &str) -> Result<Machine, Box<dyn Error + Send + Sync>
 
     match u16::from_le_bytes(version.try_into().unwrap()) {
         1 => parse_v1(payload),
-        //2 => Machine::parse_v2(payload),
         v => bail!("unsupported version: {}", v),
     }
 }

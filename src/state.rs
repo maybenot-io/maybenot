@@ -92,7 +92,7 @@ impl State {
 
     /// Validate that this state has acceptable individual and total transition
     /// probabilities, all required distributions are present, and distribution
-    /// parameters are permissible. Create next_state if it is not present.
+    /// parameters are permissible.
     pub fn validate(&self, num_states: usize) -> Result<(), Box<dyn Error + Send + Sync>> {
         // validate transition probabilities
         for event in Event::iter() {
@@ -132,8 +132,9 @@ impl State {
 
     /// Construct an alias table based on a map of transitions
     /// ([`Event`] to [`StateTransition`] vector) and the total number of
-    /// states in the [`Machine`](crate::machine). Validate state first.
-    pub(self) fn make_next_state(&self) -> EnumMap<Event, Option<VoseAlias<usize>>> {
+    /// states in the [`Machine`](crate::machine). Validate state before
+    /// calling this method.
+    fn make_next_state(&self) -> EnumMap<Event, Option<VoseAlias<usize>>> {
         let mut r: EnumMap<Event, Option<VoseAlias<usize>>> = enum_map! { _ => None };
         for event in Event::iter() {
             if !self.transitions.contains_key(event) || self.transitions[event].is_empty() {
@@ -222,8 +223,8 @@ impl<'de> DeserializeAs<'de, StateWrapper> for State {
 
         match r {
             Ok(val) => Ok(val),
-            _ => Err(<D::Error as serde::de::Error>::custom(
-                "failed to parse state",
+            r => Err(<D::Error as serde::de::Error>::custom(
+                format!("failed to parse state: {:?}", r.as_ref().err())
             )),
         }
     }

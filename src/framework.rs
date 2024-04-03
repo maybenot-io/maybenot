@@ -170,8 +170,8 @@
 //!                 // is false, use the longest of the remaining and specified
 //!                 // durations.
 //!                 //
-//!                 // If a new timer is started or an existing timer replaced,
-//!                 // trigger TriggerEvent::TimerBegin { machine: machine }.
+//!                 // Regardless of the outcome of the preceding logic, trigger
+//!                 // TriggerEvent::TimerBegin { machine: machine }.
 //!                 //
 //!                 // Trigger TriggerEvent::TimerEnd { machine: machine } when
 //!                 // the timer expires.
