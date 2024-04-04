@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use self::Event::*;
+use crate::constants::EVENT_NUM;
 use crate::framework::MachineId;
 use enum_map::Enum;
 use std::fmt;
@@ -46,7 +47,7 @@ impl fmt::Display for Event {
 
 impl Event {
     pub fn iter() -> Iter<'static, Event> {
-        static EVENTS: [Event; 12] = [
+        static EVENTS: [Event; EVENT_NUM] = [
             NormalRecv,
             PaddingRecv,
             NormalSent,
@@ -61,6 +62,11 @@ impl Event {
             PaddingQueued,
         ];
         EVENTS.iter()
+    }
+
+    // to usize
+    pub fn to_usize(&self) -> usize {
+        *self as usize
     }
 }
 

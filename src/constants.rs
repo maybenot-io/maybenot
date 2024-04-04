@@ -8,6 +8,9 @@ pub const VERSION: u8 = 2;
 /// bytes. Set to 1MB. This is a soft limit and can be increased if necessary.
 pub const MAX_DECOMPRESSED_SIZE: usize = 1 << 20;
 
+/// The number of [`Event`](crate::event)s in the framework.
+pub const EVENT_NUM: usize = 12;
+
 /// The maximum sampled timeout in a [`State`](crate::state), set to a day in
 /// microseconds.
 pub const MAX_SAMPLED_TIMEOUT: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;

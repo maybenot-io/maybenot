@@ -7,9 +7,9 @@ use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
 use simple_error::bail;
 use std::error::Error;
+use std::fmt;
 use std::str::FromStr;
 extern crate simple_error;
 use base64::prelude::*;
@@ -19,8 +19,7 @@ use std::io::prelude::*;
 
 /// A probabilistic state machine (Rabin automaton) consisting of one or more
 /// [`State`] that determine when to inject and/or block outgoing traffic.
-#[serde_as]
-#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Machine {
     /// The number of padding packets the machine is allowed to generate as
     /// actions before other limits apply.
@@ -33,8 +32,7 @@ pub struct Machine {
     /// The maximum fraction of blocking (microseconds) to allow as actions.
     pub max_blocking_frac: f64,
     /// The states that make up the machine.
-    #[serde_as(as = "Vec<State>")]
-    pub(crate) states: Vec<StateWrapper>,
+    pub(crate) states: Vec<State>,
 }
 
 impl Machine {
@@ -47,19 +45,12 @@ impl Machine {
         max_blocking_frac: f64,
         states: Vec<State>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
-        let num_states = states.len();
-        let mut wrapped = vec![];
-
-        for s in states.iter() {
-            wrapped.push(StateWrapper::new(s.clone(), num_states)?);
-        }
-
         let machine = Machine {
             allowed_padding_packets,
             max_padding_frac,
             allowed_blocked_microsec,
             max_blocking_frac,
-            states: wrapped,
+            states,
         };
         machine.validate()?;
 
@@ -70,19 +61,7 @@ impl Machine {
     /// string is 32 characters long, hex-encoded.
     pub fn name(&self) -> String {
         let mut context = Context::new(&SHA256);
-        context.update(&self.allowed_padding_packets.to_le_bytes());
-        context.update(&self.max_padding_frac.to_le_bytes());
-        context.update(&self.allowed_blocked_microsec.to_le_bytes());
-        context.update(&self.max_blocking_frac.to_le_bytes());
-
-        // We can't just do a json serialization here, because State uses a
-        // HashMap, which doesn't guarantee a stable order. Therefore, we add a
-        // deterministic print (which is not pretty, but works) for each state,
-        // then hash that.
-        for state in &self.states {
-            context.update(format!("{}", state.state).as_bytes());
-        }
-
+        context.update(self.serialize().as_bytes());
         let d = context.finish();
         let s = encode(d);
         s[0..32].to_string()
@@ -129,8 +108,8 @@ impl Machine {
         }
 
         // validate all states
-        for s in self.states.iter() {
-            s.state.validate(num_states)?;
+        for state in self.states.iter() {
+            state.validate(num_states)?;
         }
 
         Ok(())
@@ -164,24 +143,45 @@ impl FromStr for Machine {
     }
 }
 
+impl fmt::Display for Machine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Machine {}\n\
+            - allowed_padding_packets: {}\n\
+            - max_padding_frac: {}\n\
+            - allowed_blocked_microsec: {}\n\
+            - max_blocking_frac: {}\n\
+            States:\n\
+            {}",
+            self.name(),
+            self.allowed_padding_packets,
+            self.max_padding_frac,
+            self.allowed_blocked_microsec,
+            self.max_blocking_frac,
+            self.states
+                .iter()
+                .map(|s| format!("{}", s))
+                .collect::<Vec<String>>()
+                .join("\n")
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::action::*;
     use crate::dist::*;
     use crate::event::Event;
     use crate::machine::*;
-    use enum_map::{enum_map, EnumMap};
+    use enum_map::enum_map;
 
     #[test]
     fn machine_name_generation() {
-        // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let s0 = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 1.0)],
+             _ => vec![],
         });
-
-        let s0 = State::new(t);
 
         // machine
         let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0]).unwrap();
@@ -192,16 +192,11 @@ mod tests {
 
     #[test]
     fn validate_machine_limits() {
-        // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let s0 = State::new(enum_map! {
+               Event::PaddingSent => vec![Trans(0, 1.0)],
+             _ => vec![],
         });
 
-        let s0 = State::new(t);
-
-        // machine
         let mut m = Machine::new(1000, 1.0, 0, 0.0, vec![s0]).unwrap();
 
         // max padding frac
@@ -247,57 +242,34 @@ mod tests {
     #[test]
     fn validate_machine_probability() {
         // out of bounds index
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(Transition {
-            state: 1,
-            probability: 1.0,
+        let s0 = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(1, 1.0)],
+             _ => vec![],
         });
-
-        let s0 = State::new(t);
-
         // machine with broken state
         let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]);
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
         // try setting one probability too high
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(Transition {
-            state: 0,
-            probability: 1.1,
+        let s0 = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 1.1)],
+             _ => vec![],
         });
-
-        let s0 = State::new(t);
-
         // machine with broken state
         let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]);
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
         // try setting total probability too high
-
-        // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(Transition {
-            state: 0,
-            probability: 0.5,
+        let s0 = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 0.5), Trans(1, 0.6)],
+             _ => vec![],
         });
-        t[Event::PaddingSent].push(Transition {
-            state: 1,
-            probability: 0.6,
+        let s1 = State::new(enum_map! {
+            Event::PaddingRecv => vec![Trans(1, 1.0)],
+        _ => vec![],
         });
-
-        let s0 = State::new(t);
-
-        // state 1
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingRecv].push(Transition {
-            state: 1,
-            probability: 1.0,
-        });
-
-        let s1 = State::new(t);
-
         // machine with broken state
         let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]);
         println!("{:?}", r.as_ref().err());
@@ -306,14 +278,10 @@ mod tests {
 
     #[test]
     fn validate_machine_distributions() {
-        // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 1.0)],
+             _ => vec![],
         });
-
-        let mut s0 = State::new(t);
         s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,

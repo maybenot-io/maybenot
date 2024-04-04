@@ -14,7 +14,7 @@ use crate::{
     dist::{Dist, DistType},
     event::Event,
     machine::Machine,
-    state::{State, Transition},
+    state::{State, Trans},
 };
 
 // The size (in bytes) of a serialized distribution for a
@@ -168,7 +168,7 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     r += 1;
 
     // next state
-    let mut transitions: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+    let mut transitions: EnumMap<Event, Vec<Trans>> = enum_map! { _ => vec![] };
 
     for event in v1_events_iter() {
         for i in 0..num_states + 2 {
@@ -182,10 +182,7 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
                     Ordering::Greater => STATE_END,
                 };
 
-                transitions[*event].push(Transition {
-                    state,
-                    probability: v as f32,
-                });
+                transitions[*event].push(Trans(state, v as f32));
             }
         }
     }
@@ -281,8 +278,10 @@ mod tests {
             let machine = parse_v1_machine(m).unwrap();
             println!("{:?}", machine);
             assert_eq!(
-                machine,
-                Machine::from_str(machine.serialize().as_str()).unwrap()
+                machine.name(),
+                Machine::from_str(machine.serialize().as_str())
+                    .unwrap()
+                    .name()
             );
         }
     }

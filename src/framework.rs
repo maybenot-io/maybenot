@@ -295,7 +295,7 @@ where
         ];
 
         for (mi, r) in runtime.iter_mut().enumerate() {
-            let opt_action = machines.as_ref()[mi].states[0].state.action;
+            let opt_action = machines.as_ref()[mi].states[0].action;
 
             if let Some(action) = opt_action {
                 r.state_limit = action.sample_limit();
@@ -510,7 +510,7 @@ where
                 } else {
                     self.runtime[mi].current_state = next_state;
                     self.runtime[mi].state_limit = if let Some(action) =
-                        self.machines.as_ref()[mi].states[next_state].state.action
+                        self.machines.as_ref()[mi].states[next_state].action
                     {
                         action.sample_limit()
                     } else {
@@ -545,7 +545,7 @@ where
     fn update_counter(&mut self, mi: usize) -> (StateChange, bool) {
         let current = &self.machines.as_ref()[mi].states[self.runtime[mi].current_state];
 
-        if let Some(update) = &current.state.counter {
+        if let Some(update) = &current.counter {
             let value = update.sample_value();
             let counter = if update.counter == Counter::A {
                 &mut self.runtime[mi].counter_value_a
@@ -583,7 +583,7 @@ where
         mi: MachineId,
     ) -> Option<TriggerAction> {
         let current = &machine.states[runtime.current_state];
-        let action = current.state.action?;
+        let action = current.action?;
 
         match action {
             Action::Cancel { timer } => Some(TriggerAction::Cancel { machine: mi, timer }),
@@ -618,7 +618,7 @@ where
         }
         let cs = self.runtime[mi].current_state;
 
-        if let Some(action) = self.machines.as_ref()[mi].states[cs].state.action {
+        if let Some(action) = self.machines.as_ref()[mi].states[cs].action {
             if self.runtime[mi].state_limit == 0 && action.has_limit() {
                 // take no action and trigger limit reached
                 self.actions[mi] = None;
@@ -631,12 +631,12 @@ where
     fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
 
-        if current.state.action.is_none() {
+        if current.action.is_none() {
             // This could be true, but no need for an extra call to schedule_action()
             return false;
         }
 
-        match current.state.action.unwrap() {
+        match current.action.unwrap() {
             Action::BlockOutgoing { .. } => self.below_limit_blocking(runtime, machine),
             Action::SendPadding { .. } => self.below_limit_padding(runtime, machine),
             Action::UpdateTimer { .. } => runtime.state_limit > 0,
@@ -649,7 +649,7 @@ where
         // blocking action
 
         // special case: we always allow overwriting existing blocking
-        let replace = if let Some(Action::BlockOutgoing { replace, .. }) = current.state.action {
+        let replace = if let Some(Action::BlockOutgoing { replace, .. }) = current.action {
             replace
         } else {
             false
@@ -744,7 +744,7 @@ mod tests {
     use crate::dist::*;
     use crate::framework::*;
     use crate::state::*;
-    use enum_map::{enum_map, EnumMap};
+    use enum_map::enum_map;
     use std::ops::Add;
     use std::time::Duration;
     use std::time::Instant;
@@ -771,13 +771,10 @@ mod tests {
         // then multiple events and check the resulting actions
 
         // state 0: go to state 1 on PaddingSent, pad after 10 usec
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(Transition {
-            state: 1,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+            Event::PaddingSent => vec![Trans(1, 1.0)],
+        _ => vec![],
         });
-
-        let mut s0 = State::new(t);
         s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
@@ -793,13 +790,10 @@ mod tests {
         });
 
         // state 1: go to state 0 on PaddingRecv, pad after 1 usec
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingRecv].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s1 = State::new(enum_map! {
+            Event::PaddingRecv => vec![Trans(0, 1.0)],
+        _ => vec![],
         });
-
-        let mut s1 = State::new(t);
         s1.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
@@ -936,13 +930,10 @@ mod tests {
         // a machine that blocks for 10us, 1us after NormalSent
 
         // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+                 Event::NormalSent => vec![Trans(0, 1.0)],
+             _ => vec![],
         });
-
-        let mut s0 = State::new(t);
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
             replace: false,
@@ -1014,13 +1005,10 @@ mod tests {
         // a machine that sets the timer to 1 ms after PaddingSent
 
         // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(Transition {
-            state: 1,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(1, 1.0)],
+             _ => vec![],
         });
-
-        let mut s0 = State::new(t);
         s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
@@ -1037,13 +1025,10 @@ mod tests {
         });
 
         // state 1
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::TimerEnd].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s1 = State::new(enum_map! {
+                 Event::TimerEnd => vec![Trans(0, 1.0)],
+             _ => vec![],
         });
-
-        let mut s1 = State::new(t);
         s1.action = Some(Action::UpdateTimer {
             replace: false,
             duration: Dist {
@@ -1098,17 +1083,11 @@ mod tests {
         // use counter A for that, pad and increment counter B on CounterZero
 
         // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(Transition {
-            state: 1,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+            Event::PaddingSent => vec![Trans(1, 1.0)],
+            Event::CounterZero => vec![Trans(2, 1.0)],
+        _ => vec![],
         });
-        t[Event::CounterZero].push(Transition {
-            state: 2,
-            probability: 1.0,
-        });
-
-        let mut s0 = State::new(t);
         s0.counter = Some(CounterUpdate {
             counter: Counter::A,
             operation: Operation::Decrement,
@@ -1123,13 +1102,10 @@ mod tests {
         });
 
         // state 1
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s1 = State::new(enum_map! {
+            Event::NormalSent => vec![Trans(0, 1.0)],
+        _ => vec![],
         });
-
-        let mut s1 = State::new(t);
         s1.counter = Some(CounterUpdate {
             counter: Counter::A,
             operation: Operation::Increment,
@@ -1144,17 +1120,11 @@ mod tests {
         });
 
         // state 2
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s2 = State::new(enum_map! {
+            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::PaddingSent => vec![Trans(1, 1.0)],
+        _ => vec![],
         });
-        t[Event::PaddingSent].push(Transition {
-            state: 1,
-            probability: 1.0,
-        });
-
-        let mut s2 = State::new(t);
         s2.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
@@ -1213,21 +1183,12 @@ mod tests {
         // ensure CounterZero is not triggered when counter is already 0
 
         // state 0, decrement counter
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::NormalRecv => vec![Trans(1, 1.0)],
+            Event::CounterZero => vec![Trans(2, 1.0)],
+        _ => vec![],
         });
-        t[Event::NormalRecv].push(Transition {
-            state: 1,
-            probability: 1.0,
-        });
-        t[Event::CounterZero].push(Transition {
-            state: 2,
-            probability: 1.0,
-        });
-
-        let mut s0 = State::new(t);
         s0.counter = Some(CounterUpdate {
             counter: Counter::B,
             operation: Operation::Decrement, // NOTE
@@ -1242,21 +1203,12 @@ mod tests {
         });
 
         // state 1, set counter
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s1 = State::new(enum_map! {
+            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::NormalRecv => vec![Trans(1, 1.0)],
+            Event::CounterZero => vec![Trans(2, 1.0)],
+        _ => vec![],
         });
-        t[Event::NormalRecv].push(Transition {
-            state: 1,
-            probability: 1.0,
-        });
-        t[Event::CounterZero].push(Transition {
-            state: 2,
-            probability: 1.0,
-        });
-
-        let mut s1 = State::new(t);
         s1.counter = Some(CounterUpdate {
             counter: Counter::B,
             operation: Operation::Set,
@@ -1271,17 +1223,11 @@ mod tests {
         });
 
         // state 2, pad
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s2 = State::new(enum_map! {
+            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::NormalRecv => vec![Trans(1, 1.0)],
+        _ => vec![],
         });
-        t[Event::NormalRecv].push(Transition {
-            state: 1,
-            probability: 1.0,
-        });
-
-        let mut s2 = State::new(t);
         s2.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
@@ -1320,17 +1266,11 @@ mod tests {
         // set to max value, then try to add and make sure no change
 
         // state 0, increment counter
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(0, 1.0)],
+           Event::NormalRecv => vec![Trans(1, 1.0)],
+           _ => vec![],
         });
-        t[Event::NormalRecv].push(Transition {
-            state: 1,
-            probability: 1.0,
-        });
-
-        let mut s0 = State::new(t);
         s0.counter = Some(CounterUpdate {
             counter: Counter::A,
             operation: Operation::Increment, // NOTE
@@ -1345,17 +1285,11 @@ mod tests {
         });
 
         // state 1, set counter
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s1 = State::new(enum_map! {
+            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::NormalRecv => vec![Trans(1, 1.0)],
+        _ => vec![],
         });
-        t[Event::NormalRecv].push(Transition {
-            state: 1,
-            probability: 1.0,
-        });
-
-        let mut s1 = State::new(t);
         s1.counter = Some(CounterUpdate {
             counter: Counter::A,
             operation: Operation::Set,
@@ -1394,23 +1328,12 @@ mod tests {
         // of 0.5.
 
         // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        // we use queued for checking limits
-        t[Event::PaddingQueued].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+            // we use queued for checking limits and recv as an event to check
+            // without adding bytes sent
+            Event::PaddingQueued | Event::NormalQueued | Event::NormalRecv => vec![Trans(0, 1.0)],
+            _ => vec![],
         });
-        t[Event::NormalQueued].push(Transition {
-            state: 0,
-            probability: 1.0,
-        });
-        // recv as an event to check without adding bytes sent
-        t[Event::NormalRecv].push(Transition {
-            state: 0,
-            probability: 1.0,
-        });
-
-        let mut s0 = State::new(t);
         s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
@@ -1489,23 +1412,12 @@ mod tests {
         // the same allowed padding, where both machines pad in parallel
 
         // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        // we use queued for checking limits
-        t[Event::PaddingQueued].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+            // we use queued for checking limits and recv as an event to check
+            // without adding bytes sent
+            Event::PaddingQueued | Event::NormalQueued | Event::NormalRecv => vec![Trans(0, 1.0)],
+        _ => vec![],
         });
-        t[Event::NormalQueued].push(Transition {
-            state: 0,
-            probability: 1.0,
-        });
-        // recv as an event to check without adding bytes sent
-        t[Event::NormalRecv].push(Transition {
-            state: 0,
-            probability: 1.0,
-        });
-
-        let mut s0 = State::new(t);
         s0.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
@@ -1623,21 +1535,10 @@ mod tests {
         // 0.5.
 
         // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::BlockingBegin].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+           Event::BlockingBegin | Event::BlockingEnd | Event::NormalRecv => vec![Trans(0, 1.0)],
+           _ => vec![],
         });
-        t[Event::BlockingEnd].push(Transition {
-            state: 0,
-            probability: 1.0,
-        });
-        t[Event::NormalRecv].push(Transition {
-            state: 0,
-            probability: 1.0,
-        });
-
-        let mut s0 = State::new(t);
         // block every 2us for 2us
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
@@ -1741,21 +1642,10 @@ mod tests {
         // 0.5 in the framework.
 
         // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::BlockingBegin].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+            Event::BlockingBegin | Event::BlockingEnd | Event::NormalRecv => vec![Trans(0, 1.0)],
+        _ => vec![],
         });
-        t[Event::BlockingEnd].push(Transition {
-            state: 0,
-            probability: 1.0,
-        });
-        t[Event::NormalRecv].push(Transition {
-            state: 0,
-            probability: 1.0,
-        });
-
-        let mut s0 = State::new(t);
         // block every 2us for 2us
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
@@ -1861,13 +1751,10 @@ mod tests {
         // of its limit (special case in below_limit_blocking).
 
         // state 0, first machine
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalRecv].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+            Event::NormalRecv => vec![Trans(0, 1.0)],
+        _ => vec![],
         });
-
-        let mut s0 = State::new(t);
         // block every 2us for 2us
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
@@ -1895,13 +1782,10 @@ mod tests {
         let m0 = Machine::new(0, 0.0, 2, 0.5, vec![s0]).unwrap();
 
         // state 0, second machine
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(Transition {
-            state: 0,
-            probability: 1.0,
+        let mut s0 = State::new(enum_map! {
+            Event::NormalSent => vec![Trans(0, 1.0)],
+        _ => vec![],
         });
-
-        let mut s0 = State::new(t);
         // block instantly for 1000us
         s0.action = Some(Action::BlockOutgoing {
             bypass: false,
@@ -2008,22 +1892,16 @@ mod tests {
         // self
 
         // state 0
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::NormalQueued].push(Transition {
-            state: 1,
-            probability: 1.0,
+        let s0 = State::new(enum_map! {
+            Event::NormalQueued => vec![Trans(1, 1.0)],
+        _ => vec![],
         });
-
-        let s0 = State::new(t);
 
         // state 1
-        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingQueued].push(Transition {
-            state: 1,
-            probability: 1.0,
+        let mut s1 = State::new(enum_map! {
+            Event::PaddingQueued => vec![Trans(1, 1.0)],
+        _ => vec![],
         });
-
-        let mut s1 = State::new(t);
         s1.action = Some(Action::SendPadding {
             bypass: false,
             replace: false,
