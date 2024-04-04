@@ -8,14 +8,6 @@ pub const VERSION: u8 = 2;
 /// bytes. Set to 1MB. This is a soft limit and can be increased if necessary.
 pub const MAX_DECOMPRESSED_SIZE: usize = 1 << 20;
 
-/// The maximum sampled blocking duration in a [`State`](crate::state), set to a
-/// day in microseconds.
-pub const MAX_SAMPLED_BLOCK_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
-
-/// The maximum sampled counter value in a [`State`](crate::state), which is
-/// currently effectively unlimited in practice.
-pub const MAX_SAMPLED_COUNTER_VALUE: u64 = u64::MAX;
-
 /// The maximum sampled timeout in a [`State`](crate::state), set to a day in
 /// microseconds.
 pub const MAX_SAMPLED_TIMEOUT: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
@@ -23,6 +15,14 @@ pub const MAX_SAMPLED_TIMEOUT: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 /// The maximum sampled timer duration in a [`State`](crate::state), set to a
 /// day in microseconds.
 pub const MAX_SAMPLED_TIMER_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
+
+/// The maximum sampled blocking duration in a [`State`](crate::state), set to a
+/// day in microseconds.
+pub const MAX_SAMPLED_BLOCK_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
+
+/// The maximum sampled counter value in a [`State`](crate::state), which is
+/// currently effectively unlimited in practice.
+pub const MAX_SAMPLED_COUNTER_VALUE: u64 = u64::MAX;
 
 /// The maximum possible sampled limit of a [`State`](crate::state). This is the
 /// default if no limit dist is specified (in practice, the same as no limit).
