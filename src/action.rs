@@ -49,7 +49,7 @@ pub enum Action {
     /// bypass blocking) while simultaneously providing support for
     /// constant-rate defenses, when set along with the replace flag.
     ///
-    /// The replace flag determines if the action duration should replace any
+    /// The replace flag determines if the action duration MUST replace any
     /// existing blocking.
     BlockOutgoing {
         bypass: bool,
@@ -60,7 +60,7 @@ pub enum Action {
     },
     /// Update the timer duration for a machine.
     ///
-    /// The replace flag determines if the action duration should replace the
+    /// The replace flag determines if the action duration MUST replace the
     /// current timer duration, if the timer has already been set.
     UpdateTimer {
         replace: bool,
@@ -130,7 +130,6 @@ impl Action {
     }
 
     /// Validate all distributions contained in this action, if any.
-    /// Also ensure that required distributions are not DistType::None.
     pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         match self {
             Action::SendPadding { timeout, limit, .. } => {
@@ -196,7 +195,7 @@ pub enum TriggerAction {
     /// The bypass flag indicates if the blocking of outgoing traffic can be
     /// bypassed by padding packets with the bypass flag set to true.
     ///
-    /// The replace flag indicates if the duration should replace any other
+    /// The replace flag indicates if the duration MUST replace any other
     /// currently ongoing blocking of outgoing traffic. If the flag is false,
     /// the longest of the two durations MUST be used.
     BlockOutgoing {
@@ -388,7 +387,7 @@ mod tests {
             };
         }
 
-        // invalid action dist, not allowed
+        // invalid duration dist, not allowed
         if let Action::BlockOutgoing { duration, .. } = &mut a {
             *duration = Dist {
                 dist: DistType::Uniform {
@@ -403,7 +402,7 @@ mod tests {
         let r = a.validate();
         assert!(r.is_err());
 
-        // repair action dist
+        // repair duration dist
         if let Action::BlockOutgoing { duration, .. } = &mut a {
             *duration = Dist {
                 dist: DistType::Uniform {
