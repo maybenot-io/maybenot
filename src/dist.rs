@@ -1,8 +1,8 @@
 //! Distributions sampled as part of a [`State`](crate::state).
 
 use rand_distr::{
-    Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, Uniform,
-    Weibull,
+    Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, SkewNormal,
+    Uniform, Weibull,
 };
 use serde::{Deserialize, Serialize};
 use std::error::Error;
@@ -29,6 +29,16 @@ pub enum DistType {
         mean: f64,
         /// The standard deviation of the distribution.
         stdev: f64,
+    },
+    /// SkewNormal distribution with set location, scale, and shape. Useful for
+    /// real-valued quantities.
+    SkewNormal {
+        /// The location of the distribution.
+        location: f64,
+        /// The scale of the distribution.
+        scale: f64,
+        /// The shape of the distribution.
+        shape: f64,
     },
     /// LogNormal distribution with set mu and sigma. Useful for real-valued
     /// quantities.
@@ -151,6 +161,13 @@ impl Dist {
             DistType::Normal { mean, stdev } => {
                 Normal::new(mean, stdev)?;
             }
+            DistType::SkewNormal {
+                location,
+                scale,
+                shape,
+            } => {
+                SkewNormal::new(location, scale, shape)?;
+            }
             DistType::LogNormal { mu, sigma } => {
                 LogNormal::new(mu, sigma)?;
             }
@@ -208,6 +225,13 @@ impl Dist {
             DistType::Normal { mean, stdev } => Normal::new(mean, stdev)
                 .unwrap()
                 .sample(&mut rand::thread_rng()),
+            DistType::SkewNormal {
+                location,
+                scale,
+                shape,
+            } => SkewNormal::new(location, scale, shape)
+                .unwrap()
+                .sample(&mut rand::thread_rng()),
             DistType::LogNormal { mu, sigma } => LogNormal::new(mu, sigma)
                 .unwrap()
                 .sample(&mut rand::thread_rng()),
@@ -219,7 +243,8 @@ impl Dist {
                 .sample(&mut rand::thread_rng()) as f64,
             DistType::Geometric { probability } => Geometric::new(probability)
                 .unwrap()
-                .sample(&mut rand::thread_rng()) as f64,
+                .sample(&mut rand::thread_rng())
+                as f64,
             DistType::Pareto { scale, shape } => Pareto::new(scale, shape)
                 .unwrap()
                 .sample(&mut rand::thread_rng()),
@@ -306,6 +331,37 @@ mod tests {
     }
 
     #[test]
+    fn validate_skewnormal_dist() {
+        // valid dist
+        let d = Dist {
+            dist: DistType::SkewNormal {
+                location: 100.0,
+                scale: 15.0,
+                shape: -3.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_ok());
+
+        // dist with infinite shape
+        let d = Dist {
+            dist: DistType::SkewNormal {
+                location: 100.0,
+                scale: 15.0,
+                shape: f64::INFINITY,
+            },
+            start: 0.0,
+            max: 0.0,
+        };
+
+        let r = d.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
     fn validate_lognormal_dist() {
         // valid dist
         let d = Dist {
@@ -367,9 +423,7 @@ mod tests {
     fn validate_geometric_dist() {
         // valid dist
         let d = Dist {
-            dist: DistType::Geometric {
-                probability: 0.5,
-            },
+            dist: DistType::Geometric { probability: 0.5 },
             start: 0.0,
             max: 0.0,
         };
@@ -379,9 +433,7 @@ mod tests {
 
         // dist with invalid probability
         let d = Dist {
-            dist: DistType::Geometric {
-                probability: 1.1,
-            },
+            dist: DistType::Geometric { probability: 1.1 },
             start: 0.0,
             max: 0.0,
         };
@@ -423,9 +475,7 @@ mod tests {
     fn validate_poisson_dist() {
         // valid dist
         let d = Dist {
-            dist: DistType::Poisson {
-                lambda: 1.0,
-            },
+            dist: DistType::Poisson { lambda: 1.0 },
             start: 0.0,
             max: 0.0,
         };
@@ -435,9 +485,7 @@ mod tests {
 
         // dist with negative lambda
         let d = Dist {
-            dist: DistType::Poisson {
-                lambda: -1.0,
-            },
+            dist: DistType::Poisson { lambda: -1.0 },
             start: 0.0,
             max: 0.0,
         };

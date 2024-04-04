@@ -240,9 +240,10 @@ impl<'de> DeserializeAs<'de, StateWrapper> for State {
 
         match r {
             Ok(val) => Ok(val),
-            r => Err(<D::Error as serde::de::Error>::custom(
-                format!("failed to parse state: {:?}", r.as_ref().err())
-            )),
+            r => Err(<D::Error as serde::de::Error>::custom(format!(
+                "failed to parse state: {:?}",
+                r.as_ref().err()
+            ))),
         }
     }
 }
