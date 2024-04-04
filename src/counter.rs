@@ -28,7 +28,7 @@ pub enum Operation {
 
 /// A specification of how a [`Machine`](crate::machine)'s counters should be
 /// updated when transitioning to a [`State`](crate::machine). Consists of a
-/// [`Counter`], a [`Operation`] to be applied to the counter, and a
+/// [`Counter`], an [`Operation`] to be applied to the counter, and a
 /// distribution to sample values from when updating the counter.
 #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CounterUpdate {
@@ -106,6 +106,10 @@ mod tests {
 
         // counter with empty dist
         cu.value = None;
+        
+        let r = cu.validate();
+        assert!(r.is_ok());
+
         assert_eq!(cu.sample_value(), 1);
     }
 }
