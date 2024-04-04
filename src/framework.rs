@@ -218,8 +218,8 @@ struct MachineRuntime {
     normal_queued: u64,
     blocking_duration: Duration,
     machine_start: Instant,
-    counter_value_a: u64,
-    counter_value_b: u64,
+    counter_a: u64,
+    counter_b: u64,
 }
 
 #[derive(PartialEq)]
@@ -288,8 +288,8 @@ where
                 normal_queued: 0,
                 blocking_duration: Duration::from_secs(0),
                 machine_start: current_time,
-                counter_value_a: 0,
-                counter_value_b: 0,
+                counter_a: 0,
+                counter_b: 0,
             };
             machines.as_ref().len()
         ];
@@ -548,9 +548,9 @@ where
         if let Some(update) = &current.counter {
             let value = update.sample_value();
             let counter = if update.counter == Counter::A {
-                &mut self.runtime[mi].counter_value_a
+                &mut self.runtime[mi].counter_a
             } else {
-                &mut self.runtime[mi].counter_value_b
+                &mut self.runtime[mi].counter_b
             };
             let already_zero = *counter == 0;
 
@@ -1160,7 +1160,7 @@ mod tests {
 
         _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
         assert_eq!(f.actions[0], None);
-        assert_eq!(f.runtime[0].counter_value_a, 1);
+        assert_eq!(f.runtime[0].counter_a, 1);
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
@@ -1173,8 +1173,8 @@ mod tests {
                 machine: MachineId(0),
             })
         );
-        assert_eq!(f.runtime[0].counter_value_a, 0);
-        assert_eq!(f.runtime[0].counter_value_b, 4);
+        assert_eq!(f.runtime[0].counter_a, 0);
+        assert_eq!(f.runtime[0].counter_b, 4);
     }
 
     #[test]
@@ -1252,12 +1252,12 @@ mod tests {
         // decrement counter to 0
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(f.actions[0], None);
-        assert_eq!(f.runtime[0].counter_value_b, 0);
+        assert_eq!(f.runtime[0].counter_b, 0);
 
         // set counter to 0
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
         assert_eq!(f.actions[0], None);
-        assert_eq!(f.runtime[0].counter_value_b, 0);
+        assert_eq!(f.runtime[0].counter_b, 0);
     }
 
     #[test]
@@ -1312,11 +1312,11 @@ mod tests {
 
         // set counter to u64::MAX
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
-        assert_eq!(f.runtime[0].counter_value_a, u64::MAX);
+        assert_eq!(f.runtime[0].counter_a, u64::MAX);
 
         // try to increment counter by 1000
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
-        assert_eq!(f.runtime[0].counter_value_a, u64::MAX);
+        assert_eq!(f.runtime[0].counter_a, u64::MAX);
     }
 
     #[test]
