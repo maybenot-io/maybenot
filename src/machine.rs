@@ -175,8 +175,8 @@ mod tests {
     #[test]
     fn machine_name_generation() {
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -193,8 +193,8 @@ mod tests {
     #[test]
     fn validate_machine_limits() {
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -247,8 +247,8 @@ mod tests {
     #[test]
     fn validate_machine_probability() {
         // out of bounds index
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(Transition {
             state: 1,
             probability: 1.0,
         });
@@ -261,8 +261,8 @@ mod tests {
         assert!(r.is_err());
 
         // try setting one probability too high
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(Transition {
             state: 0,
             probability: 1.1,
         });
@@ -277,12 +277,12 @@ mod tests {
         // try setting total probability too high
 
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(Transition {
             state: 0,
             probability: 0.5,
         });
-        t[Event::PaddingSent].push(StateTransition {
+        t[Event::PaddingSent].push(Transition {
             state: 1,
             probability: 0.6,
         });
@@ -290,8 +290,8 @@ mod tests {
         let s0 = State::new(t);
 
         // state 1
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingRecv].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingRecv].push(Transition {
             state: 1,
             probability: 1.0,
         });
@@ -307,8 +307,8 @@ mod tests {
     #[test]
     fn validate_machine_distributions() {
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(Transition {
             state: 0,
             probability: 1.0,
         });

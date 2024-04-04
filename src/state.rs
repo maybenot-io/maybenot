@@ -20,7 +20,7 @@ extern crate simple_error;
 
 /// A state index and probability for a transition.
 #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct StateTransition {
+pub struct Transition {
     /// The index of the state to transition to. Must be less than the number
     /// of states in the corresponding machine, or STATE_CANCEL or STATE_END.
     pub state: usize,
@@ -28,13 +28,13 @@ pub struct StateTransition {
     pub probability: f32,
 }
 
-impl fmt::Display for StateTransition {
+impl fmt::Display for Transition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}: {:.4}", self.state, self.probability)
     }
 }
 
-impl StateTransition {
+impl Transition {
     /// Validate that this state transition specifies a valid state and that
     /// its probability is in the range (0.0, 1.0].
     pub fn validate(&self, num_states: usize) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -63,7 +63,7 @@ pub struct State {
     pub counter: Option<CounterUpdate>,
     /// A map of [`Event`] to state transition vector specifying the possible
     /// transitions out of this state.
-    transitions: HashMap<Event, Vec<StateTransition>>,
+    transitions: HashMap<Event, Vec<Transition>>,
 }
 
 /// A wrapper for [`State`] to support the internal alias table.
@@ -81,8 +81,8 @@ impl State {
     /// Create a new [`State`] with the given map of transitions ([`Event`] to
     /// state transition vector) and number of total states in the
     /// [`Machine`](crate::machine).
-    pub fn new(t: EnumMap<Event, Vec<StateTransition>>) -> Self {
-        let mut transitions: HashMap<Event, Vec<StateTransition>> = HashMap::new();
+    pub fn new(t: EnumMap<Event, Vec<Transition>>) -> Self {
+        let mut transitions: HashMap<Event, Vec<Transition>> = HashMap::new();
         for event in Event::iter() {
             if !t[*event].is_empty() {
                 transitions.insert(*event, t[*event].clone());
@@ -137,7 +137,7 @@ impl State {
     }
 
     /// Construct an alias table based on a map of transitions
-    /// ([`Event`] to [`StateTransition`] vector) and the total number of
+    /// ([`Event`] to [`Transition`] vector) and the total number of
     /// states in the [`Machine`](crate::machine). Validate state before
     /// calling this method.
     fn make_next_state(&self) -> EnumMap<Event, Option<VoseAlias<usize>>> {

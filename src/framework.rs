@@ -771,8 +771,8 @@ mod tests {
         // then multiple events and check the resulting actions
 
         // state 0: go to state 1 on PaddingSent, pad after 10 usec
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(Transition {
             state: 1,
             probability: 1.0,
         });
@@ -793,8 +793,8 @@ mod tests {
         });
 
         // state 1: go to state 0 on PaddingRecv, pad after 1 usec
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingRecv].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingRecv].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -936,8 +936,8 @@ mod tests {
         // a machine that blocks for 10us, 1us after NormalSent
 
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -1014,8 +1014,8 @@ mod tests {
         // a machine that sets the timer to 1 ms after PaddingSent
 
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(Transition {
             state: 1,
             probability: 1.0,
         });
@@ -1037,8 +1037,8 @@ mod tests {
         });
 
         // state 1
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::TimerEnd].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::TimerEnd].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -1098,12 +1098,12 @@ mod tests {
         // use counter A for that, pad and increment counter B on CounterZero
 
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingSent].push(Transition {
             state: 1,
             probability: 1.0,
         });
-        t[Event::CounterZero].push(StateTransition {
+        t[Event::CounterZero].push(Transition {
             state: 2,
             probability: 1.0,
         });
@@ -1123,8 +1123,8 @@ mod tests {
         });
 
         // state 1
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -1144,12 +1144,12 @@ mod tests {
         });
 
         // state 2
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::PaddingSent].push(StateTransition {
+        t[Event::PaddingSent].push(Transition {
             state: 1,
             probability: 1.0,
         });
@@ -1213,16 +1213,16 @@ mod tests {
         // ensure CounterZero is not triggered when counter is already 0
 
         // state 0, decrement counter
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::NormalRecv].push(StateTransition {
+        t[Event::NormalRecv].push(Transition {
             state: 1,
             probability: 1.0,
         });
-        t[Event::CounterZero].push(StateTransition {
+        t[Event::CounterZero].push(Transition {
             state: 2,
             probability: 1.0,
         });
@@ -1242,16 +1242,16 @@ mod tests {
         });
 
         // state 1, set counter
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::NormalRecv].push(StateTransition {
+        t[Event::NormalRecv].push(Transition {
             state: 1,
             probability: 1.0,
         });
-        t[Event::CounterZero].push(StateTransition {
+        t[Event::CounterZero].push(Transition {
             state: 2,
             probability: 1.0,
         });
@@ -1271,12 +1271,12 @@ mod tests {
         });
 
         // state 2, pad
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::NormalRecv].push(StateTransition {
+        t[Event::NormalRecv].push(Transition {
             state: 1,
             probability: 1.0,
         });
@@ -1320,12 +1320,12 @@ mod tests {
         // set to max value, then try to add and make sure no change
 
         // state 0, increment counter
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::NormalRecv].push(StateTransition {
+        t[Event::NormalRecv].push(Transition {
             state: 1,
             probability: 1.0,
         });
@@ -1345,12 +1345,12 @@ mod tests {
         });
 
         // state 1, set counter
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::NormalRecv].push(StateTransition {
+        t[Event::NormalRecv].push(Transition {
             state: 1,
             probability: 1.0,
         });
@@ -1394,18 +1394,18 @@ mod tests {
         // of 0.5.
 
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
         // we use queued for checking limits
-        t[Event::PaddingQueued].push(StateTransition {
+        t[Event::PaddingQueued].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::NormalQueued].push(StateTransition {
+        t[Event::NormalQueued].push(Transition {
             state: 0,
             probability: 1.0,
         });
         // recv as an event to check without adding bytes sent
-        t[Event::NormalRecv].push(StateTransition {
+        t[Event::NormalRecv].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -1489,18 +1489,18 @@ mod tests {
         // the same allowed padding, where both machines pad in parallel
 
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
         // we use queued for checking limits
-        t[Event::PaddingQueued].push(StateTransition {
+        t[Event::PaddingQueued].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::NormalQueued].push(StateTransition {
+        t[Event::NormalQueued].push(Transition {
             state: 0,
             probability: 1.0,
         });
         // recv as an event to check without adding bytes sent
-        t[Event::NormalRecv].push(StateTransition {
+        t[Event::NormalRecv].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -1623,16 +1623,16 @@ mod tests {
         // 0.5.
 
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::BlockingBegin].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::BlockingBegin].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::BlockingEnd].push(StateTransition {
+        t[Event::BlockingEnd].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::NormalRecv].push(StateTransition {
+        t[Event::NormalRecv].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -1741,16 +1741,16 @@ mod tests {
         // 0.5 in the framework.
 
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::BlockingBegin].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::BlockingBegin].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::BlockingEnd].push(StateTransition {
+        t[Event::BlockingEnd].push(Transition {
             state: 0,
             probability: 1.0,
         });
-        t[Event::NormalRecv].push(StateTransition {
+        t[Event::NormalRecv].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -1861,8 +1861,8 @@ mod tests {
         // of its limit (special case in below_limit_blocking).
 
         // state 0, first machine
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalRecv].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalRecv].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -1895,8 +1895,8 @@ mod tests {
         let m0 = Machine::new(0, 0.0, 2, 0.5, vec![s0]).unwrap();
 
         // state 0, second machine
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalSent].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalSent].push(Transition {
             state: 0,
             probability: 1.0,
         });
@@ -2008,8 +2008,8 @@ mod tests {
         // self
 
         // state 0
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::NormalQueued].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::NormalQueued].push(Transition {
             state: 1,
             probability: 1.0,
         });
@@ -2017,8 +2017,8 @@ mod tests {
         let s0 = State::new(t);
 
         // state 1
-        let mut t: EnumMap<Event, Vec<StateTransition>> = enum_map! { _ => vec![] };
-        t[Event::PaddingQueued].push(StateTransition {
+        let mut t: EnumMap<Event, Vec<Transition>> = enum_map! { _ => vec![] };
+        t[Event::PaddingQueued].push(Transition {
             state: 1,
             probability: 1.0,
         });
