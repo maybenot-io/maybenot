@@ -1,4 +1,6 @@
-//! A state as part of a [`Machine`](crate::machine).
+//! A state as part of a [`Machine`](crate::machine). Contains an optional
+//! [`Action`] and [`CounterUpdate`] to be executed upon transition to this
+//! state, and a vector of state transitions for each possible [`Event`].
 
 use crate::action::*;
 use crate::constants::{EVENT_NUM, STATE_CANCEL, STATE_END};
@@ -27,13 +29,11 @@ impl fmt::Display for Trans {
 /// A state as part of a [`Machine`](crate::machine).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
-    /// The action to be taken upon transition to this state.
+    /// Take an action upon transitioning to this state.
     pub action: Option<Action>,
-    /// On transition to this state, this struct will be used to determine how to
-    /// update the containing machine's counters.
+    /// On transition to this state, update a machine counter.
     pub counter: Option<CounterUpdate>,
-    /// A map of [`Event`] to state transition vector specifying the possible
-    /// transitions out of this state.
+    /// For each possible [`Event`], a vector of state transitions.
     transitions: [Option<Vec<Trans>>; EVENT_NUM],
     #[cfg(feature = "fast-sample")]
     #[serde(skip_serializing, skip_deserializing)]
@@ -53,9 +53,24 @@ struct AliasIndex {
 }
 
 impl State {
-    /// Create a new [`State`] with the given map of transitions ([`Event`] to
-    /// state transition vector) and number of total states in the
-    /// [`Machine`](crate::machine).
+    /// Create a new [`State`] that transitions on the given [`Event`]s.
+    ///
+    /// Example:
+    /// ```
+    /// use maybenot::state::*;
+    /// use maybenot::event::*;
+    /// use enum_map::enum_map;
+    /// let state = State::new(enum_map! {
+    ///     Event::PaddingSent => vec![Trans(1, 1.0)],
+    ///     Event::CounterZero => vec![Trans(2, 1.0)],
+    ///     _ => vec![],
+    /// });
+    /// ```
+    /// This creates a state that transitions to state 1 on
+    /// [`Event::PaddingSent`] and to state 2 on [`Event::CounterZero`], both
+    /// with 100% probability. All other events will not cause a transition.
+    /// Note that state indexes are 0-based and determined by the order in which
+    /// states are added to the [`Machine`](crate::machine).
     pub fn new(t: EnumMap<Event, Vec<Trans>>) -> Self {
         const ARRAY_NO_TRANS: std::option::Option<Vec<Trans>> = None;
         let mut transitions = [ARRAY_NO_TRANS; EVENT_NUM];
@@ -78,7 +93,9 @@ impl State {
     }
 
     /// Validate that this state has acceptable transitions and that the
-    /// distributions, if set, are valid.
+    /// distributions, if set, are valid. Note that num_states is the number of
+    /// states in the machine, not the number of states in this state's
+    /// transitions. Called by [`Machine::new`](crate::machine::Machine::new).
     pub fn validate(&self, num_states: usize) -> Result<(), Box<dyn Error + Send + Sync>> {
         // validate transition probabilities
         for (event, transitions) in self.transitions.iter().enumerate() {
