@@ -106,7 +106,7 @@ mod tests {
 
         // counter with empty dist
         cu.value = None;
-        
+
         let r = cu.validate();
         assert!(r.is_ok());
 

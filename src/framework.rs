@@ -498,7 +498,7 @@ where
             }
             STATE_END => {
                 // this is a state change (because we can never reach here if already in
-                // STATEEND, see first check above), but we don't cancel any pending
+                // STATE_END, see first check above), but we don't cancel any pending
                 // action, nor schedule any new action
                 self.runtime[mi].current_state = STATE_END;
                 StateChange::Changed
