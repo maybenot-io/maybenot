@@ -7,14 +7,13 @@ use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use serde::{Deserialize, Serialize};
+use sha256::digest;
 use simple_error::bail;
 use std::error::Error;
 use std::fmt;
 use std::str::FromStr;
 extern crate simple_error;
 use base64::prelude::*;
-use hex::encode;
-use ring::digest::{Context, SHA256};
 use std::io::prelude::*;
 
 /// A probabilistic state machine (Rabin automaton) consisting of one or more
@@ -60,10 +59,7 @@ impl Machine {
     /// Get a unique and deterministic string that represents the machine. The
     /// string is 32 characters long, hex-encoded.
     pub fn name(&self) -> String {
-        let mut context = Context::new(&SHA256);
-        context.update(self.serialize().as_bytes());
-        let d = context.finish();
-        let s = encode(d);
+        let s = digest(self.serialize());
         s[0..32].to_string()
     }
 
