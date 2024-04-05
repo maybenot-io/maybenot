@@ -1,12 +1,12 @@
-//! Maybenot is a framework for traffic analysis defenses that can be used to
-//! hide patterns in encrypted communication.
+//! Maybenot is a framework for traffic analysis defenses that hide patterns in
+//! encrypted communication.
 //!
-//! Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or
-//! Tor. While the connections are encrypted, *patterns* in the encrypted
+//! Consider encrypted communication protocols such as QUIC, TLS, Tor, and
+//! WireGuard. While the connections are encrypted, *patterns* in the encrypted
 //! communication may still leak information about the underlying plaintext
-//! being communicated with encryption. Maybenot is a framework for creating and
-//! executing defenses that hide such patterns. Defenses are implemented as
-//! probabilistic state machines.
+//! despite being encrypted. Maybenot is a framework for creating and executing
+//! defenses that hide such patterns. Defenses are implemented as probabilistic
+//! state machines.
 //!
 //! If you want to use Maybenot, see [`framework`] for details. As a user, that
 //! is typically all that you need and the other modules can be ignored. Note

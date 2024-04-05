@@ -16,8 +16,9 @@ use std::time::Duration;
 pub enum Timer {
     /// The scheduled timer for actions with a timeout.
     Action,
-    /// The machine timer updated by the machine using the UpdateTimer action.
-    Machine,
+    /// The machine's internal timer updated by the machine using the
+    /// UpdateTimer action.
+    Internal,
     /// Apply to all timers.
     All,
 }
@@ -239,9 +240,9 @@ mod tests {
         let r = a.validate();
         assert!(r.is_ok());
 
-        // machine timer
+        // machine's internal timer
         let a = Action::Cancel {
-            timer: Timer::Machine,
+            timer: Timer::Internal,
         };
 
         let r = a.validate();

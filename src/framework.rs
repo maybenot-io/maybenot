@@ -1,12 +1,12 @@
-//! Maybenot is a framework for traffic analysis defenses that can be used to
-//! hide patterns in encrypted communication.
+//! Maybenot is a framework for traffic analysis defenses that hide patterns in
+//! encrypted communication.
 //!
-//! Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or
-//! Tor. While the connections are encrypted, *patterns* in the encrypted
+//! Consider encrypted communication protocols such as QUIC, TLS, Tor, and
+//! WireGuard. While the connections are encrypted, *patterns* in the encrypted
 //! communication may still leak information about the underlying plaintext
-//! being communicated with encryption. Maybenot is a framework for creating and
-//! executing defenses that hide such patterns. Defenses are implemented as
-//! probabilistic state machines.
+//! despite being encrypted. Maybenot is a framework for creating and executing
+//! defenses that hide such patterns. Defenses are implemented as probabilistic
+//! state machines.
 //!
 //! ## Example usage
 //! ```
@@ -46,8 +46,8 @@
 //! // below. This is exposed mainly for testing purposes (can also be used to
 //! // make the creation of some odd types of machines easier).
 //! //
-//! // The framework validates all machines (like ::From_str() above) so it can
-//! // return an error.
+//! // The framework validates all machines (like ::From_str() above) and verifies
+//! // that the fractions are fractions, so it can return an error.
 //! let mut f = Framework::new(&m, 0.0, 0.0, Instant::now()).unwrap();
 //!
 //! // Below is the main loop for operating the framework. This should run for
@@ -71,14 +71,16 @@
 //!         // or more actions to take, up to a maximum of one action per
 //!         // machine (regardless of the number of events). It is your
 //!         // responsibility to perform those actions according to the
-//!         // specification. To do so, you will need two timers per machine. The
-//!         // machine identifier (machine in each TriggerAction) uniquely and
-//!         // deterministically maps to a single machine running in the framework
-//!         // (so suitable as a key for a data structure storing your timers, e.g.
-//!         // a HashMap<MachineId, SomeTimerDataStructure>).
+//!         // specification. To do so, you will need two timers per machine: an
+//!         // action timer (for action timeouts) and an internal timer (part of the
+//!         // machine's internal logic). The machine identifier (machine in each
+//!         // TriggerAction) uniquely and deterministically maps to a single machine
+//!         // running in the framework, so it is suitable as a key for a data structure
+//!         // storing your timers per framework instance, e.g.,
+//!         // HashMap<MachineId, (SomeTimerDataStructure, SomeTimerDataStructure)>).
 //!         match action {
 //!             TriggerAction::Cancel { machine: _, timer: _ } => {
-//!                 // Cancel the specified timer (action, machine, or both) for the
+//!                 // Cancel the specified timer (action, internal, or both) for the
 //!                 // machine in question.
 //!             }
 //!             TriggerAction::SendPadding {
@@ -91,7 +93,7 @@
 //!                 // do the following:
 //!                 //
 //!                 // 1. Queue a padding packet to be sent.
-//!                 // 2. Trigger TriggerEvent::PaddingQueued{ machine: machine }.
+//!                 // 2. Trigger TriggerEvent::PaddingQueued { machine: machine }.
 //!                 // 3. When any padding packet actually is sent over the network,
 //!                 //    trigger TriggerEvent::PaddingSent.
 //!                 //
@@ -147,7 +149,7 @@
 //!                 //    the specified duration and the *remaining* duration to
 //!                 //    block already in place.
 //!                 // 2. Trigger TriggerEvent::BlockingBegin { machine: machine }
-//!                 //    regardless of  logic outcome in 1. (From the point of view
+//!                 //    regardless of logic outcome in 1. (From the point of view
 //!                 //    of the machine, blocking is now taking place).
 //!                 //
 //!                 // Note that blocking is global across all machines, since
@@ -166,7 +168,7 @@
 //!                 machine: _,
 //!             } => {
 //!                 // If the replace flag is true, overwrite the machine's
-//!                 // non-action timer with the specified duration. If replace
+//!                 // internal timer with the specified duration. If replace
 //!                 // is false, use the longest of the remaining and specified
 //!                 // durations.
 //!                 //
@@ -236,13 +238,20 @@ enum StateChange {
 /// *send padding* traffic or *block outgoing* traffic. One or more [`Machine`]
 /// determine what [`TriggerAction`] to take based on [`TriggerEvent`].
 pub struct Framework<M> {
-    actions: Vec<Option<TriggerAction>>,
+    // updated each time the framework is triggered
     current_time: Instant,
+    // we allocate the actions vector once and reuse it, handing out references
+    // as part of the iterator in [`Framework::trigger_events`].
+    actions: Vec<Option<TriggerAction>>,
+    // the machines are immutable, but we need to keep track of their runtime
+    // state (size independent of number of states in the machine).
     machines: M,
     runtime: Vec<MachineRuntime>,
+    // padding accounting
     max_padding_frac: f64,
     normal_queued_packets: u64,
     padding_queued_packets: u64,
+    // blocking accounting
     max_blocking_frac: f64,
     blocking_duration: Duration,
     blocking_started: Instant,

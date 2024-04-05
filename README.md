@@ -18,21 +18,22 @@ attackers, hence its logo 🤔 - the thinking face emoji (U+1F914).
 [license-badge]: https://img.shields.io/crates/l/maybenot
 [license-url]: https://github.com/maybenot-io/maybenot/
 
-Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or Tor.
-While the connections are encrypted, *patterns* in the encrypted communication
-may still leak information about the communicated plaintext. Maybenot is a
-framework for creating defenses that hide such patterns.
+Consider encrypted communication protocols such as QUIC, TLS,  Tor, and
+WireGuard. While the connections are encrypted, *patterns* in the encrypted
+communication may still leak information about the communicated plaintext.
+Maybenot is a framework for creating defenses that hide such patterns.
+
 
 To simulate defenses based on Maybenot, see the [Maybenot
 simulator](https://github.com/maybenot-io/maybenot-simulator/).
 
 ## Design
 An instance of Maybenot repeatedly takes as *input* one or more *events*
-describing the encrypted traffic going over an encrypted channel, and produces
-as *output* zero or more *scheduled actions*, such as to inject *padding*
-traffic or *block* outgoing traffic. One or more *state machines* determine what
-actions to take based on events. State machines have a lightweight runtime and
-are subject to *limits* on the amount of padding a blocking they can schedule.
+describing the encrypted traffic going over an encrypted channel. It produces as
+*output* zero or more *scheduled actions*, such as to send *padding* traffic or
+to *block* outgoing traffic. One or more *state machines* determine what actions
+to take based on events. State machines have a lightweight runtime and are
+subject to *limits* on the amount of padding and blocking they can schedule.
 
 <p align="center">
 <picture>
@@ -43,50 +44,59 @@ are subject to *limits* on the amount of padding a blocking they can schedule.
 
 Integration with an encrypted communication protocol is done by reporting events
 and executing scheduled actions. Maybenot does not specify the specific async
-runtime or how to keep time for sake of ease of integration.
+runtime or how to keep time for ease of integration.
 
 ## Example usage
 ```rust,no_run
 use maybenot::{
-framework::{Action, Framework, TriggerEvent},
+action::TriggerAction,
+event::TriggerEvent,
+framework::Framework,
 machine::Machine,
 };
 use std::{str::FromStr, time::Instant};
 
-// deserialize state machine from string
-let s = "789cedca2101000000c230e85f1a8387009f9e351d051503ca0003";
+// deserialize a machine, this is a "no-op" machine that does nothing
+let s = "02eNq9zSEBAAAAwrDTvzQegfwKDL7gm7MBNQAD";
 let m = vec![Machine::from_str(s).unwrap()];
 
 // create framework instance
-let mut f = Framework::new(&m, 0.0, 0.0, 1420, Instant::now()).unwrap();
+let mut f = Framework::new(&m, 0.0, 0.0, Instant::now()).unwrap();
 
 loop {
     // collect one or more events
-    let events = [TriggerEvent::NonPaddingSent { bytes_sent: 1420 }];
+    let events = [TriggerEvent::NormalSent];
 
     // trigger events, schedule actions, at most one per machine
     for action in f.trigger_events(&events, Instant::now()) {
         match action {
-            Action::Cancel { machine: MachineId } => {
-                // if any scheduled action for this machine, cancel it
+            TriggerAction::Cancel { machine: _, timer: _ } => {
+                // cancel the specified timer (action, machine, or both) for the
+                // machine in question, if any
             }
-            Action::InjectPadding {
-                timeout: Duration,
-                size: u16,
-                bypass: bool,
-                replace: bool,
-                machine: MachineId,
+            TriggerAction::SendPadding {
+                timeout: _,
+                bypass: _,
+                replace: _,
+                machine: _,
             } => {
-                // schedule padding of a specific size after timeout
+                // schedule padding to be sent after timeout
             }
-            Action::BlockOutgoing {
-                timeout: Duration,
-                duration: Duration,
-                bypass: bool,
-                replace: bool,
-                machine: MachineId,
+            TriggerAction::BlockOutgoing {
+                timeout: _,
+                duration: _,
+                bypass: _,
+                replace: _,
+                machine: _,
             } => {
-                // schedule blocking of outgoing traffic for duration after timeout
+                // block outgoing traffic for the specified duration after timeout
+            }
+            TriggerAction::UpdateTimer {
+                duration: _,
+                replace: _,
+                machine: _,
+            } => {
+                // update the internal timer for the machine in question
             }
         }
     }
