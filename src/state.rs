@@ -10,8 +10,9 @@ use enum_map::EnumMap;
 use rand::{thread_rng, Rng};
 #[cfg(feature = "fast-sample")]
 use rand_distr::{Distribution, WeightedAliasIndex};
-use serde::Deserialize;
+use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::Serialize;
+use serde::{Deserialize, Deserializer};
 use simple_error::bail;
 use std::collections::HashSet;
 use std::error::Error;
@@ -28,7 +29,7 @@ impl fmt::Display for Trans {
     }
 }
 /// A state as part of a [`Machine`](crate::machine).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct State {
     /// Take an action upon transitioning to this state.
     pub action: Option<Action>,
@@ -37,7 +38,7 @@ pub struct State {
     /// For each possible [`Event`], a vector of state transitions.
     transitions: [Option<Vec<Trans>>; EVENT_NUM],
     #[cfg(feature = "fast-sample")]
-    #[serde(skip_serializing, skip_deserializing)]
+    #[serde(skip_serializing)]
     /// Alias method for fast sampling of transitions if feature fast-sample is
     /// enabled: trades increased memory usage for sampling speed.
     alias_index: [Option<AliasIndex>; EVENT_NUM],
@@ -230,5 +231,130 @@ impl fmt::Display for State {
         }
 
         Ok(())
+    }
+}
+
+/// Deserialize a [`State`]. This is implemented manually so that the alias
+/// table can be constructed from the transitions array.
+impl<'de> Deserialize<'de> for State {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            Action,
+            Counter,
+            Transitions,
+        }
+
+        struct StateVisitor;
+
+        impl<'de> Visitor<'de> for StateVisitor {
+            type Value = State;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("struct State")
+            }
+
+            fn visit_seq<V>(self, mut seq: V) -> Result<State, V::Error>
+            where
+                V: SeqAccess<'de>,
+            {
+                let action = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
+                let counter = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
+                let transitions: [Option<Vec<Trans>>; EVENT_NUM] = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
+
+                #[cfg(feature = "fast-sample")]
+                let alias_index = make_alias_index(&transitions);
+
+                Ok(State {
+                    action,
+                    counter,
+                    transitions,
+                    #[cfg(feature = "fast-sample")]
+                    alias_index,
+                })
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<State, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut action = None;
+                let mut counter = None;
+                let mut transitions = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Action => {
+                            if action.is_some() {
+                                return Err(de::Error::duplicate_field("action"));
+                            }
+                            action = Some(map.next_value()?);
+                        }
+                        Field::Counter => {
+                            if counter.is_some() {
+                                return Err(de::Error::duplicate_field("counter"));
+                            }
+                            counter = Some(map.next_value()?);
+                        }
+                        Field::Transitions => {
+                            if transitions.is_some() {
+                                return Err(de::Error::duplicate_field("transitions"));
+                            }
+                            transitions = Some(map.next_value()?);
+                        }
+                    }
+                }
+                let action = action.ok_or_else(|| de::Error::missing_field("action"))?;
+                let counter = counter.ok_or_else(|| de::Error::missing_field("counter"))?;
+                let transitions: [Option<Vec<Trans>>; EVENT_NUM] =
+                    transitions.ok_or_else(|| de::Error::missing_field("transitions"))?;
+
+                #[cfg(feature = "fast-sample")]
+                let alias_index = make_alias_index(&transitions);
+
+                Ok(State {
+                    action,
+                    counter,
+                    transitions,
+                    #[cfg(feature = "fast-sample")]
+                    alias_index,
+                })
+            }
+        }
+
+        const FIELDS: &[&str] = &["action", "counter", "transitions"];
+        deserializer.deserialize_struct("State", FIELDS, StateVisitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::event::Event;
+    use crate::state::*;
+    use enum_map::enum_map;
+
+    #[test]
+    fn serialization() {
+        // Ensure that sampling works after deserialization
+        // Note: enable fast-sample to verify alias table is reconstructed
+        let s0 = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(6, 1.0)],
+             _ => vec![],
+        });
+
+        let s0 = bincode::serialize(&s0).unwrap();
+        let s0: State = bincode::deserialize(&s0).unwrap();
+
+        assert_eq!(s0.sample_state(Event::PaddingSent), Some(6));
     }
 }
