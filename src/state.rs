@@ -13,6 +13,7 @@ use rand_distr::{Distribution, WeightedAliasIndex};
 use serde::Deserialize;
 use serde::Serialize;
 use simple_error::bail;
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt;
 extern crate simple_error;
@@ -108,10 +109,17 @@ impl State {
             }
 
             let mut sum: f32 = 0.0;
+            let mut seen: HashSet<usize> = HashSet::new();
+
             for t in transitions.iter() {
                 if t.0 >= num_states && t.0 != STATE_CANCEL && t.0 != STATE_END {
                     bail!("found invalid state index {}", t.0);
                 }
+                if seen.contains(&t.0) {
+                    bail!("found duplicate state index {}", t.0);
+                }
+                seen.insert(t.0);
+
                 if t.1 <= 0.0 || t.1 > 1.0 {
                     bail!("found probability {}, has to be (0.0, 1.0]", t.1);
                 }

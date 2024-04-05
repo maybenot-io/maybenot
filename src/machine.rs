@@ -263,11 +263,21 @@ mod tests {
              _ => vec![],
         });
         let s1 = State::new(enum_map! {
-            Event::PaddingRecv => vec![Trans(1, 1.0)],
-        _ => vec![],
+                 Event::PaddingRecv => vec![Trans(1, 1.0)],
+             _ => vec![],
         });
         // machine with broken state
         let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]);
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // try specifying duplicate transitions
+        let s0 = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 0.4), Trans(0, 0.6)],
+             _ => vec![],
+        });
+        // machine with broken state
+        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]);
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
     }
