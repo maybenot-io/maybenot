@@ -193,6 +193,7 @@ fn make_alias_index(
 
     alias
 }
+
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if let Some(action) = self.action {

@@ -34,13 +34,13 @@ pub const STATE_LIMIT_MAX: u64 = u64::MAX;
 /// An internal pseudo-state that means that no [`State`](crate::state) defined
 /// in a transition: it is used for state transitions as a "no-op" transition
 /// for any remaining probability up until 1.0.
-pub const STATE_NOP: usize = usize::MAX;
+pub const STATE_NOP: usize = u32::MAX as usize;
 /// A pseudo-state that means the [`Machine`](crate::machine) should completely
 /// stop.
 pub const STATE_END: usize = STATE_NOP - 1;
 /// A pseudo-state that means that we should reset all current pending timers but
 /// remain in the current [`State`](crate::state).
 pub const STATE_CANCEL: usize = STATE_END - 1;
-/// The maximum number of [`State`](crate::state) a [`Machine`](crate::machine)
+/// The maximum number of [`State`](crate::state)s a [`Machine`](crate::machine)
 /// can have.
 pub const STATE_MAX: usize = STATE_CANCEL - 1;
