@@ -125,7 +125,7 @@
 //!                 // something scheduled but try to minimize actual padding sent).
 //!             }
 //!             Action::BlockOutgoing {
-//!                 timeout: _, 
+//!                 timeout: _,
 //!                 duration: _,
 //!                 bypass: _,
 //!                 replace: _,
@@ -1798,7 +1798,7 @@ mod tests {
             }],
             current_time,
         );
-        
+
         current_time = current_time.add(Duration::from_micros(2));
         _ = f.trigger_events(&[TriggerEvent::BlockingEnd], current_time);
 
