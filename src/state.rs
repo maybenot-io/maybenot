@@ -19,17 +19,17 @@ pub struct State {
     /// On transition to this state, sampled for a timeout duration until the
     /// action is triggered.
     pub timeout: Dist,
-    /// A sampled duration for the action.
+    /// A sampled size or duration for the action.
     pub action: Dist,
     /// A flag that determines the action. If true, the action on timeout is to
     /// block. If false, the action is to inject padding.
     pub action_is_block: bool,
-    /// if the action is to block, this flag determines if padding actions are
+    /// If the action is to block, this flag determines if padding actions are
     /// allowed to bypass this block action. If the action is to pad, this flag
     /// determines if the padding packet bypasses any existing blocking (that
     /// was triggered with the bypass flag set). This might seem excessive, but
     /// we want to be able to be able to make machines that can fail closed
-    /// (never bypass blocking) while being able to make machines that can
+    /// (never bypass blocking), while being able to make machines that can
     /// bypass some kinds of blocking is essential for constant-rate defenses.
     pub bypass: bool,
     /// If the action is to block, this flag determines if the action duration
@@ -149,7 +149,7 @@ impl State {
 }
 
 /// Attempt to construct a [`State`] from the given bytes as part of a
-/// [`Machine`](crate::machine) with the specific number of states. The number
+/// [`Machine`](crate::machine) with the specified number of states. The number
 /// of states has to be known since the size of the transition matrix depends on
 /// it.
 pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {

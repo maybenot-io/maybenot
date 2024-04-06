@@ -202,7 +202,7 @@ impl Dist {
         }
     }
 
-    /// Validate that the parameters is valid for the set [`DistType`].
+    /// Validate that the parameters are valid for the set [`DistType`].
     pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         match &self.dist {
             DistType::None => {}

@@ -4,7 +4,7 @@
 //! Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or
 //! Tor. While the connections are encrypted, *patterns* in the encrypted
 //! communication may still leak information about the underlying plaintext
-//! being communicated over encrypted. Maybenot is a framework for creating
+//! being communicated with encryption. Maybenot is a framework for creating
 //! defenses that hide such patterns.
 //!
 //!
@@ -15,7 +15,7 @@
 //! machine::Machine,
 //! };
 //! use std::{str::FromStr, time::Instant};
-//! // This is a large example usage of the maybenot framework. Some parts are a
+//! // This is a large example usage of the Maybenot framework. Some parts are a
 //! // bit odd due to avoiding everything async but should convey the general
 //! // idea.
 //!
@@ -87,7 +87,7 @@
 //!                 machine: _,
 //!             } => {
 //!                 // Set the timer with the specified timeout. On expiry, do
-//!                 // the following (all of nothing):
+//!                 // the following (all or nothing):
 //!                 //
 //!                 // 1. Send size padding.
 //!                 // 2. Add TriggerEvent::PaddingSent{ bytes_sent: size,
@@ -113,7 +113,7 @@
 //!                 // padding. Regardless of if the padding is replaced or not,
 //!                 // the event should still be triggered (step 2). If enqueued
 //!                 // non-padding is sent instead of padding, then a NonPaddingSent
-//!                // event should be triggered as well.
+//!                 // event should be triggered as well.
 //!                 //
 //!                 // Above, note the use-case of having bypass and replace set to
 //!                 // true. This is to support constant-rate defenses.
@@ -125,7 +125,7 @@
 //!                 // something scheduled but try to minimize actual padding sent).
 //!             }
 //!             Action::BlockOutgoing {
-//!                 timeout: _,
+//!                 timeout: _, 
 //!                 duration: _,
 //!                 bypass: _,
 //!                 replace: _,
@@ -339,14 +339,14 @@ where
 {
     /// Create a new framework instance with zero or more [`Machine`]. The max
     /// padding/blocking fractions are enforced as a total across all machines.
-    /// The only way those limits can be violated are through
+    /// The only ways those limits can be violated are through
     /// [`Machine::allowed_padding_bytes`] and
     /// [`Machine::allowed_blocked_microsec`], respectively. The MTU is the MTU
     /// of the underlying connection (goodput). The current time is handed to
     /// the framework here (and later in [`Self::trigger_events()`]) to make
     /// some types of use-cases of the framework easier (weird machines and for
     /// simulation). Returns an error on any invalid [`Machine`] or limits not
-    /// being fractions [0, 1.0].
+    /// being fractions [0.0, 1.0].
     pub fn new(
         machines: M,
         max_padding_frac: f64,

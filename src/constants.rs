@@ -26,7 +26,7 @@ pub const STATENOP: usize = u64::MAX as usize;
 /// A pseudo-state that means the [`Machine`](crate::machine) should completely
 /// stop.
 pub const STATEEND: usize = STATENOP - 1;
-// A pseudo-state that means that we should cancel our current pending timer but
+/// A pseudo-state that means that we should cancel our current pending timer but
 /// remain in the current [`State`](crate::state).
 pub const STATECANCEL: usize = STATEEND - 1;
 /// The maximum number of [`States`](crate::state) a [`Machine`](crate::machine)
