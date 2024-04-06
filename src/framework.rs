@@ -687,7 +687,7 @@ where
 
         // special case: we always allow overwriting existing blocking
         if current.replace && self.global_blocking_active {
-            // we still check against sate limit, because its machine internal
+            // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
 
@@ -707,7 +707,7 @@ where
         // machine allowed blocking duration first, since it bypasses the
         // other two types of limits
         if m_block_dur < Duration::from_micros(machine.allowed_blocked_microsec) {
-            // we still check against sate limit, because its machine internal
+            // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
 
