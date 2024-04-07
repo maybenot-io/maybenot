@@ -423,6 +423,24 @@ mod tests {
     }
 
     #[test]
+    fn validate_state_nop_transition() {
+        // Note: enable fast-sample to test the alias table.
+        // Ensure that STATE_NOP can be sampled. This is an invalid state but
+        // doesn't matter for the behavior we want to invoke in sample_state()
+        // and make_alias_index(). The other option would be a probabilistic
+        // test since the thread rng can't be seeded...
+        let mut s = State::new(enum_map! { _ => vec![] });
+        s.transitions[Event::PaddingSent.to_usize()] = Some(vec![]);
+
+        #[cfg(feature = "fast-sample")]
+        if cfg!(feature = "fast-sample") {
+            s.alias_index = make_alias_index(&s.transitions);
+        }
+
+        assert_eq!(s.sample_state(Event::PaddingSent), None);
+    }
+
+    #[test]
     fn validate_state_action() {
         // assume a machine with one state
         let num_states = 1;
