@@ -271,7 +271,7 @@ where
     /// handed to the framework here (and later in [`Self::trigger_events()`]) to
     /// make some types of use cases of the framework easier (weird machines and
     /// for simulation). Returns an error on any invalid [`Machine`] or limits
-    /// not being fractions [0, 1.0].
+    /// not being fractions [0.0, 1.0].
     pub fn new(
         machines: M,
         max_padding_frac: f64,
