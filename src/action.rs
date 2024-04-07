@@ -16,7 +16,7 @@ use std::time::Duration;
 pub enum Timer {
     /// The scheduled timer for actions with a timeout.
     Action,
-    /// The machine's internal timer updated by the machine using the
+    /// The machine's internal timer, updated by the machine using the
     /// UpdateTimer action.
     Internal,
     /// Apply to all timers.
