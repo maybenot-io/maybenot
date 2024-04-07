@@ -490,7 +490,7 @@ where
         }
 
         // if no next state on event, done
-        if next_state.is_none() || next_state.unwrap() == STATE_NOP {
+        if next_state.is_none() {
             return StateChange::Unchanged;
         }
         let next_state = next_state.unwrap();

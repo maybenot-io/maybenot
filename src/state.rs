@@ -28,6 +28,7 @@ impl fmt::Display for Trans {
         write!(f, "{}: {}", self.0, self.1)
     }
 }
+
 /// A state as part of a [`Machine`](crate::machine).
 #[derive(Debug, Clone, Serialize)]
 pub struct State {
@@ -51,7 +52,7 @@ struct AliasIndex {
     /// The alias method for fast sampling.
     alias: WeightedAliasIndex<f32>,
     /// The state index choices to sample from.
-    choices: Vec<usize>,
+    choices: Vec<Option<usize>>,
 }
 
 impl State {
@@ -156,7 +157,7 @@ impl State {
         #[cfg(feature = "fast-sample")]
         if cfg!(feature = "fast-sample") {
             if let Some(alias) = &self.alias_index[event.to_usize()] {
-                return Some(alias.choices[alias.alias.sample(&mut rng)]);
+                return alias.choices[alias.alias.sample(&mut rng)];
             }
 
             return None;
@@ -188,12 +189,23 @@ fn make_alias_index(
             continue;
         }
         let vector = vector.as_ref().unwrap();
+
         let mut weights = Vec::new();
         let mut choices = Vec::new();
+        let mut sum: f32 = 0.0;
+
         for t in vector.iter() {
-            choices.push(t.0);
+            choices.push(Some(t.0));
             weights.push(t.1);
+            sum += t.1;
         }
+
+        // STATE_NOP for remaining probability up to 1.0
+        if sum < 1.0 {
+            choices.push(None);
+            weights.push(1.0 - sum);
+        }
+
         alias[event] = Some(AliasIndex {
             alias: WeightedAliasIndex::new(weights).unwrap(),
             choices,
