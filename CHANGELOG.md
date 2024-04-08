@@ -16,9 +16,12 @@ Manually generated changelog, for now. We follow semantic versioning.
 - Added two counters per machine which are updated upon transition to a state
   if its `counter` field is set. A CounterZero event is triggered when either
   of a machine's counters is decremented to zero.
-- Added a per-machine timer which can be set using an UpdateTimer action. These
-  are handled by the integrator, who triggers the corresponding TimerBegin and
-  TimerEnd events as needed.
+- Added a per-machine "internal" timer which can be set using an UpdateTimer
+  action. These are handled by the integrator, who triggers the corresponding
+  TimerBegin and TimerEnd events as needed.
+- Added a Cancel action which can be used to cancel a pending action
+  timer (timeout), the machine's internal timer, or both. The STATE_CANCEL
+  transition will now cancel both timers.
 - Added support for the SkewNormal distribution.
 - Added an optional `fast-sample` feature, which is enabled by default, to
   sample the next state to transition to in O(1) time at the cost of increased
