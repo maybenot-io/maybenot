@@ -9,8 +9,7 @@ Manually generated changelog, for now. We follow semantic versioning.
   NonPaddingSent and NonPaddingRecv).
 - Bytes/MTU are no longer supported in favor of simpler packet counts. As a
   result, the `include_small_packets` flag for machines has been removed.
-- State limits are now always decremented for both normal and padding packets,
-  and the `limit_includes_nonpadding` flag for states has been removed.
+- Removed the `limit_includes_nonpadding` flag for states.
 - Added events for queued packets (NormalQueued and PaddingQueued), which are
   now used for accounting rather than sent packets.
 - Added two counters per machine which are updated upon transition to a state
@@ -19,7 +18,7 @@ Manually generated changelog, for now. We follow semantic versioning.
 - Added a per-machine "internal" timer which can be set using an UpdateTimer
   action. These are handled by the integrator, who triggers the corresponding
   TimerBegin and TimerEnd events as needed.
-- Added a Cancel action which can be used to cancel a pending action
+- Extended the Cancel action that can be used to cancel a pending action
   timer (timeout), the machine's internal timer, or both. The STATE_CANCEL
   transition will now cancel both timers.
 - Added support for the SkewNormal distribution.
