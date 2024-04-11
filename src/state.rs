@@ -351,7 +351,7 @@ impl<'de> Deserialize<'de> for State {
 
 #[cfg(test)]
 mod tests {
-    use crate::counter::{CounterUpdate, Counter, Operation};
+    use crate::counter::{Counter, CounterUpdate, Operation};
     use crate::dist::{Dist, DistType};
     use crate::event::Event;
     use crate::state::*;
