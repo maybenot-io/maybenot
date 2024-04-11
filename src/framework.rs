@@ -446,14 +446,7 @@ where
                 for mi in 0..self.runtime.len() {
                     self.runtime[mi].normal_queued += 1;
 
-                    // If the transition leaves the state unchanged, decrement the
-                    // limit. If the state changed, a new limit was sampled and this
-                    // packet shouldn't count.
-                    if self.transition(mi, Event::NormalQueued) == StateChange::Unchanged
-                        && self.runtime[mi].current_state != STATE_END
-                    {
-                        self.decrement_limit(mi);
-                    }
+                    self.transition(mi, Event::NormalQueued);
                 }
             }
             TriggerEvent::PaddingQueued { machine } => {
