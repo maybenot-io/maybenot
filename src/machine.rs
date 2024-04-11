@@ -31,7 +31,7 @@ pub struct Machine {
     /// The maximum fraction of blocking (microseconds) to allow as actions.
     pub max_blocking_frac: f64,
     /// The states that make up the machine.
-    pub(crate) states: Vec<State>,
+    pub states: Vec<State>,
 }
 
 impl Machine {
