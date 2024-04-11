@@ -36,8 +36,8 @@ pub struct CounterUpdate {
     pub counter: Counter,
     /// The operation to apply to the counter upon a state transition.
     pub operation: Operation,
-    /// If set, sample the value to update from a distribution. If not set,
-    /// value is 1.
+    /// If set, sample the value to update the counter with from a
+    /// distribution. If not set, value is 1.
     pub value: Option<Dist>,
 }
 
@@ -94,7 +94,7 @@ mod tests {
         // counter update with invalid dist
         cu.value = Some(Dist {
             dist: DistType::Uniform {
-                low: 15.0, // NOTE param1 > param2
+                low: 15.0, // NOTE low > high
                 high: 5.0,
             },
             start: 0.0,

@@ -15,8 +15,8 @@
 //!
 //! If you want to build machines for the [`framework`], take a look at all the
 //! modules. For top-down, start with [`machine`]. For bottom-up, start with
-//! [`dist`], [`event`], and [`action`] before [`state`] and finally
-//! [`machine`].
+//! [`dist`], [`event`], [`action`], and [`counter`] before [`state`] and
+//! finally [`machine`].
 pub mod action;
 pub mod constants;
 pub mod counter;

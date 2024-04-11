@@ -112,7 +112,7 @@ impl Machine {
     }
 }
 
-/// from a serialized string, attempt to create a machine
+/// From a serialized string, attempt to create a machine.
 impl FromStr for Machine {
     type Err = Box<dyn Error + Send + Sync>;
 
@@ -166,8 +166,6 @@ impl fmt::Display for Machine {
 
 #[cfg(test)]
 mod tests {
-    use crate::action::*;
-    use crate::dist::*;
     use crate::event::Event;
     use crate::machine::*;
     use enum_map::enum_map;
@@ -236,98 +234,23 @@ mod tests {
     }
 
     #[test]
-    fn validate_machine_probability() {
+    fn validate_machine_states() {
         // out of bounds index
         let s0 = State::new(enum_map! {
                  Event::PaddingSent => vec![Trans(1, 1.0)],
              _ => vec![],
         });
         // machine with broken state
-        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]);
+        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0]);
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
-        // try setting one probability too high
+        // valid states should be allowed
         let s0 = State::new(enum_map! {
-                 Event::PaddingSent => vec![Trans(0, 1.1)],
+                 Event::PaddingSent => vec![Trans(0, 0.8)],
              _ => vec![],
         });
-        // machine with broken state
-        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]);
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-
-        // try setting total probability too high
-        let s0 = State::new(enum_map! {
-                 Event::PaddingSent => vec![Trans(0, 0.5), Trans(1, 0.6)],
-             _ => vec![],
-        });
-        let s1 = State::new(enum_map! {
-                 Event::PaddingRecv => vec![Trans(1, 1.0)],
-             _ => vec![],
-        });
-        // machine with broken state
-        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]);
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-
-        // try specifying duplicate transitions
-        let s0 = State::new(enum_map! {
-                 Event::PaddingSent => vec![Trans(0, 0.4), Trans(0, 0.6)],
-             _ => vec![],
-        });
-        // machine with broken state
-        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]);
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-    }
-
-    #[test]
-    fn validate_machine_distributions() {
-        let mut s0 = State::new(enum_map! {
-                 Event::PaddingSent => vec![Trans(0, 1.0)],
-             _ => vec![],
-        });
-        s0.action = Some(Action::SendPadding {
-            bypass: false,
-            replace: false,
-            timeout: Dist {
-                dist: DistType::Uniform {
-                    low: 10.0,
-                    high: 10.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            },
-            limit: None,
-        });
-
-        // valid machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]).unwrap();
-
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
+        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0]);
         assert!(r.is_ok());
-
-        // invalid action in state
-        s0.action = Some(Action::SendPadding {
-            bypass: false,
-            replace: false,
-            timeout: Dist {
-                dist: DistType::Uniform {
-                    low: 2.0, // NOTE param1 > param2
-                    high: 1.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            },
-            limit: None,
-        });
-
-        // machine with broken state
-        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone()]);
-
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
     }
 }

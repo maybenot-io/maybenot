@@ -28,6 +28,7 @@ impl fmt::Display for Trans {
         write!(f, "{}: {}", self.0, self.1)
     }
 }
+
 /// A state as part of a [`Machine`](crate::machine).
 #[derive(Debug, Clone, Serialize)]
 pub struct State {
@@ -51,7 +52,7 @@ struct AliasIndex {
     /// The alias method for fast sampling.
     alias: WeightedAliasIndex<f32>,
     /// The state index choices to sample from.
-    choices: Vec<usize>,
+    choices: Vec<Option<usize>>,
 }
 
 impl State {
@@ -156,7 +157,7 @@ impl State {
         #[cfg(feature = "fast-sample")]
         if cfg!(feature = "fast-sample") {
             if let Some(alias) = &self.alias_index[event.to_usize()] {
-                return Some(alias.choices[alias.alias.sample(&mut rng)]);
+                return alias.choices[alias.alias.sample(&mut rng)];
             }
 
             return None;
@@ -188,12 +189,23 @@ fn make_alias_index(
             continue;
         }
         let vector = vector.as_ref().unwrap();
+
         let mut weights = Vec::new();
         let mut choices = Vec::new();
+        let mut sum: f32 = 0.0;
+
         for t in vector.iter() {
-            choices.push(t.0);
+            choices.push(Some(t.0));
             weights.push(t.1);
+            sum += t.1;
         }
+
+        // STATE_NOP for remaining probability up to 1.0
+        if sum < 1.0 {
+            choices.push(None);
+            weights.push(1.0 - sum);
+        }
+
         alias[event] = Some(AliasIndex {
             alias: WeightedAliasIndex::new(weights).unwrap(),
             choices,
@@ -339,6 +351,8 @@ impl<'de> Deserialize<'de> for State {
 
 #[cfg(test)]
 mod tests {
+    use crate::counter::{CounterUpdate, Counter, Operation};
+    use crate::dist::{Dist, DistType};
     use crate::event::Event;
     use crate::state::*;
     use enum_map::enum_map;
@@ -356,5 +370,160 @@ mod tests {
         let s0: State = bincode::deserialize(&s0).unwrap();
 
         assert_eq!(s0.sample_state(Event::PaddingSent), Some(6));
+    }
+
+    #[test]
+    fn validate_state_transitions() {
+        // assume a machine with two states
+        let num_states = 2;
+
+        // out of bounds index
+        let s = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(num_states, 1.0)],
+             _ => vec![],
+        });
+        let r = s.validate(num_states);
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // try setting one probability too high
+        let s = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 1.1)],
+             _ => vec![],
+        });
+        let r = s.validate(num_states);
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // try setting total probability too high
+        let s = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 0.5), Trans(1, 0.6)],
+             _ => vec![],
+        });
+        let r = s.validate(num_states);
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // try specifying duplicate transitions
+        let s = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 0.4), Trans(0, 0.6)],
+             _ => vec![],
+        });
+        let r = s.validate(num_states);
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+
+        // valid transitions should be allowed
+        let s = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 0.4), Trans(STATE_CANCEL, 0.3), Trans(STATE_END, 0.3)],
+             _ => vec![],
+        });
+        let r = s.validate(num_states);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn validate_state_nop_transition() {
+        // Note: enable fast-sample to test the alias table.
+        // Ensure that STATE_NOP can be sampled. This is an invalid state but
+        // doesn't matter for the behavior we want to invoke in sample_state()
+        // and make_alias_index(). The other option would be a probabilistic
+        // test since the thread rng can't be seeded...
+        let mut s = State::new(enum_map! { _ => vec![] });
+        s.transitions[Event::PaddingSent.to_usize()] = Some(vec![]);
+
+        #[cfg(feature = "fast-sample")]
+        if cfg!(feature = "fast-sample") {
+            s.alias_index = make_alias_index(&s.transitions);
+        }
+
+        assert_eq!(s.sample_state(Event::PaddingSent), None);
+    }
+
+    #[test]
+    fn validate_state_action() {
+        // assume a machine with one state
+        let num_states = 1;
+
+        // valid actions should be allowed
+        let mut s = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 1.0)],
+             _ => vec![],
+        });
+        s.action = Some(Action::SendPadding {
+            bypass: false,
+            replace: false,
+            timeout: Dist {
+                dist: DistType::Uniform {
+                    low: 10.0,
+                    high: 10.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            limit: None,
+        });
+
+        let r = s.validate(num_states);
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_ok());
+
+        // invalid action in state
+        s.action = Some(Action::SendPadding {
+            bypass: false,
+            replace: false,
+            timeout: Dist {
+                dist: DistType::Uniform {
+                    low: 2.0, // NOTE low > high
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            limit: None,
+        });
+
+        let r = s.validate(num_states);
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_state_counter() {
+        // assume a machine with one state
+        let num_states = 1;
+
+        // valid counter updates should be allowed
+        let mut s = State::new(enum_map! {
+                 Event::PaddingSent => vec![Trans(0, 1.0)],
+             _ => vec![],
+        });
+        s.counter = Some(CounterUpdate {
+            counter: Counter::A,
+            operation: Operation::Increment,
+            value: None,
+        });
+
+        let r = s.validate(num_states);
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_ok());
+
+        // invalid counter update in state
+        s.counter = Some(CounterUpdate {
+            counter: Counter::B,
+            operation: Operation::Set,
+            value: Some(Dist {
+                dist: DistType::Uniform {
+                    low: 2.0, // NOTE low > high
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            }),
+        });
+
+        let r = s.validate(num_states);
+        println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
     }
 }
