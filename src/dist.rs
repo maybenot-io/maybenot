@@ -119,13 +119,15 @@ pub struct Dist {
 
 impl fmt::Display for Dist {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut clamp = String::new();
+        let clamp;
         if self.start > 0.0 && self.max > 0.0 {
-            clamp = format!(", clamped to [{}, {}]", self.start, self.max);
+            clamp = format!(", start {}, clamped to [0.0, {}]", self.start, self.max);
         } else if self.start > 0.0 {
-            clamp = format!(", clamped to [{}, ∞]", self.start);
+            clamp = format!(", start {}, clamped to [0.0, f64::MAX]", self.start);
         } else if self.max > 0.0 {
             clamp = format!(", clamped to [0.0, {}]", self.max);
+        } else {
+            clamp = format!(", clamped to [0.0, f64::MAX]");
         }
         write!(f, "{}{}", self.dist, clamp)
     }
