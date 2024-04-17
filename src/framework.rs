@@ -29,7 +29,7 @@
 //! // the same machines, then share the same vector across framework instances.
 //! // All runtime information is allocated internally in the framework without
 //! // modifying the machines.
-//! let s = "02eNq9zSEBAAAAwrDTvzQegfwKDL7gm7MBNQAD";
+//! let s = "02eNpjYEAHjKhcAAAwAAI=";
 //! // machines will error if invalid
 //! let m = vec![Machine::from_str(s).unwrap()];
 //!
@@ -765,6 +765,15 @@ mod tests {
         assert!(!f1.is_err());
         let f2 = Framework::new(&machines, 0.0, 0.0, Instant::now());
         assert!(!f2.is_err());
+    }
+
+    #[test]
+    fn noop_machine() {
+        let s0 = State::new(enum_map! {
+        _ => vec![],
+        });
+        let m = Machine::new(0, 0.0, 0, 0.0, vec![s0]).unwrap();
+        assert_eq!(m.serialize(), "02eNpjYEAHjKhcAAAwAAI=");
     }
 
     #[test]

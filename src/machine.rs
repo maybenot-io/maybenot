@@ -3,6 +3,7 @@
 
 use crate::constants::*;
 use crate::state::*;
+use bincode::Options;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
@@ -64,7 +65,8 @@ impl Machine {
     }
 
     pub fn serialize(&self) -> String {
-        let encoded = bincode::serialize(&self).unwrap();
+        let bincoder = bincode::DefaultOptions::new().with_limit(MAX_DECOMPRESSED_SIZE as u64);
+        let encoded = bincoder.serialize(&self).unwrap();
         let mut e = ZlibEncoder::new(Vec::new(), Compression::best());
         e.write_all(encoded.as_slice()).unwrap();
         let s = BASE64_STANDARD.encode(e.finish().unwrap());
@@ -134,8 +136,16 @@ impl FromStr for Machine {
         let mut buf = vec![0; MAX_DECOMPRESSED_SIZE];
         let bytes_read = decoder.read(&mut buf)?;
 
-        let r = bincode::deserialize(&buf[..bytes_read]);
-        Ok(r?)
+        // With binencode, note that "The size of the encoded object will be the
+        // same or smaller than the size that the object takes up in memory in a
+        // running Rust program".
+        let bincoder = bincode::DefaultOptions::new().with_limit(MAX_DECOMPRESSED_SIZE as u64);
+        let r = bincoder.deserialize(&buf[..bytes_read]);
+
+        // ensure that the machine is valid
+        let m: Machine = r?;
+        m.validate()?;
+        Ok(m)
     }
 }
 
