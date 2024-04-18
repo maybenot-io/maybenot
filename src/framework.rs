@@ -621,7 +621,6 @@ where
         let current = &machine.states[runtime.current_state];
 
         if current.action.is_none() {
-            // This could be true, but no need for an extra call to schedule_action()
             return false;
         }
 
