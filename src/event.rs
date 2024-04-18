@@ -13,14 +13,20 @@ use std::slice::Iter;
 /// An Event may trigger a [`State`](crate::state) transition.
 #[derive(Debug, Enum, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Event {
-    /// NormalRecv is when we received non-padding.
+    /// NormalRecv is when we received a normal, non-padding packet.
     NormalRecv,
-    /// PaddingRecv is when we received padding.
+    /// PaddingRecv is when we received a padding packet.
     PaddingRecv,
-    /// NormalSent is when we sent non-padding.
+    /// TunnelRecv is when we received a packet in the tunnel: because it is
+    /// encrypted, we do not know if it is a normal or padding packet yet.
+    TunnelRecv,
+    /// NormalSent is when we sent a normal, non-padding packet.
     NormalSent,
-    /// PaddingSent is when we sent padding.
+    /// PaddingSent is when we sent a padding packet.
     PaddingSent,
+    /// TunnelSent is when we sent a packet in the tunnel: because it is now
+    /// encrypted, we do not know if it is a normal or padding packet anymore.
+    TunnelSent,
     /// BlockingBegin is when blocking started.
     BlockingBegin,
     /// BlockingEnd is when blocking ended.
@@ -33,10 +39,6 @@ pub enum Event {
     TimerBegin,
     /// TimerEnd is when a machine's timer expired.
     TimerEnd,
-    /// NormalQueued is when we queued non-padding.
-    NormalQueued,
-    /// PaddingQueued is when we queued padding.
-    PaddingQueued,
 }
 
 impl fmt::Display for Event {
@@ -50,16 +52,16 @@ impl Event {
         static EVENTS: [Event; EVENT_NUM] = [
             NormalRecv,
             PaddingRecv,
+            TunnelRecv,
             NormalSent,
             PaddingSent,
+            TunnelSent,
             BlockingBegin,
             BlockingEnd,
             LimitReached,
             CounterZero,
             TimerBegin,
             TimerEnd,
-            NormalQueued,
-            PaddingQueued,
         ];
         EVENTS.iter()
     }
@@ -77,10 +79,14 @@ pub enum TriggerEvent {
     NormalRecv,
     /// Received padding packet.
     PaddingRecv,
+    /// Received packet in the tunnel.
+    TunnelRecv,
     /// Sent non-padding packet.
     NormalSent,
     /// Sent padding packet.
-    PaddingSent,
+    PaddingSent { machine: MachineId },
+    /// Sent packet in the tunnel.
+    TunnelSent,
     /// Blocking of outgoing traffic started by the action from a machine.
     BlockingBegin { machine: MachineId },
     /// Blocking of outgoing traffic stopped.
@@ -89,10 +95,6 @@ pub enum TriggerEvent {
     TimerBegin { machine: MachineId },
     /// A machine's timer expired.
     TimerEnd { machine: MachineId },
-    /// Queued non-padding packet.
-    NormalQueued,
-    /// Queued padding packet.
-    PaddingQueued { machine: MachineId },
 }
 
 impl TriggerEvent {
@@ -107,8 +109,8 @@ impl TriggerEvent {
             TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
             TriggerEvent::TimerBegin { .. } => e == Event::TimerBegin,
             TriggerEvent::TimerEnd { .. } => e == Event::TimerEnd,
-            TriggerEvent::NormalQueued => e == Event::NormalQueued,
-            TriggerEvent::PaddingQueued { .. } => e == Event::PaddingQueued,
+            TriggerEvent::TunnelSent => e == Event::TunnelSent,
+            TriggerEvent::TunnelRecv => e == Event::TunnelRecv,
         }
     }
 }
@@ -119,14 +121,14 @@ impl fmt::Display for TriggerEvent {
         match self {
             TriggerEvent::NormalRecv => write!(f, "rn"),
             TriggerEvent::PaddingRecv => write!(f, "rp"),
+            TriggerEvent::TunnelRecv => write!(f, "rt"),
             TriggerEvent::NormalSent => write!(f, "sn"),
             TriggerEvent::PaddingSent { .. } => write!(f, "sp"),
+            TriggerEvent::TunnelSent => write!(f, "st"),
             TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
             TriggerEvent::BlockingEnd => write!(f, "be"),
             TriggerEvent::TimerBegin { .. } => write!(f, "tb"),
             TriggerEvent::TimerEnd { .. } => write!(f, "te"),
-            TriggerEvent::NormalQueued => write!(f, "qn"),
-            TriggerEvent::PaddingQueued { .. } => write!(f, "qp"),
         }
     }
 }
@@ -150,7 +152,7 @@ mod tests {
         assert_eq!(Event::CounterZero.to_string(), "CounterZero");
         assert_eq!(Event::TimerBegin.to_string(), "TimerBegin");
         assert_eq!(Event::TimerEnd.to_string(), "TimerEnd");
-        assert_eq!(Event::NormalQueued.to_string(), "NormalQueued");
-        assert_eq!(Event::PaddingQueued.to_string(), "PaddingQueued");
+        assert_eq!(Event::TunnelRecv.to_string(), "TunnelRecv");
+        assert_eq!(Event::TunnelSent.to_string(), "TunnelSent");
     }
 }

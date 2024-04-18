@@ -27,9 +27,8 @@ fn v1_events_iter() -> Iter<'static, Event> {
         Event::NormalRecv,
         Event::PaddingRecv,
         // was in v1 NonPaddingSent
-        Event::NormalQueued,
-        // was in v1 PaddingSent
-        Event::PaddingQueued,
+        Event::NormalSent,
+        Event::PaddingSent,
         Event::BlockingBegin,
         Event::BlockingEnd,
         Event::LimitReached,

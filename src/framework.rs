@@ -92,13 +92,8 @@
 //!                 // Set the action timer with the specified timeout. On expiry,
 //!                 // do the following:
 //!                 //
-//!                 // 1. Queue a padding packet to be sent.
-//!                 // 2. Trigger TriggerEvent::PaddingQueued { machine: machine }.
-//!                 // 3. When any padding packet actually is sent over the network,
-//!                 //    trigger TriggerEvent::PaddingSent.
-//!                 //
-//!                 // Above, "queue" and "send" should mimic as close as possible
-//!                 // a normal packet being sent.
+//!                 // 1. Send a padding packet.
+//!                 // 2. Trigger TriggerEvent::PaddingSent { machine: machine }.
 //!                 //
 //!                 // If bypass is true, then the padding MUST be sent even if there
 //!                 // is active blocking of outgoing traffic AND the active blocking
@@ -108,14 +103,14 @@
 //!                 //
 //!                 // If replace is true, then the padding MAY be replaced by
 //!                 // another packet. The other packet could be an encrypted packet
-//!                 // already queued but not already sent, containing either
+//!                 // already queued but not already sent in the tunnel, containing either
 //!                 // padding or normal data (ideally, the user of the framework cannot
 //!                 // tell, because encrypted). The other data could also be
-//!                 // normal data about to be turned into a normal packet and enqueued.
-//!                 // Regardless of if the padding is replaced or not, the events
-//!                 // should still be triggered (steps 2/3). If enqueued
-//!                 // normal is sent instead of padding, then the NormalSent event
-//!                 // should be triggered as well.
+//!                 // normal data about to be turned into a normal packet and sent.
+//!                 // Regardless of if the padding is replaced or not, the event
+//!                 // should still be triggered (steps 2). If enqueued normal data sent
+//!                 // instead of padding, then the NormalSent event should be triggered
+//!                 // as well.
 //!                 //
 //!                 // Above, note the use case of having bypass and replace set to
 //!                 // true. This is to support constant-rate defenses.
@@ -216,8 +211,8 @@ impl MachineId {
 struct MachineRuntime {
     current_state: usize,
     state_limit: u64,
-    padding_queued: u64,
-    normal_queued: u64,
+    padding_sent: u64,
+    normal_sent: u64,
     blocking_duration: Duration,
     machine_start: Instant,
     counter_a: u64,
@@ -249,8 +244,8 @@ pub struct Framework<M> {
     runtime: Vec<MachineRuntime>,
     // padding accounting
     max_padding_frac: f64,
-    normal_queued_packets: u64,
-    padding_queued_packets: u64,
+    normal_sent_packets: u64,
+    padding_sent_packets: u64,
     // blocking accounting
     max_blocking_frac: f64,
     blocking_duration: Duration,
@@ -293,8 +288,8 @@ where
             MachineRuntime {
                 current_state: 0,
                 state_limit: 0,
-                padding_queued: 0,
-                normal_queued: 0,
+                padding_sent: 0,
+                normal_sent: 0,
                 blocking_duration: Duration::from_secs(0),
                 machine_start: current_time,
                 counter_a: 0,
@@ -324,8 +319,8 @@ where
             blocking_active: false,
             blocking_started: current_time,
             blocking_duration: Duration::from_secs(0),
-            padding_queued_packets: 0,
-            normal_queued_packets: 0,
+            padding_sent_packets: 0,
+            normal_sent_packets: 0,
         })
     }
 
@@ -373,16 +368,40 @@ where
                     self.transition(mi, Event::PaddingRecv);
                 }
             }
-            TriggerEvent::NormalSent => {
-                // accounting is based on queued, not sent
+            TriggerEvent::TunnelRecv => {
+                // no special accounting needed
                 for mi in 0..self.runtime.len() {
+                    self.transition(mi, Event::TunnelRecv);
+                }
+            }
+            TriggerEvent::NormalSent => {
+                self.normal_sent_packets += 1;
+
+                for mi in 0..self.runtime.len() {
+                    self.runtime[mi].normal_sent += 1;
+
                     self.transition(mi, Event::NormalSent);
                 }
             }
-            TriggerEvent::PaddingSent => {
-                // the event is global: tell all machines
+            TriggerEvent::PaddingSent { machine } => {
+                self.padding_sent_packets += 1;
+
+                let mi = machine.0;
+                if mi >= self.runtime.len() {
+                    return;
+                }
+                self.runtime[mi].padding_sent += 1;
+                if self.transition(mi, Event::PaddingSent) == StateChange::Unchanged
+                    && self.runtime[mi].current_state != STATE_END
+                {
+                    // decrement only makes sense if we didn't change state
+                    self.decrement_limit(mi);
+                }
+            }
+            TriggerEvent::TunnelSent => {
+                // accounting is based on normal/padding sent, not tunnel
                 for mi in 0..self.runtime.len() {
-                    self.transition(mi, Event::PaddingSent);
+                    self.transition(mi, Event::TunnelSent);
                 }
             }
             TriggerEvent::BlockingBegin { machine } => {
@@ -439,30 +458,6 @@ where
                     return;
                 }
                 self.transition(mi, Event::TimerEnd);
-            }
-            TriggerEvent::NormalQueued => {
-                self.normal_queued_packets += 1;
-
-                for mi in 0..self.runtime.len() {
-                    self.runtime[mi].normal_queued += 1;
-
-                    self.transition(mi, Event::NormalQueued);
-                }
-            }
-            TriggerEvent::PaddingQueued { machine } => {
-                self.padding_queued_packets += 1;
-
-                let mi = machine.0;
-                if mi >= self.runtime.len() {
-                    return;
-                }
-                self.runtime[mi].padding_queued += 1;
-                if self.transition(mi, Event::PaddingQueued) == StateChange::Unchanged
-                    && self.runtime[mi].current_state != STATE_END
-                {
-                    // decrement only makes sense if we didn't change state
-                    self.decrement_limit(mi);
-                }
             }
         };
     }
@@ -702,28 +697,28 @@ where
 
     fn below_limit_padding(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         // no limits apply if not made up padding count
-        if runtime.padding_queued < machine.allowed_padding_packets {
+        if runtime.padding_sent < machine.allowed_padding_packets {
             return runtime.state_limit > 0;
         }
 
         // hit machine limits?
         if machine.max_padding_frac > 0.0 {
-            let total = runtime.normal_queued + runtime.padding_queued;
+            let total = runtime.normal_sent + runtime.padding_sent;
             if total == 0 {
                 return true;
             }
-            if runtime.padding_queued as f64 / total as f64 >= machine.max_padding_frac {
+            if runtime.padding_sent as f64 / total as f64 >= machine.max_padding_frac {
                 return false;
             }
         }
 
         // hit global limits?
         if self.max_padding_frac > 0.0 {
-            let total = self.padding_queued_packets + self.normal_queued_packets;
+            let total = self.padding_sent_packets + self.normal_sent_packets;
             if total == 0 {
                 return true;
             }
-            if self.padding_queued_packets as f64 / total as f64 >= self.max_padding_frac {
+            if self.padding_sent_packets as f64 / total as f64 >= self.max_padding_frac {
                 return false;
             }
         }
@@ -841,7 +836,12 @@ mod tests {
         assert_eq!(f.actions[0], None);
 
         // trigger transition to next state
-        _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::SendPadding {
@@ -854,7 +854,12 @@ mod tests {
 
         // increase time, trigger event, make sure no further action
         current_time = current_time.add(Duration::from_micros(20));
-        _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
         assert_eq!(f.actions[0], None);
 
         // go back to state 0
@@ -872,7 +877,12 @@ mod tests {
         // test multiple triggers overwriting actions
         for _ in 0..10 {
             _ = f.trigger_events(
-                &[TriggerEvent::PaddingSent, TriggerEvent::PaddingRecv],
+                &[
+                    TriggerEvent::PaddingSent {
+                        machine: MachineId(0),
+                    },
+                    TriggerEvent::PaddingRecv,
+                ],
                 current_time,
             );
             assert_eq!(
@@ -892,7 +902,9 @@ mod tests {
                 _ = f.trigger_events(
                     &[
                         TriggerEvent::PaddingRecv,
-                        TriggerEvent::PaddingSent,
+                        TriggerEvent::PaddingSent {
+                            machine: MachineId(0),
+                        },
                         TriggerEvent::PaddingRecv,
                     ],
                     current_time,
@@ -909,9 +921,13 @@ mod tests {
             } else {
                 _ = f.trigger_events(
                     &[
-                        TriggerEvent::PaddingSent,
+                        TriggerEvent::PaddingSent {
+                            machine: MachineId(0),
+                        },
                         TriggerEvent::PaddingRecv,
-                        TriggerEvent::PaddingSent,
+                        TriggerEvent::PaddingSent {
+                            machine: MachineId(0),
+                        },
                     ],
                     current_time,
                 );
@@ -1052,7 +1068,12 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::UpdateTimer {
@@ -1161,7 +1182,12 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::PaddingSent], current_time);
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_a, 1);
 
@@ -1332,9 +1358,9 @@ mod tests {
 
         // state 0
         let mut s0 = State::new(enum_map! {
-            // we use queued for checking limits and recv as an event to check
+            // we use sent for checking limits and recv as an event to check
             // without adding bytes sent
-            Event::PaddingQueued | Event::NormalQueued | Event::NormalRecv => vec![Trans(0, 1.0)],
+            Event::PaddingSent | Event::NormalSent | Event::NormalRecv => vec![Trans(0, 1.0)],
             _ => vec![],
         });
         s0.action = Some(Action::SendPadding {
@@ -1374,7 +1400,7 @@ mod tests {
             );
 
             _ = f.trigger_events(
-                &[TriggerEvent::PaddingQueued {
+                &[TriggerEvent::PaddingSent {
                     machine: MachineId(0),
                 }],
                 current_time,
@@ -1391,12 +1417,12 @@ mod tests {
         // verify that no padding is scheduled until we've sent the same amount
         // of bytes
         for _ in 0..100 {
-            _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
+            _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
             assert_eq!(f.actions[0], None);
         }
 
         // send one byte of normal, putting us just over the limit
-        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
 
         assert_eq!(
             f.actions[0],
@@ -1416,9 +1442,9 @@ mod tests {
 
         // state 0
         let mut s0 = State::new(enum_map! {
-            // we use queued for checking limits and recv as an event to check
+            // we use sent for checking limits and recv as an event to check
             // without adding bytes sent
-            Event::PaddingQueued | Event::NormalQueued | Event::NormalRecv => vec![Trans(0, 1.0)],
+            Event::PaddingSent | Event::NormalSent | Event::NormalRecv => vec![Trans(0, 1.0)],
         _ => vec![],
         });
         s0.action = Some(Action::SendPadding {
@@ -1471,14 +1497,14 @@ mod tests {
             );
             _ = f.trigger_events(
                 &[
-                    TriggerEvent::PaddingQueued {
+                    TriggerEvent::PaddingSent {
                         machine: MachineId(0),
                     },
-                    TriggerEvent::PaddingQueued {
+                    TriggerEvent::PaddingSent {
                         machine: MachineId(1),
                     },
-                    TriggerEvent::PaddingSent,
-                    TriggerEvent::PaddingSent,
+                    TriggerEvent::TunnelSent,
+                    TriggerEvent::TunnelSent,
                 ],
                 current_time,
             );
@@ -1495,20 +1521,20 @@ mod tests {
         assert_eq!(f.actions[1], None);
 
         // in sync?
-        assert_eq!(f.runtime[0].padding_queued, f.runtime[1].padding_queued);
-        assert_eq!(f.runtime[0].padding_queued, 100);
+        assert_eq!(f.runtime[0].padding_sent, f.runtime[1].padding_sent);
+        assert_eq!(f.runtime[0].padding_sent, 100);
 
         // OK, so we've sent in total 2*100*mtu of padding using two machines. This
         // means that we should need to send at least 2*100*mtu + 1 bytes before
         // padding is scheduled again
         for _ in 0..200 {
-            _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
+            _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
             assert_eq!(f.actions[0], None);
             assert_eq!(f.actions[1], None);
         }
 
         // the last byte should tip it over
-        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
 
         assert_eq!(
             f.actions[0],
@@ -1896,13 +1922,13 @@ mod tests {
 
         // state 0
         let s0 = State::new(enum_map! {
-            Event::NormalQueued => vec![Trans(1, 1.0)],
+            Event::NormalSent => vec![Trans(1, 1.0)],
         _ => vec![],
         });
 
         // state 1
         let mut s1 = State::new(enum_map! {
-            Event::PaddingQueued => vec![Trans(1, 1.0)],
+            Event::PaddingSent => vec![Trans(1, 1.0)],
         _ => vec![],
         });
         s1.action = Some(Action::SendPadding {
@@ -1934,7 +1960,7 @@ mod tests {
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
 
         // trigger self to start the padding
-        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
 
         assert_eq!(f.runtime[0].state_limit, 4);
 
@@ -1951,7 +1977,7 @@ mod tests {
             );
             current_time = current_time.add(Duration::from_micros(1));
             _ = f.trigger_events(
-                &[TriggerEvent::PaddingQueued {
+                &[TriggerEvent::PaddingSent {
                     machine: MachineId(0),
                 }],
                 current_time,
@@ -1959,8 +1985,8 @@ mod tests {
         }
 
         // padding accounting correct
-        assert_eq!(f.runtime[0].padding_queued, 4);
-        assert_eq!(f.runtime[0].normal_queued, 1);
+        assert_eq!(f.runtime[0].padding_sent, 4);
+        assert_eq!(f.runtime[0].normal_sent, 1);
 
         // limit should be reached after 4 padding, blocking next action
         assert_eq!(f.actions[0], None);
