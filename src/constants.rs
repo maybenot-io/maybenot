@@ -38,9 +38,6 @@ pub const STATE_NOP: usize = u32::MAX as usize;
 /// A pseudo-state that means the [`Machine`](crate::machine) should completely
 /// stop.
 pub const STATE_END: usize = STATE_NOP - 1;
-/// A pseudo-state that means that we should reset all current pending timers but
-/// remain in the current [`State`](crate::state).
-pub const STATE_CANCEL: usize = STATE_END - 1;
 /// The maximum number of [`State`](crate::state)s a [`Machine`](crate::machine)
 /// can have.
-pub const STATE_MAX: usize = STATE_CANCEL - 1;
+pub const STATE_MAX: usize = STATE_END - 1;

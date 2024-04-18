@@ -490,14 +490,6 @@ where
 
         // we got a next state, act on it
         match next_state {
-            STATE_CANCEL => {
-                // cancel any pending action, but doesn't count as a state change
-                self.actions[mi] = Some(TriggerAction::Cancel {
-                    machine: MachineId(mi),
-                    timer: Timer::All,
-                });
-                StateChange::Unchanged
-            }
             STATE_END => {
                 // this is a state change (because we can never reach here if already in
                 // STATE_END, see first check above), but we don't cancel any pending

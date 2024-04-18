@@ -10,7 +10,7 @@ use std::slice::Iter;
 
 use crate::{
     action::Action,
-    constants::{STATE_CANCEL, STATE_END},
+    constants::STATE_END,
     dist::{Dist, DistType},
     event::Event,
     machine::Machine,
@@ -178,7 +178,10 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
             if v != 0.0 {
                 let state = match i.cmp(&(num_states)) {
                     Ordering::Less => i,
-                    Ordering::Equal => STATE_CANCEL,
+                    // FIXME: if someone really needs this, it can be supported
+                    // by dynamically creating a new state with the cancel
+                    // action and adjusting transitions accordingly
+                    Ordering::Equal => bail!("invalid state, not supported in v2"),
                     Ordering::Greater => STATE_END,
                 };
 

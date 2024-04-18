@@ -3,7 +3,7 @@
 //! state, and a vector of state transitions for each possible [`Event`].
 
 use crate::action::*;
-use crate::constants::{EVENT_NUM, STATE_CANCEL, STATE_END};
+use crate::constants::{EVENT_NUM, STATE_END};
 use crate::counter::CounterUpdate;
 use crate::event::*;
 use enum_map::EnumMap;
@@ -114,7 +114,7 @@ impl State {
             let mut seen: HashSet<usize> = HashSet::new();
 
             for t in transitions.iter() {
-                if t.0 >= num_states && t.0 != STATE_CANCEL && t.0 != STATE_END {
+                if t.0 >= num_states && t.0 != STATE_END {
                     bail!("found invalid state index {}", t.0);
                 }
                 if seen.contains(&t.0) {
@@ -415,7 +415,7 @@ mod tests {
 
         // valid transitions should be allowed
         let s = State::new(enum_map! {
-                 Event::PaddingSent => vec![Trans(0, 0.4), Trans(STATE_CANCEL, 0.3), Trans(STATE_END, 0.3)],
+                 Event::PaddingSent => vec![Trans(0, 0.4), Trans(STATE_END, 0.3)],
              _ => vec![],
         });
         let r = s.validate(num_states);
