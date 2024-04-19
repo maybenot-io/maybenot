@@ -434,7 +434,7 @@ mod tests {
         s.transitions[Event::PaddingSent.to_usize()] = Some(vec![]);
 
         #[cfg(feature = "fast-sample")]
-        if cfg!(feature = "fast-sample") {
+        {
             s.alias_index = make_alias_index(&s.transitions);
         }
 
