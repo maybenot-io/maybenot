@@ -298,11 +298,9 @@ where
             machines.as_ref().len()
         ];
 
-        for (mi, r) in runtime.iter_mut().enumerate() {
-            let opt_action = machines.as_ref()[mi].states[0].action;
-
-            if let Some(action) = opt_action {
-                r.state_limit = action.sample_limit();
+        for (runtime, machine) in runtime.iter_mut().zip(machines.as_ref().iter()) {
+            if let Some(action) = machine.states[0].action {
+                runtime.state_limit = action.sample_limit();
             }
         }
 
