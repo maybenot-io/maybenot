@@ -7,7 +7,7 @@ use crate::constants::{EVENT_NUM, STATE_END};
 use crate::counter::CounterUpdate;
 use crate::event::*;
 use enum_map::EnumMap;
-use rand::{thread_rng, Rng};
+use rand::thread_rng;
 #[cfg(feature = "fast-sample")]
 use rand_distr::{Distribution, WeightedAliasIndex};
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
@@ -153,27 +153,28 @@ impl State {
     pub(crate) fn sample_state(&self, event: Event) -> Option<usize> {
         let mut rng = thread_rng();
 
-        // NOTE: redundant but needed to make rust-analyzer and cargo happy
-        #[cfg(feature = "fast-sample")]
-        if cfg!(feature = "fast-sample") {
-            if let Some(alias) = &self.alias_index[event.to_usize()] {
-                return alias.choices[alias.alias.sample(&mut rng)];
-            }
-
-            return None;
-        }
-        if let Some(vector) = &self.transitions[event.to_usize()] {
-            let mut sum = 0.0;
-            let r = rng.gen_range(0.0..1.0);
-            for t in vector.iter() {
-                sum += t.1;
-                if r < sum {
-                    return Some(t.0);
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "fast-sample")] {
+                if let Some(alias) = &self.alias_index[event.to_usize()] {
+                    alias.choices[alias.alias.sample(&mut rng)]
+                } else {
+                    None
                 }
+            } else {
+                use rand::Rng;
+                if let Some(vector) = &self.transitions[event.to_usize()] {
+                    let mut sum = 0.0;
+                    let r = rng.gen_range(0.0..1.0);
+                    for t in vector.iter() {
+                        sum += t.1;
+                        if r < sum {
+                            return Some(t.0);
+                        }
+                    }
+                }
+                None
             }
         }
-
-        None
     }
 }
 
