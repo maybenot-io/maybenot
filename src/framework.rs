@@ -469,19 +469,17 @@ where
         }
 
         // sample next state
-        let next_state;
         // new block for immutable ref, makes things less ugly
-        {
+        let next_state = {
             let machine = &self.machines.as_ref()[mi];
             let state = &machine.states[self.runtime[mi].current_state];
-            next_state = state.sample_state(event);
-        }
+            state.sample_state(event)
+        };
 
         // if no next state on event, done
-        if next_state.is_none() {
+        let Some(next_state) = next_state else {
             return StateChange::Unchanged;
-        }
-        let next_state = next_state.unwrap();
+        };
 
         // we got a next state, act on it
         match next_state {
@@ -620,11 +618,11 @@ where
     fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
 
-        if current.action.is_none() {
+        let Some(action) = current.action else {
             return false;
-        }
+        };
 
-        match current.action.unwrap() {
+        match action {
             Action::BlockOutgoing { .. } => self.below_limit_blocking(runtime, machine),
             Action::SendPadding { .. } => self.below_limit_padding(runtime, machine),
             Action::UpdateTimer { .. } => runtime.state_limit > 0,

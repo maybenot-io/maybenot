@@ -102,10 +102,9 @@ impl State {
     pub fn validate(&self, num_states: usize) -> Result<(), Box<dyn Error + Send + Sync>> {
         // validate transition probabilities
         for (event, transitions) in self.transitions.iter().enumerate() {
-            if transitions.is_none() {
+            let Some(transitions) = transitions else {
                 continue;
-            }
-            let transitions = transitions.as_ref().unwrap();
+            };
             if self.transitions.is_empty() {
                 bail!("found empty transition vector for {}", &event);
             }
@@ -185,10 +184,7 @@ fn make_alias_index(
     let mut alias = [ARRAY_NO_ALIAS; EVENT_NUM];
 
     for (event, vector) in transitions.iter().enumerate() {
-        if vector.is_none() {
-            continue;
-        }
-        let vector = vector.as_ref().unwrap();
+        let Some(vector) = vector else { continue };
 
         let mut weights = Vec::new();
         let mut choices = Vec::new();

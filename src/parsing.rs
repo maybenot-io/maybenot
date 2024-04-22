@@ -138,19 +138,16 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     r += 1;
 
     let action: Option<Action>;
-    if timeout.is_none() {
-        action = None;
-    } else {
-        let timeout = timeout.unwrap();
+    if let Some(timeout) = timeout {
         if action_is_block {
-            if duration.is_none() {
-                bail!("action dist is None")
-            }
+            let Some(duration) = duration else {
+                bail!("action dist is None");
+            };
             action = Some(Action::BlockOutgoing {
                 bypass,
                 replace,
                 timeout,
-                duration: duration.unwrap(),
+                duration,
                 limit,
             });
         } else {
@@ -161,6 +158,8 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
                 limit,
             });
         };
+    } else {
+        action = None;
     }
 
     //let limit_includes_nonpadding: bool = buf[r] == 1;

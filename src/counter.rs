@@ -61,8 +61,8 @@ impl CounterUpdate {
 
     // Validate the value dist.
     pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        if self.value.is_some() {
-            self.value.unwrap().validate()?;
+        if let Some(value) = self.value {
+            value.validate()?;
         }
         Ok(())
     }

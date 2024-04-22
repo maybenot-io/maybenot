@@ -135,8 +135,8 @@ impl Action {
         match self {
             Action::SendPadding { timeout, limit, .. } => {
                 timeout.validate()?;
-                if limit.is_some() {
-                    limit.unwrap().validate()?;
+                if let Some(limit) = limit {
+                    limit.validate()?;
                 }
             }
             Action::BlockOutgoing {
@@ -147,16 +147,16 @@ impl Action {
             } => {
                 timeout.validate()?;
                 duration.validate()?;
-                if limit.is_some() {
-                    limit.unwrap().validate()?;
+                if let Some(limit) = limit {
+                    limit.validate()?;
                 }
             }
             Action::UpdateTimer {
                 duration, limit, ..
             } => {
                 duration.validate()?;
-                if limit.is_some() {
-                    limit.unwrap().validate()?;
+                if let Some(limit) = limit {
+                    limit.validate()?;
                 }
             }
             _ => {}
