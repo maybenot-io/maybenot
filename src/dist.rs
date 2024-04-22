@@ -127,7 +127,7 @@ impl fmt::Display for Dist {
         } else if self.max > 0.0 {
             clamp = format!(", clamped to [0.0, {}]", self.max);
         } else {
-            clamp = format!(", clamped to [0.0, f64::MAX]");
+            clamp = ", clamped to [0.0, f64::MAX]".to_string();
         }
         write!(f, "{}{}", self.dist, clamp)
     }
