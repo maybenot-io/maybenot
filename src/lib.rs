@@ -190,15 +190,17 @@ pub mod action;
 pub mod constants;
 pub mod counter;
 pub mod dist;
+pub mod error;
 pub mod event;
 pub mod framework;
 pub mod machine;
 pub mod state;
 
 pub use crate::action::{Action, Timer, TriggerAction};
-pub use crate::constants::VERSION;
+pub use crate::constants::{STATE_END, STATE_LIMIT_MAX, VERSION};
 pub use crate::counter::{Counter, CounterUpdate, Operation};
 pub use crate::dist::{Dist, DistType};
+pub use crate::error::Error;
 pub use crate::event::{Event, TriggerEvent};
 pub use crate::framework::Framework;
 pub use crate::framework::MachineId;

@@ -2,9 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::constants::*;
-use crate::dist::*;
-use std::error::Error;
+use crate::constants::MAX_SAMPLED_COUNTER_VALUE;
+use crate::*;
 use std::fmt;
 
 /// The two counters that are part of each [`Machine`](crate::machine).
@@ -60,7 +59,7 @@ impl CounterUpdate {
     }
 
     // Validate the value dist.
-    pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn validate(&self) -> Result<(), Error> {
         if let Some(value) = self.value {
             value.validate()?;
         }

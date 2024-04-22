@@ -1,13 +1,6 @@
 //! Maybenot is a framework for traffic analysis defenses that hide patterns in
 //! encrypted communication.
-use simple_error::bail;
-
-use crate::action::*;
-use crate::constants::*;
-use crate::counter::*;
-use crate::event::*;
-use crate::machine::*;
-use std::error::Error;
+use crate::*;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -91,16 +84,16 @@ where
         max_padding_frac: f64,
         max_blocking_frac: f64,
         current_time: Instant,
-    ) -> Result<Self, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Self, Error> {
         for m in machines.as_ref() {
             m.validate()?;
         }
 
         if !(0.0..=1.0).contains(&max_padding_frac) {
-            bail!("max_padding_frac has to be between [0.0, 1.0]");
+            Err(Error::PaddingLimit)?;
         }
         if !(0.0..=1.0).contains(&max_blocking_frac) {
-            bail!("max_blocking_frac has to be between [0.0, 1.0]");
+            Err(Error::BlockingLimit)?;
         }
 
         let mut runtime = vec![
@@ -394,7 +387,7 @@ where
             Action::SendPadding {
                 bypass, replace, ..
             } => Some(TriggerAction::SendPadding {
-                timeout: Duration::from_micros(action.sample_timeout().unwrap() as u64),
+                timeout: Duration::from_micros(action.sample_timeout()),
                 bypass,
                 replace,
                 machine: mi,
@@ -402,14 +395,14 @@ where
             Action::BlockOutgoing {
                 bypass, replace, ..
             } => Some(TriggerAction::BlockOutgoing {
-                timeout: Duration::from_micros(action.sample_timeout().unwrap() as u64),
-                duration: Duration::from_micros(action.sample_duration().unwrap() as u64),
+                timeout: Duration::from_micros(action.sample_timeout()),
+                duration: Duration::from_micros(action.sample_duration()),
                 bypass,
                 replace,
                 machine: mi,
             }),
             Action::UpdateTimer { replace, .. } => Some(TriggerAction::UpdateTimer {
-                duration: Duration::from_micros(action.sample_duration().unwrap() as u64),
+                duration: Duration::from_micros(action.sample_duration()),
                 replace,
                 machine: mi,
             }),

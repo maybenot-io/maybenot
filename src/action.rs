@@ -1,12 +1,9 @@
 //! Actions for [`State`](crate::state) transitions.
 
 use serde::{Deserialize, Serialize};
-use simple_error::bail;
 
 use crate::constants::*;
-use crate::dist::*;
-use crate::framework::MachineId;
-use std::error::Error;
+use crate::*;
 use std::fmt;
 use std::hash::Hash;
 use std::time::Duration;
@@ -78,34 +75,30 @@ impl fmt::Display for Action {
 
 impl Action {
     /// Sample a timeout for a padding or blocking action.
-    pub fn sample_timeout(&self) -> Result<f64, Box<dyn Error + Send + Sync>> {
+    pub(crate) fn sample_timeout(&self) -> u64 {
         match self {
             Action::SendPadding { timeout, .. } | Action::BlockOutgoing { timeout, .. } => {
-                Ok(timeout.sample().min(MAX_SAMPLED_TIMEOUT))
+                timeout.sample().min(MAX_SAMPLED_TIMEOUT).round() as u64
             }
-            _ => {
-                bail!("can only sample a timeout for SendPadding and BlockOutgoing actions");
-            }
+            _ => 0,
         }
     }
 
     /// Sample a duration for a blocking or timer update action.
-    pub fn sample_duration(&self) -> Result<f64, Box<dyn Error + Send + Sync>> {
+    pub(crate) fn sample_duration(&self) -> u64 {
         match self {
             Action::BlockOutgoing { duration, .. } => {
-                Ok(duration.sample().min(MAX_SAMPLED_BLOCK_DURATION))
+                duration.sample().min(MAX_SAMPLED_BLOCK_DURATION).round() as u64
             }
             Action::UpdateTimer { duration, .. } => {
-                Ok(duration.sample().min(MAX_SAMPLED_TIMER_DURATION))
+                duration.sample().min(MAX_SAMPLED_TIMER_DURATION).round() as u64
             }
-            _ => {
-                bail!("can only sample a duration for BlockOutgoing and UpdateTimer actions");
-            }
+            _ => 0,
         }
     }
 
     /// Sample a limit.
-    pub fn sample_limit(&self) -> u64 {
+    pub(crate) fn sample_limit(&self) -> u64 {
         match self {
             Action::SendPadding { limit, .. }
             | Action::BlockOutgoing { limit, .. }
@@ -121,7 +114,7 @@ impl Action {
     }
 
     /// Check if the action has a limit distribution.
-    pub fn has_limit(&self) -> bool {
+    pub(crate) fn has_limit(&self) -> bool {
         match self {
             Action::SendPadding { limit, .. }
             | Action::BlockOutgoing { limit, .. }
@@ -131,7 +124,7 @@ impl Action {
     }
 
     /// Validate all distributions contained in this action, if any.
-    pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn validate(&self) -> Result<(), Error> {
         match self {
             Action::SendPadding { timeout, limit, .. } => {
                 timeout.validate()?;

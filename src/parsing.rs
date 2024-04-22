@@ -1,21 +1,13 @@
-use std::{error::Error, io::Read};
+use std::io::Read;
 
 use byteorder::{ByteOrder, LittleEndian};
 use enum_map::{enum_map, EnumMap};
 use flate2::read::ZlibDecoder;
 use hex::decode;
-use simple_error::{bail, map_err_with};
 use std::cmp::Ordering;
 use std::slice::Iter;
 
-use crate::{
-    action::Action,
-    constants::STATE_END,
-    dist::{Dist, DistType},
-    event::Event,
-    machine::Machine,
-    state::{State, Trans},
-};
+use crate::*;
 
 // The size (in bytes) of a serialized distribution for a
 // [`State`](crate::state) in v1.
@@ -39,30 +31,33 @@ fn v1_events_iter() -> Iter<'static, Event> {
 /// parses a v1 machine from a hex string into a [`Machine`](crate::machine).
 /// This format is deprecated and should not be used for new machines.
 /// Therefore, no support for writing machines in this format is provided.
-pub fn parse_v1_machine(s: &str) -> Result<Machine, Box<dyn Error + Send + Sync>> {
+pub fn parse_v1_machine(s: &str) -> Result<Machine, Error> {
     // hex -> zlib -> vec
-    let compressed = map_err_with!(decode(s), "failed to decode hex")?;
+    let compressed = decode(s).map_err(|e| Error::Machine(e.to_string()))?;
 
     let mut d = ZlibDecoder::new(compressed.as_slice());
     let mut buf = vec![];
-    d.read_to_end(&mut buf)?;
+    d.read_to_end(&mut buf)
+        .map_err(|e| Error::Machine(e.to_string()))?;
 
     if buf.len() < 2 {
-        bail!("cannot read version")
+        Err(Error::Machine("cannot read version".to_string()))?;
     }
 
     let (version, payload) = buf.split_at(2);
 
     match u16::from_le_bytes(version.try_into().unwrap()) {
         1 => parse_v1(payload),
-        v => bail!("unsupported version: {}", v),
+        v => Err(Error::Machine(format!("unsupported version: {}", v)))?,
     }
 }
 
-fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
+fn parse_v1(buf: &[u8]) -> Result<Machine, Error> {
     // note that we already read 2 bytes of version in fn parse_machine()
     if buf.len() < 4 * 8 + 1 + 2 {
-        bail!("not enough data for version 1 machine")
+        Err(Error::Machine(
+            "not enough data for version 1 machine".to_string(),
+        ))?;
     }
 
     let mut r: usize = 0;
@@ -88,12 +83,12 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
     let expected_state_len: usize =
         3 * SERIALIZED_DIST_SIZE + 4 + (num_states + 2) * 8 * (v1_events_iter().len() + 1);
     if buf[r..].len() != expected_state_len * num_states {
-        bail!(format!(
+        Err(Error::Machine(format!(
             "expected {} bytes for {} states, but got {} bytes",
             expected_state_len * num_states,
             num_states,
             buf[r..].len()
-        ))
+        )))?;
     }
 
     let mut states = vec![];
@@ -112,12 +107,12 @@ fn parse_v1(buf: &[u8]) -> Result<Machine, Box<dyn Error + Send + Sync>> {
     )
 }
 
-pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Error + Send + Sync>> {
+pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Error> {
     // len: 3 distributions + 4 flags + next_state
     if buf.len()
         < 3 * SERIALIZED_DIST_SIZE + 4 + (num_states + 2) * 8 * (v1_events_iter().len() + 1)
     {
-        bail!("too small")
+        Err(Error::Machine("too small".to_string()))?;
     }
 
     // distributions
@@ -141,7 +136,7 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     if let Some(timeout) = timeout {
         if action_is_block {
             let Some(duration) = duration else {
-                bail!("action dist is None");
+                Err(Error::Machine("missing duration".to_string()))?
             };
             action = Some(Action::BlockOutgoing {
                 bypass,
@@ -179,7 +174,9 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
                     // FIXME: if someone really needs this, it can be supported
                     // by dynamically creating a new state with the cancel
                     // action and adjusting transitions accordingly
-                    Ordering::Equal => bail!("invalid state, not supported in v2"),
+                    Ordering::Equal => Err(Error::Machine(
+                        "invalid state, not supported in v2".to_string(),
+                    ))?,
                     Ordering::Greater => STATE_END,
                 };
 
@@ -193,9 +190,9 @@ pub fn parse_state(buf: Vec<u8>, num_states: usize) -> Result<State, Box<dyn Err
     Ok(s)
 }
 
-fn parse_dist(buf: Vec<u8>) -> Result<Option<Dist>, Box<dyn Error + Send + Sync>> {
+fn parse_dist(buf: Vec<u8>) -> Result<Option<Dist>, Error> {
     if buf.len() < SERIALIZED_DIST_SIZE {
-        bail!("too small")
+        Err(Error::Machine("too small".to_string()))?;
     }
 
     let type_buf = LittleEndian::read_u16(&buf[..2]);

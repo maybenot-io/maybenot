@@ -2,10 +2,8 @@
 //! [`Action`] and [`CounterUpdate`] to be executed upon transition to this
 //! state, and a vector of state transitions for each possible [`Event`].
 
-use crate::action::*;
-use crate::constants::{EVENT_NUM, STATE_END};
-use crate::counter::CounterUpdate;
-use crate::event::*;
+use crate::constants::*;
+use crate::*;
 use enum_map::EnumMap;
 use rand::thread_rng;
 #[cfg(feature = "fast-sample")]
@@ -13,11 +11,8 @@ use rand_distr::{Distribution, WeightedAliasIndex};
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::Serialize;
 use serde::{Deserialize, Deserializer};
-use simple_error::bail;
 use std::collections::HashSet;
-use std::error::Error;
 use std::fmt;
-extern crate simple_error;
 
 /// A state index and probability for a transition.
 #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
@@ -99,14 +94,17 @@ impl State {
     /// distributions, if set, are valid. Note that num_states is the number of
     /// states in the machine, not the number of states in this state's
     /// transitions. Called by [`Machine::new`](crate::machine::Machine::new).
-    pub fn validate(&self, num_states: usize) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn validate(&self, num_states: usize) -> Result<(), Error> {
         // validate transition probabilities
         for (event, transitions) in self.transitions.iter().enumerate() {
             let Some(transitions) = transitions else {
                 continue;
             };
             if self.transitions.is_empty() {
-                bail!("found empty transition vector for {}", &event);
+                Err(Error::Machine(format!(
+                    "found empty transition vector for {}",
+                    &event
+                )))?;
             }
 
             let mut sum: f32 = 0.0;
@@ -114,25 +112,33 @@ impl State {
 
             for t in transitions.iter() {
                 if t.0 >= num_states && t.0 != STATE_END {
-                    bail!("found invalid state index {}", t.0);
+                    Err(Error::Machine(format!(
+                        "found out-of-bounds state index {}",
+                        t.0
+                    )))?;
                 }
                 if seen.contains(&t.0) {
-                    bail!("found duplicate state index {}", t.0);
+                    Err(Error::Machine(format!(
+                        "found duplicate state index {}",
+                        t.0
+                    )))?;
                 }
                 seen.insert(t.0);
 
                 if t.1 <= 0.0 || t.1 > 1.0 {
-                    bail!("found probability {}, has to be (0.0, 1.0]", t.1);
+                    Err(Error::Machine(format!(
+                        "found probability {}, has to be (0.0, 1.0]",
+                        t.1
+                    )))?;
                 }
                 sum += t.1;
             }
 
             if sum <= 0.0 || sum > 1.0 {
-                bail!(
+                Err(Error::Machine(format!(
                     "found invalid total probability vector {} for {}, must be (0.0, 1.0]",
-                    &sum,
-                    &event
-                );
+                    &sum, &event
+                )))?;
             }
         }
 

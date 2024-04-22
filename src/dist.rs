@@ -5,10 +5,9 @@ use rand_distr::{
     Uniform, Weibull,
 };
 use serde::{Deserialize, Serialize};
-use std::error::Error;
 use std::fmt;
-extern crate simple_error;
-use simple_error::bail;
+
+use crate::Error;
 
 /// DistType represents the type of a [`Dist`]. Supports a wide range of
 /// different distributions. Some are probably useless and some are probably
@@ -153,51 +152,54 @@ impl Dist {
     }
 
     /// Validate that the parameters are valid for the set [`DistType`].
-    pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub fn validate(&self) -> Result<(), Error> {
         match self.dist {
             DistType::Uniform { low, high } => {
                 if low > high {
-                    bail!("for Uniform dist, got low > high")
+                    Err(Error::Machine(
+                        "for Uniform dist, got low > high".to_string(),
+                    ))?;
                 }
             }
             DistType::Normal { mean, stdev } => {
-                Normal::new(mean, stdev)?;
+                Normal::new(mean, stdev).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::SkewNormal {
                 location,
                 scale,
                 shape,
             } => {
-                SkewNormal::new(location, scale, shape)?;
+                SkewNormal::new(location, scale, shape)
+                    .map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::LogNormal { mu, sigma } => {
-                LogNormal::new(mu, sigma)?;
+                LogNormal::new(mu, sigma).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Binomial {
                 trials,
                 probability,
             } => {
-                Binomial::new(trials, probability)?;
+                Binomial::new(trials, probability).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Geometric { probability } => {
-                Geometric::new(probability)?;
+                Geometric::new(probability).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Pareto { scale, shape } => {
-                Pareto::new(scale, shape)?;
+                Pareto::new(scale, shape).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Poisson { lambda } => {
-                Poisson::new(lambda)?;
+                Poisson::new(lambda).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Weibull { scale, shape } => {
-                Weibull::new(scale, shape)?;
+                Weibull::new(scale, shape).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Gamma { scale, shape } => {
                 // note order below in inverse from others for some reason in
                 // rand_distr
-                Gamma::new(shape, scale)?;
+                Gamma::new(shape, scale).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Beta { alpha, beta } => {
-                Beta::new(alpha, beta)?;
+                Beta::new(alpha, beta).map_err(|e| Error::Machine(e.to_string()))?;
             }
         };
 
