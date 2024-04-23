@@ -213,22 +213,18 @@ pub mod framework;
 pub mod machine;
 pub mod state;
 
-pub use crate::action::{Action, Timer, TriggerAction};
-pub use crate::constants::{STATE_END, STATE_LIMIT_MAX, VERSION};
-pub use crate::counter::{Counter, CounterUpdate, Operation};
-pub use crate::dist::{Dist, DistType};
+pub use crate::action::{Timer, TriggerAction};
 pub use crate::error::Error;
-pub use crate::event::{Event, TriggerEvent};
-pub use crate::framework::Framework;
-pub use crate::framework::MachineId;
+pub use crate::event::TriggerEvent;
+pub use crate::framework::{Framework, MachineId};
 pub use crate::machine::Machine;
-pub use crate::state::{State, Trans};
 
 #[cfg(feature = "parsing")]
 pub mod parsing;
 
 #[cfg(test)]
 mod tests {
+
     #[test]
     fn constants_set() {
         assert_eq!(crate::constants::VERSION, 2);

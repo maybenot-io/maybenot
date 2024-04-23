@@ -7,6 +7,8 @@ use crate::constants::MAX_SAMPLED_COUNTER_VALUE;
 use crate::*;
 use std::fmt;
 
+use self::dist::Dist;
+
 /// The two counters that are part of each [`Machine`](crate::machine).
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Counter {
@@ -70,7 +72,7 @@ impl CounterUpdate {
 
 #[cfg(test)]
 mod tests {
-    use crate::counter::*;
+    use crate::{counter::*, dist::DistType};
 
     #[test]
     fn validate_counter_update() {

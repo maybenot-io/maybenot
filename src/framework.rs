@@ -6,6 +6,13 @@ use crate::*;
 use std::time::Duration;
 use std::time::Instant;
 
+use self::action::Action;
+use self::constants::STATE_END;
+use self::constants::STATE_LIMIT_MAX;
+use self::counter::Counter;
+use self::counter::Operation;
+use self::event::Event;
+
 /// An opaque token representing one machine running inside the framework.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct MachineId(usize);
@@ -544,6 +551,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::counter::CounterUpdate;
     use crate::dist::*;
     use crate::framework::*;
     use crate::state::*;

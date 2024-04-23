@@ -9,6 +9,8 @@ use std::fmt;
 use std::hash::Hash;
 use std::time::Duration;
 
+use self::dist::Dist;
+
 /// The different types of timers used by a [`Machine`](crate::machine).
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Timer {
@@ -220,7 +222,7 @@ impl fmt::Display for TriggerAction {
 
 #[cfg(test)]
 mod tests {
-    use crate::action::*;
+    use crate::{action::*, dist::DistType};
 
     #[test]
     fn validate_cancel_action() {

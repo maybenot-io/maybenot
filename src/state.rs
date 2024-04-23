@@ -14,6 +14,10 @@ use serde::{Deserialize, Deserializer};
 use std::collections::HashSet;
 use std::fmt;
 
+use self::action::Action;
+use self::counter::CounterUpdate;
+use self::event::Event;
+
 /// A state index and probability for a transition.
 #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Trans(pub usize, pub f32);

@@ -14,6 +14,8 @@ use std::fmt;
 use std::io::prelude::*;
 use std::str::FromStr;
 
+use self::state::State;
+
 /// A probabilistic state machine (Rabin automaton) consisting of one or more
 /// [`State`] that determine when to inject and/or block outgoing traffic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,6 +185,7 @@ impl fmt::Display for Machine {
 mod tests {
     use crate::event::Event;
     use crate::machine::*;
+    use crate::state::Trans;
     use enum_map::enum_map;
 
     #[test]

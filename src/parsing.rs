@@ -9,6 +9,12 @@ use std::slice::Iter;
 
 use crate::*;
 
+use self::action::Action;
+use self::constants::STATE_END;
+use self::dist::{Dist, DistType};
+use self::event::Event;
+use self::state::{State, Trans};
+
 // The size (in bytes) of a serialized distribution for a
 // [`State`](crate::state) in v1.
 const SERIALIZED_DIST_SIZE: usize = 2 + 8 * 4;
