@@ -1,5 +1,7 @@
 //! Maybenot is a framework for traffic analysis defenses that hide patterns in
 //! encrypted communication.
+use rand::Rng;
+
 use crate::*;
 use std::time::Duration;
 use std::time::Instant;
@@ -44,9 +46,11 @@ enum StateChange {
 /// channel, and produces as *output* zero or more [`TriggerAction`], such as to
 /// *send padding* traffic or *block outgoing* traffic. One or more [`Machine`]
 /// determine what [`TriggerAction`] to take based on [`TriggerEvent`].
-pub struct Framework<M> {
+pub struct Framework<M, R> {
     // updated each time the framework is triggered
     current_time: Instant,
+    // random number generator, used for sampling distributions and transitions
+    rng: R,
     // we allocate the actions vector once and reuse it, handing out references
     // as part of the iterator in [`Framework::trigger_events`].
     actions: Vec<Option<TriggerAction>>,
@@ -66,9 +70,10 @@ pub struct Framework<M> {
     framework_start: Instant,
 }
 
-impl<M> Framework<M>
+impl<M, R> Framework<M, R>
 where
     M: AsRef<[Machine]>,
+    R: Rng,
 {
     /// Create a new framework instance with zero or more [`Machine`]. The max
     /// padding/blocking fractions are enforced as a total across all machines.
@@ -84,6 +89,7 @@ where
         max_padding_frac: f64,
         max_blocking_frac: f64,
         current_time: Instant,
+        rng: R,
     ) -> Result<Self, Error> {
         for m in machines.as_ref() {
             m.validate()?;
@@ -96,7 +102,7 @@ where
             Err(Error::BlockingLimit)?;
         }
 
-        let mut runtime = vec![
+        let runtime = vec![
             MachineRuntime {
                 current_state: 0,
                 state_limit: 0,
@@ -110,19 +116,15 @@ where
             machines.as_ref().len()
         ];
 
-        for (runtime, machine) in runtime.iter_mut().zip(machines.as_ref().iter()) {
-            if let Some(action) = machine.states[0].action {
-                runtime.state_limit = action.sample_limit();
-            }
-        }
-
         let actions = vec![None; machines.as_ref().len()];
 
-        Ok(Self {
+        // take ownership of rng before using it below to sample limits
+        let mut s = Self {
             actions,
             machines,
             runtime,
             current_time,
+            rng,
             max_blocking_frac,
             max_padding_frac,
             framework_start: current_time,
@@ -131,7 +133,15 @@ where
             blocking_duration: Duration::from_secs(0),
             padding_sent_packets: 0,
             normal_sent_packets: 0,
-        })
+        };
+
+        for (runtime, machine) in s.runtime.iter_mut().zip(s.machines.as_ref().iter()) {
+            if let Some(action) = machine.states[0].action {
+                runtime.state_limit = action.sample_limit(&mut s.rng);
+            }
+        }
+
+        Ok(s)
     }
 
     /// Returns the number of machines in the framework.
@@ -309,7 +319,7 @@ where
                     self.runtime[mi].state_limit = if let Some(action) =
                         self.machines.as_ref()[mi].states[next_state].action
                     {
-                        action.sample_limit()
+                        action.sample_limit(&mut self.rng)
                     } else {
                         STATE_LIMIT_MAX
                     };
@@ -327,11 +337,7 @@ where
                 }
 
                 if self.below_action_limits(&self.runtime[mi], &self.machines.as_ref()[mi]) {
-                    self.actions[mi] = self.schedule_action(
-                        &self.runtime[mi],
-                        &self.machines.as_ref()[mi],
-                        MachineId(mi),
-                    );
+                    self.schedule_action(mi);
                 }
 
                 state_changed
@@ -343,7 +349,7 @@ where
         let current = &self.machines.as_ref()[mi].states[self.runtime[mi].current_state];
 
         if let Some(update) = &current.counter {
-            let value = update.sample_value();
+            let value = update.sample_value(&mut self.rng);
             let counter = if update.counter == Counter::A {
                 &mut self.runtime[mi].counter_a
             } else {
@@ -373,40 +379,41 @@ where
         (StateChange::Unchanged, false)
     }
 
-    fn schedule_action(
-        &self,
-        runtime: &MachineRuntime,
-        machine: &Machine,
-        mi: MachineId,
-    ) -> Option<TriggerAction> {
-        let current = &machine.states[runtime.current_state];
-        let action = current.action?;
+    fn schedule_action(&mut self, mi: usize) {
+        let index = MachineId(mi);
+        let action = self.machines.as_ref()[mi].states[self.runtime[mi].current_state].action;
 
-        match action {
-            Action::Cancel { timer } => Some(TriggerAction::Cancel { machine: mi, timer }),
-            Action::SendPadding {
-                bypass, replace, ..
-            } => Some(TriggerAction::SendPadding {
-                timeout: Duration::from_micros(action.sample_timeout()),
-                bypass,
-                replace,
-                machine: mi,
-            }),
-            Action::BlockOutgoing {
-                bypass, replace, ..
-            } => Some(TriggerAction::BlockOutgoing {
-                timeout: Duration::from_micros(action.sample_timeout()),
-                duration: Duration::from_micros(action.sample_duration()),
-                bypass,
-                replace,
-                machine: mi,
-            }),
-            Action::UpdateTimer { replace, .. } => Some(TriggerAction::UpdateTimer {
-                duration: Duration::from_micros(action.sample_duration()),
-                replace,
-                machine: mi,
-            }),
-        }
+        self.actions[mi] = match action {
+            Some(action) => match action {
+                Action::Cancel { timer } => Some(TriggerAction::Cancel {
+                    machine: index,
+                    timer,
+                }),
+                Action::SendPadding {
+                    bypass, replace, ..
+                } => Some(TriggerAction::SendPadding {
+                    timeout: Duration::from_micros(action.sample_timeout(&mut self.rng)),
+                    bypass,
+                    replace,
+                    machine: index,
+                }),
+                Action::BlockOutgoing {
+                    bypass, replace, ..
+                } => Some(TriggerAction::BlockOutgoing {
+                    timeout: Duration::from_micros(action.sample_timeout(&mut self.rng)),
+                    duration: Duration::from_micros(action.sample_duration(&mut self.rng)),
+                    bypass,
+                    replace,
+                    machine: index,
+                }),
+                Action::UpdateTimer { replace, .. } => Some(TriggerAction::UpdateTimer {
+                    duration: Duration::from_micros(action.sample_duration(&mut self.rng)),
+                    replace,
+                    machine: index,
+                }),
+            },
+            None => None,
+        };
     }
 
     fn decrement_limit(&mut self, mi: usize) {
@@ -548,16 +555,16 @@ mod tests {
     #[test]
     fn no_machines() {
         let machines = vec![];
-        let f = Framework::new(&machines, 0.0, 0.0, Instant::now());
+        let f = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::thread_rng());
         assert!(!f.is_err());
     }
 
     #[test]
     fn reuse_machines() {
         let machines = vec![];
-        let f1 = Framework::new(&machines, 0.0, 0.0, Instant::now());
+        let f1 = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::thread_rng());
         assert!(!f1.is_err());
-        let f2 = Framework::new(&machines, 0.0, 0.0, Instant::now());
+        let f2 = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::thread_rng());
         assert!(!f2.is_err());
     }
 
@@ -619,7 +626,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
 
         assert_eq!(f.actions.len(), 1);
 
@@ -787,7 +794,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
 
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(
@@ -873,7 +880,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
 
         _ = f.trigger_events(
             &[TriggerEvent::PaddingSent {
@@ -987,7 +994,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
 
         _ = f.trigger_events(
             &[TriggerEvent::PaddingSent {
@@ -1083,7 +1090,7 @@ mod tests {
 
         let current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
 
         // decrement counter to 0
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
@@ -1144,7 +1151,7 @@ mod tests {
 
         let current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
 
         // set counter to u64::MAX
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
@@ -1189,7 +1196,7 @@ mod tests {
 
         let current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
 
         // transition to get the loop going
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
@@ -1275,7 +1282,7 @@ mod tests {
         // NOTE 0.5 max_padding_frac below
         let current_time = Instant::now();
         let machines = vec![m1, m2];
-        let mut f = Framework::new(&machines, 0.5, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.5, 0.0, current_time, rand::thread_rng()).unwrap();
 
         // we have two machines that each can send 100 packets before their own
         // or any framework limits are applied (by design, see
@@ -1403,7 +1410,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
 
         // trigger self to start the blocking (triggers action)
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
@@ -1512,7 +1519,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.5, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.5, current_time, rand::thread_rng()).unwrap();
 
         // trigger self to start the blocking (triggers action)
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
@@ -1651,7 +1658,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m0, m1];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
 
         // trigger to make machine 0 block
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
@@ -1764,7 +1771,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
 
         // trigger self to start the padding
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);

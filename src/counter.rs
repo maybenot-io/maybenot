@@ -1,5 +1,6 @@
 //! Counters as part of a [`Machine`](crate::machine).
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::MAX_SAMPLED_COUNTER_VALUE;
@@ -48,10 +49,10 @@ impl fmt::Display for CounterUpdate {
 
 impl CounterUpdate {
     /// Sample a value to update the counter with.
-    pub fn sample_value(&self) -> u64 {
+    pub fn sample_value<R: Rng>(&self, rng: &mut R) -> u64 {
         match self.value {
             Some(value) => {
-                let s = value.sample() as u64;
+                let s = value.sample(rng) as u64;
                 s.min(MAX_SAMPLED_COUNTER_VALUE)
             }
             None => 1,
@@ -109,6 +110,6 @@ mod tests {
         let r = cu.validate();
         assert!(r.is_ok());
 
-        assert_eq!(cu.sample_value(), 1);
+        assert_eq!(cu.sample_value(&mut rand::thread_rng()), 1);
     }
 }

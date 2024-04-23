@@ -1,5 +1,6 @@
 //! Actions for [`State`](crate::state) transitions.
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::*;
@@ -75,30 +76,30 @@ impl fmt::Display for Action {
 
 impl Action {
     /// Sample a timeout for a padding or blocking action.
-    pub(crate) fn sample_timeout(&self) -> u64 {
+    pub(crate) fn sample_timeout<R: Rng>(&self, rng: &mut R) -> u64 {
         match self {
             Action::SendPadding { timeout, .. } | Action::BlockOutgoing { timeout, .. } => {
-                timeout.sample().min(MAX_SAMPLED_TIMEOUT).round() as u64
+                timeout.sample(rng).min(MAX_SAMPLED_TIMEOUT).round() as u64
             }
             _ => 0,
         }
     }
 
     /// Sample a duration for a blocking or timer update action.
-    pub(crate) fn sample_duration(&self) -> u64 {
+    pub(crate) fn sample_duration<R: Rng>(&self, rng: &mut R) -> u64 {
         match self {
             Action::BlockOutgoing { duration, .. } => {
-                duration.sample().min(MAX_SAMPLED_BLOCK_DURATION).round() as u64
+                duration.sample(rng).min(MAX_SAMPLED_BLOCK_DURATION).round() as u64
             }
             Action::UpdateTimer { duration, .. } => {
-                duration.sample().min(MAX_SAMPLED_TIMER_DURATION).round() as u64
+                duration.sample(rng).min(MAX_SAMPLED_TIMER_DURATION).round() as u64
             }
             _ => 0,
         }
     }
 
     /// Sample a limit.
-    pub(crate) fn sample_limit(&self) -> u64 {
+    pub(crate) fn sample_limit<R: Rng>(&self, rng: &mut R) -> u64 {
         match self {
             Action::SendPadding { limit, .. }
             | Action::BlockOutgoing { limit, .. }
@@ -106,7 +107,7 @@ impl Action {
                 if limit.is_none() {
                     return STATE_LIMIT_MAX;
                 }
-                let s = limit.unwrap().sample().round() as u64;
+                let s = limit.unwrap().sample(rng).round() as u64;
                 s.min(STATE_LIMIT_MAX)
             }
             _ => STATE_LIMIT_MAX,

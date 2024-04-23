@@ -1,5 +1,6 @@
 //! Distributions sampled as part of a [`State`](crate::state).
 
+use rand::Rng;
 use rand_distr::{
     Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, SkewNormal,
     Uniform, Weibull,
@@ -207,17 +208,16 @@ impl Dist {
     }
 
     /// Sample the distribution. May panic if not valid (see [`Self::validate()`]).
-    pub fn sample(self) -> f64 {
+    pub fn sample<R: Rng>(self, rng: &mut R) -> f64 {
         let mut r: f64 = 0.0;
-        r = r.max(self.dist_sample() + self.start);
+        r = r.max(self.dist_sample(rng) + self.start);
         if self.max > 0.0 {
             return r.min(self.max);
         }
         r
     }
 
-    fn dist_sample(self) -> f64 {
-        let rng = &mut rand::thread_rng();
+    fn dist_sample<R: Rng>(self, rng: &mut R) -> f64 {
         match self.dist {
             DistType::Uniform { low, high } => {
                 // special common case for handcrafted machines, also not
@@ -580,7 +580,7 @@ mod tests {
             start: 5.0,
             max: 0.0,
         };
-        assert_eq!(d.sample(), 5.0);
+        assert_eq!(d.sample(&mut rand::thread_rng()), 5.0);
 
         // max: uniform 10, ensure sampled value is < 10
         let d = Dist {
@@ -591,7 +591,7 @@ mod tests {
             start: 0.0,
             max: 5.0,
         };
-        assert_eq!(d.sample(), 5.0);
+        assert_eq!(d.sample(&mut rand::thread_rng()), 5.0);
 
         // finally, make sure values < 0.0 cannot be sampled
         let d = Dist {
@@ -602,6 +602,6 @@ mod tests {
             start: 0.0,
             max: 0.0,
         };
-        assert_eq!(d.sample(), 0.0);
+        assert_eq!(d.sample(&mut rand::thread_rng()), 0.0);
     }
 }
