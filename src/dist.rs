@@ -217,6 +217,7 @@ impl Dist {
     }
 
     fn dist_sample(self) -> f64 {
+        let rng = &mut rand::thread_rng();
         match self.dist {
             DistType::Uniform { low, high } => {
                 // special common case for handcrafted machines, also not
@@ -224,50 +225,31 @@ impl Dist {
                 if low == high {
                     return low;
                 }
-                Uniform::new(low, high).sample(&mut rand::thread_rng())
+                Uniform::new(low, high).sample(rng)
             }
-            DistType::Normal { mean, stdev } => Normal::new(mean, stdev)
-                .unwrap()
-                .sample(&mut rand::thread_rng()),
+            DistType::Normal { mean, stdev } => Normal::new(mean, stdev).unwrap().sample(rng),
             DistType::SkewNormal {
                 location,
                 scale,
                 shape,
-            } => SkewNormal::new(location, scale, shape)
-                .unwrap()
-                .sample(&mut rand::thread_rng()),
-            DistType::LogNormal { mu, sigma } => LogNormal::new(mu, sigma)
-                .unwrap()
-                .sample(&mut rand::thread_rng()),
+            } => SkewNormal::new(location, scale, shape).unwrap().sample(rng),
+            DistType::LogNormal { mu, sigma } => LogNormal::new(mu, sigma).unwrap().sample(rng),
             DistType::Binomial {
                 trials,
                 probability,
-            } => Binomial::new(trials, probability)
-                .unwrap()
-                .sample(&mut rand::thread_rng()) as f64,
-            DistType::Geometric { probability } => Geometric::new(probability)
-                .unwrap()
-                .sample(&mut rand::thread_rng())
-                as f64,
-            DistType::Pareto { scale, shape } => Pareto::new(scale, shape)
-                .unwrap()
-                .sample(&mut rand::thread_rng()),
-            DistType::Poisson { lambda } => Poisson::new(lambda)
-                .unwrap()
-                .sample(&mut rand::thread_rng()) as f64,
-            DistType::Weibull { scale, shape } => Weibull::new(scale, shape)
-                .unwrap()
-                .sample(&mut rand::thread_rng()),
+            } => Binomial::new(trials, probability).unwrap().sample(rng) as f64,
+            DistType::Geometric { probability } => {
+                Geometric::new(probability).unwrap().sample(rng) as f64
+            }
+            DistType::Pareto { scale, shape } => Pareto::new(scale, shape).unwrap().sample(rng),
+            DistType::Poisson { lambda } => Poisson::new(lambda).unwrap().sample(rng) as f64,
+            DistType::Weibull { scale, shape } => Weibull::new(scale, shape).unwrap().sample(rng),
             DistType::Gamma { scale, shape } => {
                 // note order below inverted from others for some reason in
                 // rand_distr
-                Gamma::new(shape, scale)
-                    .unwrap()
-                    .sample(&mut rand::thread_rng())
+                Gamma::new(shape, scale).unwrap().sample(rng)
             }
-            DistType::Beta { alpha, beta } => Beta::new(alpha, beta)
-                .unwrap()
-                .sample(&mut rand::thread_rng()),
+            DistType::Beta { alpha, beta } => Beta::new(alpha, beta).unwrap().sample(rng),
         }
     }
 }
