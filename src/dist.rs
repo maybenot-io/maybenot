@@ -242,7 +242,7 @@ impl Dist {
                 Geometric::new(probability).unwrap().sample(rng) as f64
             }
             DistType::Pareto { scale, shape } => Pareto::new(scale, shape).unwrap().sample(rng),
-            DistType::Poisson { lambda } => Poisson::new(lambda).unwrap().sample(rng) as f64,
+            DistType::Poisson { lambda } => Poisson::new(lambda).unwrap().sample(rng),
             DistType::Weibull { scale, shape } => Weibull::new(scale, shape).unwrap().sample(rng),
             DistType::Gamma { scale, shape } => {
                 // note order below inverted from others for some reason in
