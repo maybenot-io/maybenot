@@ -207,7 +207,7 @@ pub mod action;
 pub mod constants;
 pub mod counter;
 pub mod dist;
-pub mod error;
+mod error;
 pub mod event;
 mod framework;
 mod machine;
