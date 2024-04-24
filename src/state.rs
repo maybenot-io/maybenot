@@ -1,4 +1,4 @@
-//! A state as part of a [`Machine`](crate::machine). Contains an optional
+//! A state as part of a [`Machine`]. Contains an optional
 //! [`Action`] and [`CounterUpdate`] to be executed upon transition to this
 //! state, and a vector of state transitions for each possible [`Event`].
 
@@ -28,7 +28,7 @@ impl fmt::Display for Trans {
     }
 }
 
-/// A state as part of a [`Machine`](crate::machine).
+/// A state as part of a [`Machine`].
 #[derive(Debug, Clone, Serialize)]
 pub struct State {
     /// Take an action upon transitioning to this state.
@@ -72,7 +72,7 @@ impl State {
     /// [`Event::PaddingSent`] and to state 2 on [`Event::CounterZero`], both
     /// with 100% probability. All other events will not cause a transition.
     /// Note that state indexes are 0-based and determined by the order in which
-    /// states are added to the [`Machine`](crate::machine).
+    /// states are added to the [`Machine`].
     pub fn new(t: EnumMap<Event, Vec<Trans>>) -> Self {
         const ARRAY_NO_TRANS: std::option::Option<Vec<Trans>> = None;
         let mut transitions = [ARRAY_NO_TRANS; EVENT_NUM];

@@ -13,10 +13,10 @@
 //! modules can be ignored. Note that you create an existing [`Machine`] (for
 //! use with the [`Framework`]) using the [`core::str::FromStr`] trait.
 //!
-//! If you want to build machines for the [`framework`], take a look at all the
-//! modules. For top-down, start with [`machine`]. For bottom-up, start with
-//! [`dist`], [`event`], [`action`], and [`counter`] before [`state`] and
-//! finally [`machine`].
+//! If you want to build machines for the [`Framework`], take a look at all the
+//! modules. For top-down, start with the [`Machine`] type. For bottom-up, start
+//! with [`dist`], [`event`], [`action`], and [`counter`] before [`state`] and
+//! finally [`Machine`].
 //!
 //! ## Example usage
 //! ```
@@ -209,15 +209,15 @@ pub mod counter;
 pub mod dist;
 pub mod error;
 pub mod event;
-pub mod framework;
-pub mod machine;
+mod framework;
+mod machine;
 pub mod state;
 
 pub use crate::action::{Timer, TriggerAction};
 pub use crate::error::Error;
 pub use crate::event::TriggerEvent;
-pub use crate::framework::{Framework, MachineId};
-pub use crate::machine::Machine;
+pub use framework::{Framework, MachineId};
+pub use machine::Machine;
 
 #[cfg(feature = "parsing")]
 pub mod parsing;
