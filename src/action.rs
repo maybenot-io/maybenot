@@ -1,6 +1,6 @@
 //! Actions for [`State`](crate::state) transitions.
 
-use rand::Rng;
+use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::*;
@@ -78,7 +78,7 @@ impl fmt::Display for Action {
 
 impl Action {
     /// Sample a timeout for a padding or blocking action.
-    pub(crate) fn sample_timeout<R: Rng>(&self, rng: &mut R) -> u64 {
+    pub(crate) fn sample_timeout<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
             Action::SendPadding { timeout, .. } | Action::BlockOutgoing { timeout, .. } => {
                 timeout.sample(rng).min(MAX_SAMPLED_TIMEOUT).round() as u64
@@ -88,7 +88,7 @@ impl Action {
     }
 
     /// Sample a duration for a blocking or timer update action.
-    pub(crate) fn sample_duration<R: Rng>(&self, rng: &mut R) -> u64 {
+    pub(crate) fn sample_duration<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
             Action::BlockOutgoing { duration, .. } => {
                 duration.sample(rng).min(MAX_SAMPLED_BLOCK_DURATION).round() as u64
@@ -101,7 +101,7 @@ impl Action {
     }
 
     /// Sample a limit.
-    pub(crate) fn sample_limit<R: Rng>(&self, rng: &mut R) -> u64 {
+    pub(crate) fn sample_limit<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
             Action::SendPadding { limit, .. }
             | Action::BlockOutgoing { limit, .. }
