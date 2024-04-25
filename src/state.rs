@@ -159,7 +159,7 @@ impl State {
     }
 
     /// Sample a state to transition to given an [`Event`].
-    pub(crate) fn sample_state<R: RngCore>(&self, event: Event, rng: &mut R) -> Option<usize> {
+    pub fn sample_state<R: RngCore>(&self, event: Event, rng: &mut R) -> Option<usize> {
         cfg_if::cfg_if! {
             if #[cfg(feature = "fast-sample")] {
                 if let Some(alias) = &self.alias_index[event.to_usize()] {
