@@ -1,4 +1,4 @@
-//! Counters as part of a [`Machine`](crate::machine).
+//! Counters as part of a [`Machine`].
 
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
@@ -9,15 +9,15 @@ use std::fmt;
 
 use self::dist::Dist;
 
-/// The two counters that are part of each [`Machine`](crate::machine).
+/// The two counters that are part of each [`Machine`].
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Counter {
     A,
     B,
 }
 
-/// The operation applied to a [`Machine`](crate::machine)'s counters upon
-/// transition to a [`State`](crate::state).
+/// The operation applied to a [`Machine`]'s counters upon
+/// transition to a [`State`](crate::state::State).
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Operation {
     /// Increment the counter by the sampled value.
@@ -28,9 +28,9 @@ pub enum Operation {
     Set,
 }
 
-/// A specification of how a [`Machine`](crate::machine)'s counters should be
-/// updated when transitioning to a [`State`](crate::machine). Consists of a
-/// [`Counter`], an [`Operation`] to be applied to the counter, and a
+/// A specification of how a [`Machine`]'s counters should be
+/// updated when transitioning to a [`State`](crate::state::State). Consists of
+/// a [`Counter`], an [`Operation`] to be applied to the counter, and a
 /// distribution to sample values from when updating the counter.
 #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CounterUpdate {

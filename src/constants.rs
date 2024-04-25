@@ -1,10 +1,10 @@
 //! Global constants for the framework.
 
-/// The highest possible version of a [`Machine`](crate::machine) supported by
+/// The highest possible version of a [`Machine`](crate::Machine) supported by
 /// this framework.
 pub const VERSION: u8 = 2;
 
-/// The maximum size of a decompressed encoded [`Machine`](crate::machine) in
+/// The maximum size of a decompressed encoded [`Machine`](crate::Machine) in
 /// bytes. Set to 1MB. This is a soft limit and can be increased if necessary.
 pub const MAX_DECOMPRESSED_SIZE: usize = 1 << 20;
 
@@ -35,9 +35,9 @@ pub const STATE_LIMIT_MAX: u64 = u64::MAX;
 /// in a transition: it is used for state transitions as a "no-op" transition
 /// for any remaining probability up until 1.0.
 pub const STATE_NOP: usize = u32::MAX as usize;
-/// A pseudo-state that means the [`Machine`](crate::machine) should completely
+/// A pseudo-state that means the [`Machine`](crate::Machine) should completely
 /// stop.
 pub const STATE_END: usize = STATE_NOP - 1;
-/// The maximum number of [`State`](crate::state)s a [`Machine`](crate::machine)
+/// The maximum number of [`State`](crate::state)s a [`Machine`](crate::Machine)
 /// can have.
 pub const STATE_MAX: usize = STATE_END - 1;

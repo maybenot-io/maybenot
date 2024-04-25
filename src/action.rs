@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use self::dist::Dist;
 
-/// The different types of timers used by a [`Machine`](crate::machine).
+/// The different types of timers used by a [`Machine`].
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Timer {
     /// The scheduled timer for actions with a timeout.
