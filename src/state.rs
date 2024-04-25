@@ -5,7 +5,7 @@
 use crate::constants::*;
 use crate::*;
 use enum_map::EnumMap;
-use rand::thread_rng;
+use rand::RngCore;
 #[cfg(feature = "fast-sample")]
 use rand_distr::{Distribution, WeightedAliasIndex};
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
@@ -159,13 +159,11 @@ impl State {
     }
 
     /// Sample a state to transition to given an [`Event`].
-    pub(crate) fn sample_state(&self, event: Event) -> Option<usize> {
-        let mut rng = thread_rng();
-
+    pub(crate) fn sample_state<R: RngCore>(&self, event: Event, rng: &mut R) -> Option<usize> {
         cfg_if::cfg_if! {
             if #[cfg(feature = "fast-sample")] {
                 if let Some(alias) = &self.alias_index[event.to_usize()] {
-                    alias.choices[alias.alias.sample(&mut rng)]
+                    alias.choices[alias.alias.sample(rng)]
                 } else {
                     None
                 }
@@ -376,7 +374,10 @@ mod tests {
         let s0 = bincode::serialize(&s0).unwrap();
         let s0: State = bincode::deserialize(&s0).unwrap();
 
-        assert_eq!(s0.sample_state(Event::PaddingSent), Some(6));
+        assert_eq!(
+            s0.sample_state(Event::PaddingSent, &mut rand::thread_rng()),
+            Some(6)
+        );
     }
 
     #[test]
@@ -444,7 +445,10 @@ mod tests {
             s.alias_index = make_alias_index(&s.transitions);
         }
 
-        assert_eq!(s.sample_state(Event::PaddingSent), None);
+        assert_eq!(
+            s.sample_state(Event::PaddingSent, &mut rand::thread_rng()),
+            None
+        );
     }
 
     #[test]

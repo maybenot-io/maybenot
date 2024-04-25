@@ -301,7 +301,7 @@ where
         let next_state = {
             let machine = &self.machines.as_ref()[mi];
             let state = &machine.states[self.runtime[mi].current_state];
-            state.sample_state(event)
+            state.sample_state(event, &mut self.rng)
         };
 
         // if no next state on event, done
