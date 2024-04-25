@@ -1,6 +1,7 @@
 //! Maybenot is a framework for traffic analysis defenses that hide patterns in
 //! encrypted communication.
-use rand::Rng;
+
+use rand_core::RngCore;
 
 use crate::*;
 use std::time::Duration;
@@ -80,7 +81,7 @@ pub struct Framework<M, R> {
 impl<M, R> Framework<M, R>
 where
     M: AsRef<[Machine]>,
-    R: Rng,
+    R: RngCore,
 {
     /// Create a new framework instance with zero or more [`Machine`]. The max
     /// padding/blocking fractions are enforced as a total across all machines.
