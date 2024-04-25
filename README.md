@@ -48,20 +48,15 @@ runtime or how to keep time for ease of integration.
 
 ## Example usage
 ```rust,no_run
-use maybenot::{
-action::TriggerAction,
-event::TriggerEvent,
-framework::Framework,
-machine::Machine,
-};
+use crate::{Framework, Machine, TriggerAction, TriggerEvent};
 use std::{str::FromStr, time::Instant};
 
 // deserialize a machine, this is a "no-op" machine that does nothing
-let s = "02eNq9zSEBAAAAwrDTvzQegfwKDL7gm7MBNQAD";
+let s = "02eNpjYEAHjKhcAAAwAAI=";
 let m = vec![Machine::from_str(s).unwrap()];
 
 // create framework instance
-let mut f = Framework::new(&m, 0.0, 0.0, Instant::now()).unwrap();
+let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::thread_rng()).unwrap();
 
 loop {
     // collect one or more events
@@ -70,31 +65,34 @@ loop {
     // trigger events, schedule actions, at most one per machine
     for action in f.trigger_events(&events, Instant::now()) {
         match action {
-            TriggerAction::Cancel { machine: _, timer: _ } => {
+            TriggerAction::Cancel { 
+                machine: MachineId,
+                timer: Timer,
+            } => {
                 // cancel the specified timer (action, machine, or both) for the
                 // machine in question, if any
             }
             TriggerAction::SendPadding {
-                timeout: _,
-                bypass: _,
-                replace: _,
-                machine: _,
+                timeout: Duration,
+                bypass: bool,
+                replace: bool,
+                machine: MachineId,
             } => {
                 // schedule padding to be sent after timeout
             }
             TriggerAction::BlockOutgoing {
-                timeout: _,
-                duration: _,
-                bypass: _,
-                replace: _,
-                machine: _,
+                timeout: Duration,
+                duration: Duration,
+                bypass: bool,
+                replace: bool,
+                machine: MachineId,
             } => {
                 // block outgoing traffic for the specified duration after timeout
             }
             TriggerAction::UpdateTimer {
-                duration: _,
-                replace: _,
-                machine: _,
+                duration: Duration,
+                replace: bool,
+                machine: MachineId,
             } => {
                 // update the internal timer for the machine in question
             }
