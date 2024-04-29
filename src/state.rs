@@ -6,11 +6,8 @@ use crate::constants::*;
 use crate::*;
 use enum_map::EnumMap;
 use rand::RngCore;
-#[cfg(feature = "fast-sample")]
-use rand_distr::{Distribution, WeightedAliasIndex};
-use serde::de::{self, MapAccess, SeqAccess, Visitor};
+use serde::Deserialize;
 use serde::Serialize;
-use serde::{Deserialize, Deserializer};
 use std::collections::HashSet;
 use std::fmt;
 
@@ -29,7 +26,7 @@ impl fmt::Display for Trans {
 }
 
 /// A state as part of a [`Machine`].
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     /// Take an action upon transitioning to this state.
     pub action: Option<Action>,
@@ -37,21 +34,6 @@ pub struct State {
     pub counter: Option<CounterUpdate>,
     /// For each possible [`Event`], a vector of state transitions.
     transitions: [Option<Vec<Trans>>; EVENT_NUM],
-    #[cfg(feature = "fast-sample")]
-    #[serde(skip_serializing)]
-    /// Alias method for fast sampling of transitions if feature fast-sample is
-    /// enabled: trades increased memory usage for sampling speed.
-    alias_index: [Option<AliasIndex>; EVENT_NUM],
-}
-
-#[cfg(feature = "fast-sample")]
-#[derive(Debug, Clone)]
-/// Alias method for fast sampling of transitions at the cost of memory.
-struct AliasIndex {
-    /// The alias method for fast sampling.
-    alias: WeightedAliasIndex<f32>,
-    /// The state index choices to sample from.
-    choices: Vec<Option<usize>>,
 }
 
 impl State {
@@ -82,15 +64,10 @@ impl State {
             }
         }
 
-        #[cfg(feature = "fast-sample")]
-        let alias_index = make_alias_index(&transitions);
-
         State {
             transitions,
             action: None,
             counter: None,
-            #[cfg(feature = "fast-sample")]
-            alias_index,
         }
     }
 
@@ -160,64 +137,19 @@ impl State {
 
     /// Sample a state to transition to given an [`Event`].
     pub fn sample_state<R: RngCore>(&self, event: Event, rng: &mut R) -> Option<usize> {
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "fast-sample")] {
-                if let Some(alias) = &self.alias_index[event.to_usize()] {
-                    alias.choices[alias.alias.sample(rng)]
-                } else {
-                    None
+        use rand::Rng;
+        if let Some(vector) = &self.transitions[event.to_usize()] {
+            let mut sum = 0.0;
+            let r = rng.gen_range(0.0..1.0);
+            for t in vector.iter() {
+                sum += t.1;
+                if r < sum {
+                    return Some(t.0);
                 }
-            } else {
-                use rand::Rng;
-                if let Some(vector) = &self.transitions[event.to_usize()] {
-                    let mut sum = 0.0;
-                    let r = rng.gen_range(0.0..1.0);
-                    for t in vector.iter() {
-                        sum += t.1;
-                        if r < sum {
-                            return Some(t.0);
-                        }
-                    }
-                }
-                None
             }
         }
+        None
     }
-}
-
-#[cfg(feature = "fast-sample")]
-fn make_alias_index(
-    transitions: &[Option<Vec<Trans>>; EVENT_NUM],
-) -> [Option<AliasIndex>; EVENT_NUM] {
-    const ARRAY_NO_ALIAS: std::option::Option<AliasIndex> = None;
-    let mut alias = [ARRAY_NO_ALIAS; EVENT_NUM];
-
-    for (event, vector) in transitions.iter().enumerate() {
-        let Some(vector) = vector else { continue };
-
-        let mut weights = Vec::new();
-        let mut choices = Vec::new();
-        let mut sum: f32 = 0.0;
-
-        for t in vector.iter() {
-            choices.push(Some(t.0));
-            weights.push(t.1);
-            sum += t.1;
-        }
-
-        // STATE_NOP for remaining probability up to 1.0
-        if sum < 1.0 {
-            choices.push(None);
-            weights.push(1.0 - sum);
-        }
-
-        alias[event] = Some(AliasIndex {
-            alias: WeightedAliasIndex::new(weights).unwrap(),
-            choices,
-        });
-    }
-
-    alias
 }
 
 impl fmt::Display for State {
@@ -251,109 +183,6 @@ impl fmt::Display for State {
     }
 }
 
-/// Deserialize a [`State`]. This is implemented manually so that the alias
-/// table can be constructed from the transitions array.
-impl<'de> Deserialize<'de> for State {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "lowercase")]
-        enum Field {
-            Action,
-            Counter,
-            Transitions,
-        }
-
-        struct StateVisitor;
-
-        impl<'de> Visitor<'de> for StateVisitor {
-            type Value = State;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("struct State")
-            }
-
-            fn visit_seq<V>(self, mut seq: V) -> Result<State, V::Error>
-            where
-                V: SeqAccess<'de>,
-            {
-                let action = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(0, &self))?;
-                let counter = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(1, &self))?;
-                let transitions: [Option<Vec<Trans>>; EVENT_NUM] = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::invalid_length(2, &self))?;
-
-                #[cfg(feature = "fast-sample")]
-                let alias_index = make_alias_index(&transitions);
-
-                Ok(State {
-                    action,
-                    counter,
-                    transitions,
-                    #[cfg(feature = "fast-sample")]
-                    alias_index,
-                })
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<State, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut action = None;
-                let mut counter = None;
-                let mut transitions = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::Action => {
-                            if action.is_some() {
-                                return Err(de::Error::duplicate_field("action"));
-                            }
-                            action = Some(map.next_value()?);
-                        }
-                        Field::Counter => {
-                            if counter.is_some() {
-                                return Err(de::Error::duplicate_field("counter"));
-                            }
-                            counter = Some(map.next_value()?);
-                        }
-                        Field::Transitions => {
-                            if transitions.is_some() {
-                                return Err(de::Error::duplicate_field("transitions"));
-                            }
-                            transitions = Some(map.next_value()?);
-                        }
-                    }
-                }
-                let action = action.ok_or_else(|| de::Error::missing_field("action"))?;
-                let counter = counter.ok_or_else(|| de::Error::missing_field("counter"))?;
-                let transitions: [Option<Vec<Trans>>; EVENT_NUM] =
-                    transitions.ok_or_else(|| de::Error::missing_field("transitions"))?;
-
-                #[cfg(feature = "fast-sample")]
-                let alias_index = make_alias_index(&transitions);
-
-                Ok(State {
-                    action,
-                    counter,
-                    transitions,
-                    #[cfg(feature = "fast-sample")]
-                    alias_index,
-                })
-            }
-        }
-
-        const FIELDS: &[&str] = &["action", "counter", "transitions"];
-        deserializer.deserialize_struct("State", FIELDS, StateVisitor)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::counter::{Counter, CounterUpdate, Operation};
@@ -365,7 +194,6 @@ mod tests {
     #[test]
     fn serialization() {
         // Ensure that sampling works after deserialization
-        // Note: enable fast-sample to verify alias table is reconstructed
         let s0 = State::new(enum_map! {
                  Event::PaddingSent => vec![Trans(6, 1.0)],
              _ => vec![],
@@ -432,19 +260,12 @@ mod tests {
 
     #[test]
     fn validate_state_nop_transition() {
-        // Note: enable fast-sample to test the alias table.
         // Ensure that STATE_NOP can be sampled. This is an invalid state but
         // doesn't matter for the behavior we want to invoke in sample_state()
         // and make_alias_index(). The other option would be a probabilistic
         // test since the thread rng can't be seeded...
         let mut s = State::new(enum_map! { _ => vec![] });
         s.transitions[Event::PaddingSent.to_usize()] = Some(vec![]);
-
-        #[cfg(feature = "fast-sample")]
-        {
-            s.alias_index = make_alias_index(&s.transitions);
-        }
-
         assert_eq!(
             s.sample_state(Event::PaddingSent, &mut rand::thread_rng()),
             None

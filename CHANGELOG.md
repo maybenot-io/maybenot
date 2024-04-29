@@ -22,9 +22,6 @@ Manually generated changelog, for now. We follow semantic versioning.
   timer (timeout), the machine's internal timer, or both. The STATE_CANCEL
   transition will now cancel both timers.
 - Added support for the SkewNormal distribution.
-- Added an optional `fast-sample` feature, which is enabled by default, to
-  sample the next state to transition to in O(1) time at the cost of increased
-  memory usage.
 - Added an optional `parsing` feature to reconstruct v1 machines, though they
   may behave differently than expected. v1 machines are now deprecated.
 - Machines are now serialized exclusively with Serde, and the custom format
