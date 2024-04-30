@@ -2,6 +2,9 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 1.1.1 - 2024-04-30
+- Added `into_raw()` to MachineId to make Maybenot FFI wrapping easier.
+
 ## 1.1.0 - 2024-04-06
 - Limits sampled on framework init to allow self-transition to first state.
 - Padding is now allowed before any bytes have yet been sent (edge case).
