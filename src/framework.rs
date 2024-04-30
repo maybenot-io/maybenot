@@ -194,6 +194,13 @@ impl MachineId {
     pub fn from_raw(raw: usize) -> Self {
         MachineId(raw)
     }
+
+    /// Return the raw integer representation of the machine identifier. For
+    /// testing and FFI-wrapper purposes only. For regular use, use the
+    /// [`MachineId`] returned by [Framework::trigger_events].
+    pub fn into_raw(self) -> usize {
+        self.0
+    }
 }
 
 /// Represents an event to be triggered in the framework.
@@ -476,7 +483,7 @@ where
                 for mi in 0..self.runtime.len() {
                     // ... but the event is per-machine
                     // TODO: we probably want a PaddingQueued (self) and PaddingSent (global)
-                    if mi == machine.0 {
+                    if mi == machine.into_raw() {
                         self.runtime[mi].padding_sent += *bytes_sent as u64;
 
                         if self.transition(mi, Event::PaddingSent, *bytes_sent as u64)
@@ -498,7 +505,7 @@ where
                 // blocking is a global event
                 for mi in 0..self.runtime.len() {
                     if self.transition(mi, Event::BlockingBegin, 0) == StateChange::Unchanged
-                        && mi == machine.0
+                        && mi == machine.into_raw()
                     {
                         // decrement only makes sense if we didn't
                         // change state and for the machine in question
@@ -527,7 +534,7 @@ where
             }
             TriggerEvent::LimitReached { machine } => {
                 // limit is an internal event
-                self.transition(machine.0, Event::LimitReached, 0);
+                self.transition(machine.into_raw(), Event::LimitReached, 0);
             }
             TriggerEvent::UpdateMTU { new_mtu } => {
                 self.mtu = *new_mtu;
