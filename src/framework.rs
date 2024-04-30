@@ -21,11 +21,19 @@ pub struct MachineId(usize);
 impl MachineId {
     /// Create a new machine identifier from a raw integer. Intended for use
     /// with the `machine` field of [`TriggerAction`] and [`TriggerEvent`]. For
-    /// testing purposes only. For regular use, use [`MachineId`] returned by
-    /// [Framework::trigger_events]. Triggering an event in the framework for a
-    /// machine that does not exist does not raise a panic or any error.
+    /// testing and FFI-wrapper purposes only. For regular use, use
+    /// [`MachineId`] returned by [Framework::trigger_events]. Triggering an
+    /// event in the framework for a machine that does not exist does not raise
+    /// a panic or any error.
     pub fn from_raw(raw: usize) -> Self {
         MachineId(raw)
+    }
+
+    /// Return the raw integer representation of the machine identifier. For
+    /// testing and FFI-wrapper purposes only. For regular use, use the
+    /// [`MachineId`] returned by [Framework::trigger_events].
+    pub fn into_raw(self) -> usize {
+        self.0
     }
 }
 
@@ -214,7 +222,7 @@ where
             TriggerEvent::PaddingSent { machine } => {
                 self.padding_sent_packets += 1;
 
-                let mi = machine.0;
+                let mi = machine.into_raw();
                 if mi >= self.runtime.len() {
                     return;
                 }
@@ -243,7 +251,7 @@ where
                 for mi in 0..self.runtime.len() {
                     if self.transition(mi, Event::BlockingBegin) == StateChange::Unchanged
                         && self.runtime[mi].current_state != STATE_END
-                        && mi == machine.0
+                        && mi == machine.into_raw()
                     {
                         // decrement only makes sense if we didn't
                         // change state and for the machine in question
@@ -269,7 +277,7 @@ where
                 }
             }
             TriggerEvent::TimerBegin { machine } => {
-                let mi = machine.0;
+                let mi = machine.into_raw();
                 if mi >= self.runtime.len() {
                     return;
                 }
@@ -277,11 +285,11 @@ where
                     && self.runtime[mi].current_state != STATE_END
                 {
                     // decrement only makes sense if we didn't change state
-                    self.decrement_limit(machine.0);
+                    self.decrement_limit(machine.into_raw());
                 }
             }
             TriggerEvent::TimerEnd { machine } => {
-                let mi = machine.0;
+                let mi = machine.into_raw();
                 if mi >= self.runtime.len() {
                     return;
                 }
