@@ -14,24 +14,24 @@
 //!
 //! ## Example usage
 //! ```
-//! use maybenot::{framework::TriggerEvent, machine::Machine};
-//! use maybenot_simulator::{parse_trace, network::Network, sim};
+//! use maybenot::{event::TriggerEvent, Machine};
+//! use maybenot_simulator::{network::Network, parse_trace, sim};
 //! use std::{str::FromStr, time::Duration};
 //!
-//! // A trace of ten packets from the client's perspective when visiting
-//! // google.com over WireGuard. The format is: "time,direction,size\n". The
+//! // The first ten packets of a network trace from the client's perspective
+//! // when visiting google.com. The format is: "time,direction\n". The
 //! // direction is either "s" (sent) or "r" (received). The time is in
-//! // nanoseconds since the start of the trace. The size is in bytes.
-//! let raw_trace = "0,s,52
-//! 19714282,r,52
-//! 183976147,s,52
-//! 243699564,r,52
-//! 1696037773,s,40
-//! 2047985926,s,52
-//! 2055955094,r,52
-//! 9401039609,s,73
-//! 9401094589,s,73
-//! 9420892765,r,191";
+//! // nanoseconds since the start of the trace.
+//! let raw_trace = "0,s
+//! 19714282,r
+//! 183976147,s
+//! 243699564,r
+//! 1696037773,s
+//! 2047985926,s
+//! 2055955094,r
+//! 9401039609,s
+//! 9401094589,s
+//! 9420892765,r";
 //!
 //! // The network model for simulating the network between the client and the
 //! // server. Currently just a delay.
@@ -43,10 +43,9 @@
 //! // at the same time as in the raw trace.
 //! let mut input_trace = parse_trace(raw_trace, &network);
 //!
-//! // A simple machine that sends one padding packet of 1000 bytes 20
-//! // milliseconds after the first NonPaddingSent is sent.
-//! let m = "789cedcfc10900200805506d82b6688c1caf5bc3b54823f4a1a2a453b7021ff8ff49\
-//! 41261f685323426187f8d3f9cceb18039205b9facab8914adf9d6d9406142f07f0";
+//! // A simple machine that sends one padding packet 20 milliseconds after the
+//! // first normal packet is sent.
+//! let m = "02eNptibEJAAAIw1of09Mc/c+HRMFFzFBoAlxkliTgurLfT6T9oQBWJgJi";
 //! let m = Machine::from_str(m).unwrap();
 //!
 //! // Run the simulator with the machine at the client. Run the simulation up
@@ -59,51 +58,48 @@
 //!     .into_iter()
 //!     .filter(|p| p.client)
 //!     .for_each(|p| match p.event {
-//!         TriggerEvent::NonPaddingSent { bytes_sent } => {
-//!             println!(
-//!                 "sent {} bytes at {} ms",
-//!                 bytes_sent,
-//!                 (p.time - starting_time).as_millis()
-//!             );
+//!         TriggerEvent::TunnelSent => {
+//!             if p.contains_padding {
+//!                 println!(
+//!                     "sent a padding packet at {} ms",
+//!                     (p.time - starting_time).as_millis()
+//!                 );
+//!             } else {
+//!                 println!(
+//!                     "sent a normal packet at {} ms",
+//!                     (p.time - starting_time).as_millis()
+//!                 );
+//!             }
 //!         }
-//!         TriggerEvent::PaddingSent { bytes_sent, .. } => {
-//!             println!(
-//!                 "sent {} bytes of padding at {} ms",
-//!                 bytes_sent,
-//!                 (p.time - starting_time).as_millis()
-//!             );
-//!         }
-//!         TriggerEvent::NonPaddingRecv { bytes_recv } => {
-//!             println!(
-//!                 "received {} bytes at {} ms",
-//!                 bytes_recv,
-//!                 (p.time - starting_time).as_millis()
-//!             );
-//!         }
-//!         TriggerEvent::PaddingRecv { bytes_recv, .. } => {
-//!             println!(
-//!                 "received {} bytes of padding at {} ms",
-//!                 bytes_recv,
-//!                 (p.time - starting_time).as_millis()
-//!             );
+//!         TriggerEvent::TunnelRecv => {
+//!             if p.contains_padding {
+//!                 println!(
+//!                     "received a padding packet at {} ms",
+//!                     (p.time - starting_time).as_millis()
+//!                 );
+//!             } else {
+//!                 println!(
+//!                     "received a normal packet at {} ms",
+//!                     (p.time - starting_time).as_millis()
+//!                 );
+//!             }
 //!         }
 //!         _ => {}
 //!     });
+
 //!
-//! ```
-//!  Prints the following output:
-//! ```text
-//! sent 52 bytes at 0 ms
-//! received 52 bytes at 19 ms
-//! sent 1000 bytes of padding at 20 ms
-//! sent 52 bytes at 183 ms
-//! received 52 bytes at 243 ms
-//! sent 40 bytes at 1696 ms
-//! sent 52 bytes at 2047 ms
-//! received 52 bytes at 2055 ms
-//! sent 73 bytes at 9401 ms
-//! sent 73 bytes at 9401 ms
-//! received 191 bytes at 9420 ms
+//! // Output:
+//! // sent a normal packet at 0 ms
+//! // received a normal packet at 19 ms
+//! // sent a padding packet at 20 ms
+//! // sent a normal packet at 183 ms
+//! // received a normal packet at 243 ms
+//! // sent a normal packet at 1696 ms
+//! // sent a normal packet at 2047 ms
+//! // received a normal packet at 2055 ms
+//! // sent a normal packet at 9401 ms
+//! // sent a normal packet at 9401 ms
+//! // received a normal packet at 9420 ms
 //! ```
 
 pub mod integration;
@@ -112,7 +108,7 @@ pub mod peek;
 pub mod queue;
 
 use std::{
-    cmp::Reverse,
+    cmp::{Ordering, Reverse},
     collections::HashMap,
     time::{Duration, Instant},
 };
@@ -122,15 +118,54 @@ use log::debug;
 use network::Network;
 use queue::SimQueue;
 
-use maybenot::{
-    framework::{Action, Framework, MachineId, TriggerEvent},
-    machine::Machine,
-};
+use maybenot::{Framework, Machine, MachineId, Timer, TriggerAction, TriggerEvent};
+use rand::{rngs::ThreadRng, RngCore};
+use rand_xoshiro::rand_core::SeedableRng;
+use rand_xoshiro::Xoshiro256StarStar;
 
 use crate::{
-    network::sim_network_activity,
-    peek::{peek_blocked_exp, peek_queue, peek_scheduled},
+    network::sim_network_stack,
+    peek::{peek_blocked_exp, peek_internal, peek_queue, peek_scheduled},
 };
+
+// Enum to encapsulate different RngCore sources: in the Maybenot Framework, the
+// RngCore trait is not ?Sized (unnecessary overhead for the framework), so we
+// have to work around this by using an enum to support selecting rng source as
+// a simulation option.
+enum RngSource {
+    Thread(ThreadRng),
+    Xoshiro(Xoshiro256StarStar),
+}
+
+impl RngCore for RngSource {
+    fn next_u32(&mut self) -> u32 {
+        match self {
+            RngSource::Thread(rng) => rng.next_u32(),
+            RngSource::Xoshiro(rng) => rng.next_u32(),
+        }
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        match self {
+            RngSource::Thread(rng) => rng.next_u64(),
+            RngSource::Xoshiro(rng) => rng.next_u64(),
+        }
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        match self {
+            RngSource::Thread(rng) => rng.fill_bytes(dest),
+            RngSource::Xoshiro(rng) => rng.fill_bytes(dest),
+        }
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+        match self {
+            RngSource::Thread(rng) => rng.try_fill_bytes(dest),
+            RngSource::Xoshiro(rng) => rng.try_fill_bytes(dest),
+        }
+    }
+}
 
 /// SimEvent represents an event in the simulator. It is used internally to
 /// represent events that are to be processed by the simulator (in SimQueue) and
@@ -141,6 +176,8 @@ pub struct SimEvent {
     pub time: Instant,
     pub delay: Duration,
     pub client: bool,
+    // flag to track padding or normal packet
+    pub contains_padding: bool,
     // internal flag to mark event as bypass
     bypass: bool,
     // internal flag to mark event as replace
@@ -151,31 +188,31 @@ pub struct SimEvent {
 
 /// ScheduledAction represents an action that is scheduled to be executed at a
 /// certain time.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Clone, Debug)]
 pub struct ScheduledAction {
-    action: Option<Action>,
+    action: TriggerAction,
     time: Instant,
 }
 
 /// The state of the client or the server in the simulator.
-pub struct SimState<M> {
+pub struct SimState<M, R> {
     /// an instance of the Maybenot framework
-    framework: Framework<M>,
-    /// scheduled actions (timers)
-    scheduled_action: HashMap<MachineId, ScheduledAction>,
+    framework: Framework<M, R>,
+    /// scheduled action timers
+    scheduled_action: HashMap<MachineId, Option<ScheduledAction>>,
+    /// scheduled internal timers
+    scheduled_internal: HashMap<MachineId, Option<Instant>>,
     /// blocking time (active if in the future, relative to current_time)
     blocking_until: Instant,
     /// whether the active blocking bypassable or not
     blocking_bypassable: bool,
     /// time of the last sent packet
     last_sent_time: Instant,
-    /// size of the last sent packet
-    last_sent_size: u16,
     /// integration aspects for this state
     integration: Option<Integration>,
 }
 
-impl<M> SimState<M>
+impl<M> SimState<M, RngSource>
 where
     M: AsRef<[Machine]>,
 {
@@ -184,19 +221,27 @@ where
         current_time: Instant,
         max_padding_frac: f64,
         max_blocking_frac: f64,
-        mtu: u16,
         integration: Option<Integration>,
+        insecure_rng_seed: Option<u64>,
     ) -> Self {
+        let rng = match insecure_rng_seed {
+            // deterministic, insecure RNG
+            Some(seed) => RngSource::Xoshiro(Xoshiro256StarStar::seed_from_u64(seed)),
+            // secure RNG, default
+            None => RngSource::Thread(rand::thread_rng()),
+        };
+
         Self {
             framework: Framework::new(
                 machines,
                 max_padding_frac,
                 max_blocking_frac,
-                mtu,
                 current_time,
+                rng,
             )
             .unwrap(),
             scheduled_action: HashMap::new(),
+            scheduled_internal: HashMap::new(),
             // has to be in the past
             blocking_until: current_time.checked_sub(Duration::from_micros(1)).unwrap(),
             blocking_bypassable: false,
@@ -204,7 +249,6 @@ where
             last_sent_time: current_time
                 .checked_sub(Duration::from_millis(1000))
                 .unwrap(),
-            last_sent_size: 0,
             integration,
         }
     }
@@ -212,21 +256,21 @@ where
     pub fn reporting_delay(&self) -> Duration {
         self.integration
             .as_ref()
-            .map(|i| i.reporting_delay.sample())
+            .map(|i| i.reporting_delay())
             .unwrap_or(Duration::from_micros(0))
     }
 
     pub fn action_delay(&self) -> Duration {
         self.integration
             .as_ref()
-            .map(|i| i.action_delay.sample())
+            .map(|i| i.action_delay())
             .unwrap_or(Duration::from_micros(0))
     }
 
     pub fn trigger_delay(&self) -> Duration {
         self.integration
             .as_ref()
-            .map(|i| i.trigger_delay.sample())
+            .map(|i| i.trigger_delay())
             .unwrap_or(Duration::from_micros(0))
     }
 }
@@ -268,17 +312,37 @@ pub fn sim(
 /// Arguments for [`sim_advanced`].
 #[derive(Clone, Debug)]
 pub struct SimulatorArgs<'a> {
+    /// The network model for simulating the network between the client and the
+    /// server.
     pub network: &'a Network,
+    /// The maximum number of events to simulate.
     pub max_trace_length: usize,
+    /// The maximum number of iterations to run the simulator for. If 0, the
+    /// simulator will run until it stops.
     pub max_sim_iterations: usize,
+    /// If true, only client events are returned in the output trace.
     pub only_client_events: bool,
+    /// If true, only events that represent network packets are returned in the
+    /// output trace.
     pub only_network_activity: bool,
+    /// The maximum fraction of padding for the client's instance of the
+    /// Maybenot framework.
     pub max_padding_frac_client: f64,
+    /// The maximum fraction of blocking for the client's instance of the
+    /// Maybenot framework.
     pub max_blocking_frac_client: f64,
+    /// The maximum fraction of padding for the server's instance of the
+    /// Maybenot framework.
     pub max_padding_frac_server: f64,
+    /// The maximum fraction of blocking for the server's instance of the
+    /// Maybenot framework.
     pub max_blocking_frac_server: f64,
-    pub mtu: u16,
+    /// The seed for the deterministic (insecure) Xoshiro256StarStar RNG. If
+    /// None, the simulator will use the cryptographically secure thread_rng().
+    pub insecure_rng_seed: Option<u64>,
+    /// Optional client integration delays.
     pub client_integration: Option<&'a Integration>,
+    /// Optional server integration delays.
     pub server_integration: Option<&'a Integration>,
 }
 
@@ -294,8 +358,7 @@ impl<'a> SimulatorArgs<'a> {
             max_blocking_frac_client: 0.0,
             max_padding_frac_server: 0.0,
             max_blocking_frac_server: 0.0,
-            // WireGuard default MTU
-            mtu: 1420,
+            insecure_rng_seed: None,
             client_integration: None,
             server_integration: None,
         }
@@ -317,37 +380,44 @@ pub fn sim_advanced(
     // put the mocked current time at the first event
     let mut current_time = sq.peek().unwrap().0.time;
 
-    // the client and server states
     let mut client = SimState::new(
         machines_client,
         current_time,
         args.max_padding_frac_client,
         args.max_blocking_frac_client,
-        args.mtu,
         args.client_integration.cloned(),
+        args.insecure_rng_seed,
     );
     let mut server = SimState::new(
         machines_server,
         current_time,
         args.max_padding_frac_server,
         args.max_blocking_frac_server,
-        args.mtu,
         args.server_integration.cloned(),
+        args.insecure_rng_seed,
     );
 
     let mut sim_iterations = 0;
     let start_time = current_time;
     while let Some(next) = pick_next(sq, &mut client, &mut server, current_time) {
         debug!("#########################################################");
-        debug!("sim(): main loop start, moving time forward");
+        debug!("sim(): main loop start");
 
-        // move time forward
-        if next.time < current_time {
-            debug!("sim(): {:#?}", current_time);
-            debug!("sim(): {:#?}", next.time);
-            panic!("BUG: next event moves time backwards");
+        // move time forward?
+        match next.time.cmp(&current_time) {
+            Ordering::Less => {
+                debug!("sim(): {:#?}", current_time);
+                debug!("sim(): {:#?}", next.time);
+                panic!("BUG: next event moves time backwards");
+            }
+            Ordering::Greater => {
+                debug!("sim(): time moved forward {:#?}", next.time - current_time);
+                current_time = next.time;
+            }
+            _ => {}
         }
-        current_time = next.time;
+
+        // status
         debug!(
             "sim(): at time {:#?}",
             current_time.duration_since(start_time)
@@ -372,40 +442,33 @@ pub fn sim_advanced(
             );
         }
 
-        // For (non-)padding sent, queue the corresponding padding recv event:
-        // in other words, where we simulate sending packets. The only place
-        // where the simulator simulates the entire network between the client
-        // and the server. TODO: make delay/network more realistic.
+        // Where the simulator simulates the entire network between the client
+        // and the server. Returns true if there was network activity (i.e., a
+        // packet was sent or received over the network), false otherwise.
         let network_activity = if next.client {
-            sim_network_activity(&next, sq, &client, &server, args.network, &current_time)
+            sim_network_stack(&next, sq, &client, &server, args.network, &current_time)
         } else {
-            sim_network_activity(&next, sq, &server, &client, args.network, &current_time)
+            sim_network_stack(&next, sq, &server, &client, args.network, &current_time)
         };
 
         if network_activity {
             // update last packet stats in state
-            match next.event {
-                TriggerEvent::PaddingSent { bytes_sent, .. }
-                | TriggerEvent::NonPaddingSent { bytes_sent } => {
-                    if next.client {
-                        client.last_sent_time = current_time;
-                        client.last_sent_size = bytes_sent;
-                    } else {
-                        server.last_sent_time = current_time;
-                        server.last_sent_size = bytes_sent;
-                    }
+            if next.event == TriggerEvent::TunnelSent {
+                if next.client {
+                    client.last_sent_time = current_time;
+                } else {
+                    server.last_sent_time = current_time;
                 }
-                _ => {}
             }
         }
 
         // get actions, update scheduled actions
         if next.client {
             debug!("sim(): trigger @client framework\n{:#?}", next.event);
-            trigger_update(&mut client, &next, &current_time);
+            trigger_update(&mut client, &next, &current_time, sq, true);
         } else {
             debug!("sim(): trigger @server framework\n{:#?}", next.event);
-            trigger_update(&mut server, &next, &current_time);
+            trigger_update(&mut server, &next, &current_time, sq, false);
         }
 
         // conditional save to resulting trace: only on network activity if set
@@ -417,16 +480,28 @@ pub fn sim_advanced(
             // integration delays
             let mut n = next.clone();
             match next.event {
-                TriggerEvent::PaddingSent { .. } => {
-                    // padding adds the action delay
-                    n.time += n.delay;
-                }
-                TriggerEvent::PaddingRecv { .. }
-                | TriggerEvent::NonPaddingRecv { .. }
-                | TriggerEvent::NonPaddingSent { .. } => {
-                    // reported events remove the reporting delay
+                TriggerEvent::NormalSent => {
+                    // remove the reporting delay
                     n.time -= n.delay;
                 }
+                TriggerEvent::PaddingSent { .. } => {
+                    // padding packet adds the action delay
+                    n.time += n.delay;
+                }
+                TriggerEvent::TunnelSent => {
+                    if n.contains_padding {
+                        // padding packet adds the action delay
+                        n.time += n.delay;
+                    } else {
+                        // normal packet removes the reporting delay
+                        n.time -= n.delay;
+                    }
+                }
+                TriggerEvent::TunnelRecv | TriggerEvent::PaddingRecv | TriggerEvent::NormalRecv => {
+                    // remove the reporting delay
+                    n.time -= n.delay;
+                }
+
                 _ => {}
             }
 
@@ -463,8 +538,8 @@ pub fn sim_advanced(
 
 fn pick_next<M: AsRef<[Machine]>>(
     sq: &mut SimQueue,
-    client: &mut SimState<M>,
-    server: &mut SimState<M>,
+    client: &mut SimState<M, RngSource>,
+    server: &mut SimState<M, RngSource>,
     current_time: Instant,
 ) -> Option<SimEvent> {
     // find the earliest scheduled, blocked, and queued events to determine the
@@ -475,20 +550,26 @@ fn pick_next<M: AsRef<[Machine]>>(
         current_time,
     );
     debug!("\tpick_next(): peek_scheduled = {:?}", s);
+    let i = peek_internal(
+        &client.scheduled_internal,
+        &server.scheduled_internal,
+        current_time,
+    );
+    debug!("\tpick_next(): peek_internal = {:?}", i);
     let b = peek_blocked_exp(&client.blocking_until, &server.blocking_until, current_time);
     debug!("\tpick_next(): peek_blocked_exp = {:?}", b);
     let (q, q_peek) = peek_queue(sq, client, server, s.min(b), current_time);
     debug!("\tpick_next(): peek_queue = {:?}", q);
 
     // no next?
-    if s == Duration::MAX && b == Duration::MAX && q == Duration::MAX {
+    if s == Duration::MAX && i == Duration::MAX && b == Duration::MAX && q == Duration::MAX {
         return None;
     }
 
     // We prioritize the queue: in general, stuff happens faster outside the
     // framework than inside it. On overload, the user of the framework will
     // bulk trigger events in the framework.
-    if q <= s && q <= b {
+    if q <= s && q <= i && q <= b {
         debug!("\tpick_next(): picked queue");
         sq.remove(q_peek.as_ref().unwrap());
 
@@ -502,7 +583,7 @@ fn pick_next<M: AsRef<[Machine]>>(
 
     // next is blocking expiry, happens outside of framework, so probably faster
     // than framework
-    if b <= s {
+    if b <= s && b <= i {
         debug!("\tpick_next(): picked blocking");
         // create SimEvent and move blocking into (what soon will be) the past
         // to indicate that it has been processed
@@ -534,93 +615,149 @@ fn pick_next<M: AsRef<[Machine]>>(
             fuzz: fastrand::i32(..),
             bypass: false,
             replace: false,
+            contains_padding: false,
         });
+    }
+
+    // next we pick internal events, which should be faster than scheduled
+    // actions due to less work
+    if i <= s {
+        debug!("\tpick_next(): picked internal");
+        let target = current_time + i;
+        let act = do_internal(client, server, target);
+        if let Some(a) = act {
+            sq.push_sim(a.clone(), Reverse(a.time));
+        }
+        return pick_next(sq, client, server, current_time);
     }
 
     // what's left is scheduled actions: find the action act on the action,
     // putting the event into the sim queue, and then recurse
     debug!("\tpick_next(): picked scheduled");
     let target = current_time + s;
-    let act = do_scheduled(client, server, current_time, target);
+    let act = do_scheduled(client, server, target);
     if let Some(a) = act {
         sq.push_sim(a.clone(), Reverse(a.time));
     }
     pick_next(sq, client, server, current_time)
 }
 
+fn do_internal<M: AsRef<[Machine]>>(
+    client: &mut SimState<M, RngSource>,
+    server: &mut SimState<M, RngSource>,
+    target: Instant,
+) -> Option<SimEvent> {
+    let mut machine: Option<MachineId> = None;
+    let mut is_client = false;
+
+    client.scheduled_internal.retain(|mi, t| {
+        if *t == Some(target) {
+            machine = Some(*mi);
+            is_client = true;
+            return false;
+        }
+        true
+    });
+
+    if machine.is_none() {
+        server.scheduled_internal.retain(|mi, t| {
+            if *t == Some(target) {
+                machine = Some(*mi);
+                return false;
+            }
+            true
+        });
+    }
+
+    assert!(machine.is_some(), "BUG: no internal action found");
+
+    // create SimEvent with TimerEnd
+    Some(SimEvent {
+        client: is_client,
+        event: TriggerEvent::TimerEnd {
+            machine: machine.unwrap(),
+        },
+        time: target,
+        delay: Duration::from_micros(0), // TODO: is this correct?
+        fuzz: fastrand::i32(..),
+        bypass: false,
+        replace: false,
+        contains_padding: false,
+    })
+}
+
 fn do_scheduled<M: AsRef<[Machine]>>(
-    client: &mut SimState<M>,
-    server: &mut SimState<M>,
-    current_time: Instant,
+    client: &mut SimState<M, RngSource>,
+    server: &mut SimState<M, RngSource>,
     target: Instant,
 ) -> Option<SimEvent> {
     // find the action
-    let mut a = ScheduledAction {
-        action: None,
-        time: current_time,
-    };
-    let mut a_is_client = false;
-    let mut a_is_found = false;
+    let mut a: Option<ScheduledAction> = None;
+    let mut is_client = false;
 
     client.scheduled_action.retain(|&_mi, sa| {
-        if !a_is_found && sa.action.is_some() && sa.time == target {
-            a = sa.clone();
-            a_is_client = true;
-            a_is_found = true;
-            return false;
-        };
+        if let Some(sa) = sa {
+            if a.is_none() && sa.time == target {
+                a = Some(sa.clone());
+                is_client = true;
+                return false;
+            };
+        }
         true
     });
 
     // cannot schedule a None action, so if we found one, done
-    if a.action.is_none() {
+    if a.is_none() {
         server.scheduled_action.retain(|&_mi, sa| {
-            if !a_is_found && sa.action.is_some() && sa.time == target {
-                a = sa.clone();
-                a_is_client = false;
-                a_is_found = true;
-                return false;
-            };
+            if let Some(sa) = sa {
+                if a.is_none() && sa.time == target {
+                    a = Some(sa.clone());
+                    is_client = false;
+                    return false;
+                };
+            }
             true
         });
     }
 
     // no action found
-    assert!(a_is_found, "BUG: no action found");
+    assert!(a.is_some(), "BUG: no action found");
+    let a = a.unwrap();
 
     // do the action
-    match a.action? {
-        Action::Cancel { .. } => {
-            // by being selected we set the action to None already
-            None
+    match a.action {
+        TriggerAction::Cancel { .. } => {
+            // this should never happen, bug
+            panic!("BUG: cancel action in scheduled action");
         }
-        Action::InjectPadding {
+        TriggerAction::UpdateTimer { .. } => {
+            // this should never happen, bug
+            panic!("BUG: update timer action in scheduled action");
+        }
+        TriggerAction::SendPadding {
             timeout: _,
-            size,
             bypass,
             replace,
             machine,
         } => {
-            let action_delay = if a_is_client {
+            let action_delay = if is_client {
                 client.action_delay()
             } else {
                 server.action_delay()
             };
 
             Some(SimEvent {
-                event: TriggerEvent::PaddingSent {
-                    bytes_sent: size,
-                    machine,
-                },
+                event: TriggerEvent::PaddingSent { machine },
                 time: a.time,
                 delay: action_delay,
-                client: a_is_client,
+                client: is_client,
                 bypass,
                 replace,
+                contains_padding: true,
                 fuzz: fastrand::i32(..),
             })
         }
-        Action::BlockOutgoing {
+        TriggerAction::BlockOutgoing {
             timeout: _,
             duration,
             bypass,
@@ -630,7 +767,7 @@ fn do_scheduled<M: AsRef<[Machine]>>(
             let block = a.time + duration;
             let event_bypass;
             // ASSUMPTION: block outgoing reported from integration
-            let total_delay = if a_is_client {
+            let total_delay = if is_client {
                 client.action_delay() + client.reporting_delay()
             } else {
                 server.action_delay() + server.reporting_delay()
@@ -638,7 +775,7 @@ fn do_scheduled<M: AsRef<[Machine]>>(
             let reported = a.time + total_delay;
 
             // should we update client/server blocking?
-            if a_is_client {
+            if is_client {
                 if replace || block > client.blocking_until {
                     client.blocking_until = block;
                     client.blocking_bypassable = bypass;
@@ -657,9 +794,10 @@ fn do_scheduled<M: AsRef<[Machine]>>(
                 event: TriggerEvent::BlockingBegin { machine },
                 time: reported,
                 delay: total_delay,
-                client: a_is_client,
+                client: is_client,
                 bypass: event_bypass,
                 replace: false,
+                contains_padding: false,
                 fuzz: fastrand::i32(..),
             })
         }
@@ -667,9 +805,11 @@ fn do_scheduled<M: AsRef<[Machine]>>(
 }
 
 fn trigger_update<M: AsRef<[Machine]>>(
-    state: &mut SimState<M>,
+    state: &mut SimState<M, RngSource>,
     next: &SimEvent,
     current_time: &Instant,
+    sq: &mut SimQueue,
+    is_client: bool,
 ) {
     let trigger_delay = state.trigger_delay();
 
@@ -679,31 +819,37 @@ fn trigger_update<M: AsRef<[Machine]>>(
         .trigger_events(&[next.event.clone()], *current_time)
     {
         match action {
-            Action::Cancel { machine } => {
-                state.scheduled_action.insert(
-                    *machine,
-                    ScheduledAction {
-                        action: Some(action.clone()),
-                        time: *current_time + trigger_delay,
-                    },
-                );
+            TriggerAction::Cancel { machine, timer } => {
+                // here we make a simplifying assumption of no trigger delay for
+                // cancel actions
+                match timer {
+                    Timer::Action => {
+                        state.scheduled_action.insert(*machine, None);
+                    }
+                    Timer::Internal => {
+                        state.scheduled_internal.insert(*machine, None);
+                    }
+                    Timer::All => {
+                        state.scheduled_action.insert(*machine, None);
+                        state.scheduled_internal.insert(*machine, None);
+                    }
+                }
             }
-            Action::InjectPadding {
+            TriggerAction::SendPadding {
                 timeout,
-                size: _,
                 bypass: _,
                 replace: _,
                 machine,
             } => {
                 state.scheduled_action.insert(
                     *machine,
-                    ScheduledAction {
-                        action: Some(action.clone()),
+                    Some(ScheduledAction {
+                        action: action.clone(),
                         time: *current_time + *timeout + trigger_delay,
-                    },
+                    }),
                 );
             }
-            Action::BlockOutgoing {
+            TriggerAction::BlockOutgoing {
                 timeout,
                 duration: _,
                 bypass: _,
@@ -712,11 +858,45 @@ fn trigger_update<M: AsRef<[Machine]>>(
             } => {
                 state.scheduled_action.insert(
                     *machine,
-                    ScheduledAction {
-                        action: Some(action.clone()),
+                    Some(ScheduledAction {
+                        action: action.clone(),
                         time: *current_time + *timeout + trigger_delay,
-                    },
+                    }),
                 );
+            }
+            TriggerAction::UpdateTimer {
+                duration,
+                replace,
+                machine,
+            } => {
+                // get current internal timer duration, if any
+                let current = state
+                    .scheduled_internal
+                    .get(machine)
+                    .cloned()
+                    .unwrap_or(Some(*current_time))
+                    .unwrap();
+
+                // update the timer
+                if *replace || current < *current_time + *duration {
+                    state
+                        .scheduled_internal
+                        .insert(*machine, Some(*current_time + *duration));
+                    // TimerBegin event
+                    sq.push_sim(
+                        SimEvent {
+                            client: is_client,
+                            event: TriggerEvent::TimerBegin { machine: *machine },
+                            time: *current_time,
+                            delay: Duration::from_micros(0), // TODO: is this correct?
+                            fuzz: fastrand::i32(..),
+                            bypass: false,
+                            replace: false,
+                            contains_padding: false,
+                        },
+                        Reverse(*current_time),
+                    );
+                }
             }
         };
     }
@@ -749,23 +929,26 @@ pub fn parse_trace_advanced(
 
     for l in trace.lines() {
         let parts: Vec<&str> = l.split(',').collect();
-        if parts.len() == 3 {
+        if parts.len() >= 2 {
             let timestamp =
                 starting_time + Duration::from_nanos(parts[0].trim().parse::<u64>().unwrap());
-            let size = parts[2].trim().parse::<u64>().unwrap();
+            // let size = parts[2].trim().parse::<u64>().unwrap();
 
+            // NOTE: for supporting deterministic simulation with a seed, note
+            // that once network is randomized and integration delays are used,
+            // both need to be updated below. Unfortunately, users of the
+            // simulator would have to take this parsing into account as well.
             match parts[1] {
                 "s" | "sn" => {
                     // client sent at the given time
                     let reporting_delay = client
-                        .map(|i| i.reporting_delay.sample())
+                        .map(|i| i.reporting_delay())
                         .unwrap_or(Duration::from_micros(0));
                     let reported = timestamp + reporting_delay;
                     sq.push(
-                        TriggerEvent::NonPaddingSent {
-                            bytes_sent: size as u16,
-                        },
+                        TriggerEvent::NormalSent,
                         true,
+                        false,
                         reported,
                         reporting_delay,
                         Reverse(reported),
@@ -776,13 +959,12 @@ pub fn parse_trace_advanced(
                     let sent = timestamp.checked_sub(network.delay).unwrap();
                     // but reported to the Maybenot framework at the server with delay
                     let reporting_delay = server
-                        .map(|i| i.reporting_delay.sample())
+                        .map(|i| i.reporting_delay())
                         .unwrap_or(Duration::from_micros(0));
                     let reported = sent + reporting_delay;
                     sq.push(
-                        TriggerEvent::NonPaddingSent {
-                            bytes_sent: size as u16,
-                        },
+                        TriggerEvent::NormalSent,
+                        false,
                         false,
                         reported,
                         reporting_delay,

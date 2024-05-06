@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::{Rng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, time::Duration};
 
@@ -36,15 +36,21 @@ pub struct Integration {
 
 impl Integration {
     pub fn action_delay(&self) -> Duration {
-        self.action_delay.sample()
+        // TODO: needs to use the configured RngSource if we want to support
+        // deterministic testing of integration delays
+        self.action_delay.sample(&mut rand::thread_rng())
     }
 
     pub fn reporting_delay(&self) -> Duration {
-        self.reporting_delay.sample()
+        // TODO: needs to use the configured RngSource if we want to support
+        // deterministic testing of integration delays
+        self.reporting_delay.sample(&mut rand::thread_rng())
     }
 
     pub fn trigger_delay(&self) -> Duration {
-        self.trigger_delay.sample()
+        // TODO: needs to use the configured RngSource if we want to support
+        // deterministic testing of integration delays
+        self.trigger_delay.sample(&mut rand::thread_rng())
     }
 }
 
@@ -98,8 +104,7 @@ impl BinDist {
         })
     }
 
-    pub fn sample(&self) -> Duration {
-        let mut rng = rand::thread_rng();
+    pub fn sample<R: RngCore>(&self, rng: &mut R) -> Duration {
         let sample_prob = rng.gen::<f64>();
         let bin_index = match self
             .cumulative_probabilities

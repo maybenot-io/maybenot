@@ -1,10 +1,11 @@
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 
 use maybenot::{
+    action::Action,
     dist::{Dist, DistType},
     event::Event,
-    machine::Machine,
-    state::State,
+    state::{State, Trans},
+    Machine,
 };
 use maybenot_simulator::{
     integration::{BinDist, Integration},
@@ -12,31 +13,33 @@ use maybenot_simulator::{
     parse_trace_advanced, sim_advanced, SimEvent, SimulatorArgs,
 };
 
+use enum_map::enum_map;
+
 fn get_test_machine() -> Machine {
     // a simple machine that pads once after 5ms
-    let num_states = 2;
-    let mut t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-    let mut e: HashMap<usize, f64> = HashMap::new();
-    e.insert(1, 1.0);
-    t.insert(Event::NonPaddingSent, e);
-    let s0 = State::new(t, num_states);
-    let t: HashMap<Event, HashMap<usize, f64>> = HashMap::new();
-    let mut s1 = State::new(t, num_states);
-    s1.timeout = Dist {
-        dist: DistType::Uniform,
-        param1: 0.0,
-        param2: 0.0,
-        start: 5.0 * 1000.0,
-        max: 0.0,
-    };
-    Machine {
-        allowed_padding_bytes: 10000,
-        max_padding_frac: 1.0,
-        allowed_blocked_microsec: 0,
-        max_blocking_frac: 0.0,
-        states: vec![s0, s1],
-        include_small_packets: true,
-    }
+    let s0 = State::new(enum_map! {
+        Event::NormalSent => vec![Trans(1, 1.0)],
+        _ => vec![],
+    });
+
+    let mut s1 = State::new(enum_map! {
+        _ => vec![],
+    });
+    s1.action = Some(Action::SendPadding {
+        bypass: false,
+        replace: false,
+        timeout: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 5.0 * 1000.0,
+            max: 0.0,
+        },
+        limit: None,
+    });
+
+    Machine::new(0, 0.0, 0, 0.0, vec![s0, s1]).unwrap()
 }
 
 fn run_sim(
@@ -108,7 +111,8 @@ fn test_action_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::PaddingSent));
+    assert!(base_trace[1].event.is_event(Event::TunnelSent));
+    assert!(base_trace[1].contains_padding);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
         integration.action_delay()
@@ -116,7 +120,8 @@ fn test_action_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(delayed_trace_server[2].event.is_event(Event::PaddingRecv));
+    assert!(delayed_trace_server[2].event.is_event(Event::TunnelRecv));
+    assert!(delayed_trace_server[2].contains_padding);
     // note below that first recv is 5ms in
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
@@ -158,7 +163,8 @@ fn test_reporting_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::PaddingSent));
+    assert!(base_trace[1].event.is_event(Event::TunnelSent));
+    assert!(base_trace[1].contains_padding);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
         integration.reporting_delay()
@@ -166,7 +172,8 @@ fn test_reporting_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(delayed_trace_server[2].event.is_event(Event::PaddingRecv));
+    assert!(delayed_trace_server[2].event.is_event(Event::TunnelRecv));
+    assert!(delayed_trace_server[2].contains_padding);
     // note below that first recv is 5ms in
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
@@ -208,7 +215,8 @@ fn test_trigger_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::PaddingSent));
+    assert!(base_trace[1].event.is_event(Event::TunnelSent));
+    assert!(base_trace[1].contains_padding);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
         integration.trigger_delay()
@@ -216,7 +224,8 @@ fn test_trigger_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(delayed_trace_server[2].event.is_event(Event::PaddingRecv));
+    assert!(delayed_trace_server[2].event.is_event(Event::TunnelRecv));
+    assert!(delayed_trace_server[2].contains_padding);
     // note below that first recv is 5ms in
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
@@ -254,7 +263,8 @@ fn test_action_and_reporting_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::PaddingSent));
+    assert!(base_trace[1].event.is_event(Event::TunnelSent));
+    assert!(base_trace[1].contains_padding);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
         integration.action_delay() + integration.reporting_delay()
@@ -300,7 +310,8 @@ fn test_action_reporting_and_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::PaddingSent));
+    assert!(base_trace[1].event.is_event(Event::TunnelSent));
+    assert!(base_trace[1].contains_padding);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
         integration.action_delay() + integration.reporting_delay() + integration.trigger_delay()

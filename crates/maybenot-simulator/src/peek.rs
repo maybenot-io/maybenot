@@ -5,14 +5,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use maybenot::{event::Event, framework::MachineId, machine::Machine};
+use maybenot::{event::Event, Machine, MachineId};
 
-use crate::{queue::SimQueue, ScheduledAction, SimEvent, SimState};
+use crate::{queue::SimQueue, RngSource, ScheduledAction, SimEvent, SimState};
 
-pub fn peek_queue<M: AsRef<[Machine]>>(
+pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
     sq: &mut SimQueue,
-    client: &mut SimState<M>,
-    server: &mut SimState<M>,
+    client: &mut SimState<M, RngSource>,
+    server: &mut SimState<M, RngSource>,
     earliest: Duration,
     current_time: Instant,
 ) -> (Duration, Option<SimEvent>) {
@@ -23,7 +23,7 @@ pub fn peek_queue<M: AsRef<[Machine]>>(
     let peek = sq.peek().unwrap().0.clone();
 
     // easy: non-blocking event first
-    if !peek.event.is_event(Event::PaddingSent) && !peek.event.is_event(Event::NonPaddingSent) {
+    if !peek.event.is_event(Event::TunnelSent) {
         return (peek.time.duration_since(current_time), Some(peek));
     }
 
@@ -53,15 +53,14 @@ pub fn peek_queue<M: AsRef<[Machine]>>(
     if (peek.client
         && client_blocking
         && client.blocking_bypassable
-        // bypassable NonPaddingSent is the result of replaced padding
-        && (peek.event.is_event(Event::PaddingSent) || peek.event.is_event(Event::NonPaddingSent))
+        // bypassable TunnelSent is the result of replaced padding
+        && (peek.event.is_event(Event::TunnelSent))
         && peek.bypass)
         || (!peek.client
             && server_blocking
             && server.blocking_bypassable
-            // bypassable NonPaddingSent is the result of replaced padding
-            && (peek.event.is_event(Event::PaddingSent)
-                || peek.event.is_event(Event::NonPaddingSent))
+            // bypassable TunnelSent is the result of replaced padding
+            && (peek.event.is_event(Event::TunnelSent))
             && peek.bypass)
     {
         return (peek.time.duration_since(current_time), Some(peek));
@@ -101,33 +100,33 @@ fn peek_queue_earliest_side(
     current_time: Instant,
     is_client: bool,
 ) -> (Duration, Option<SimEvent>) {
-    // OK, bummer, we have to peek for the next blocking and nonblocking: note
+    // OK, bummer, we have to peek for the next blocking and non-blocking: note
     // that this takes into account if blocking is bypassable or not, picking the
     // earliest next event from the queue.
     let peek_blocking = sq
         .peek_blocking(blocking_bypassable, is_client)
         .map(|(e, _)| e.clone());
-    let peek_nonblocking = sq
-        .peek_nonblocking(blocking_bypassable, is_client)
+    let peek_non_blocking = sq
+        .peek_non_blocking(blocking_bypassable, is_client)
         .map(|(e, _)| e.clone());
 
     // easy: no events to consider
-    if peek_blocking.is_none() && peek_nonblocking.is_none() {
+    if peek_blocking.is_none() && peek_non_blocking.is_none() {
         return (Duration::MAX, None);
     }
 
     // easy: only one event to consider
     if peek_blocking.is_none() {
         return (
-            peek_nonblocking
+            peek_non_blocking
                 .as_ref()
                 .unwrap()
                 .time
                 .duration_since(current_time),
-            peek_nonblocking,
+            peek_non_blocking,
         );
     }
-    if peek_nonblocking.is_none() {
+    if peek_non_blocking.is_none() {
         return (
             peek_blocking
                 .as_ref()
@@ -141,40 +140,57 @@ fn peek_queue_earliest_side(
 
     // consider both events, taking blocking into account
     let pb = peek_blocking.as_ref().unwrap();
-    let pn = peek_nonblocking.as_ref().unwrap();
+    let pn = peek_non_blocking.as_ref().unwrap();
     if pb.time.max(*blocking_until) <= pn.time {
         (
             pb.time.max(*blocking_until).duration_since(current_time),
             peek_blocking,
         )
     } else {
-        (pn.time.duration_since(current_time), peek_nonblocking)
+        (pn.time.duration_since(current_time), peek_non_blocking)
     }
 }
 
 pub fn peek_scheduled(
-    scheduled_c: &HashMap<MachineId, ScheduledAction>,
-    scheduled_s: &HashMap<MachineId, ScheduledAction>,
+    scheduled_c: &HashMap<MachineId, Option<ScheduledAction>>,
+    scheduled_s: &HashMap<MachineId, Option<ScheduledAction>>,
     current_time: Instant,
 ) -> Duration {
     // there are at most one scheduled action per machine, so we can just
     // iterate over all of them quickly
     let mut earliest = Duration::MAX;
 
-    for a in scheduled_c.values() {
-        if a.action.is_some()
-            && a.time >= current_time
-            && a.time.duration_since(current_time) < earliest
-        {
+    for a in scheduled_c.values().flatten() {
+        if a.time >= current_time && a.time.duration_since(current_time) < earliest {
             earliest = a.time.duration_since(current_time);
         }
     }
-    for a in scheduled_s.values() {
-        if a.action.is_some()
-            && a.time >= current_time
-            && a.time.duration_since(current_time) < earliest
-        {
+    for a in scheduled_s.values().flatten() {
+        if a.time >= current_time && a.time.duration_since(current_time) < earliest {
             earliest = a.time.duration_since(current_time);
+        }
+    }
+
+    earliest
+}
+
+pub fn peek_internal(
+    internal_c: &HashMap<MachineId, Option<Instant>>,
+    internal_s: &HashMap<MachineId, Option<Instant>>,
+    current_time: Instant,
+) -> Duration {
+    // there are at most one internal event per machine, so we can just
+    // iterate over all of them quickly
+    let mut earliest = Duration::MAX;
+
+    for t in internal_c.values().flatten() {
+        if *t >= current_time && t.duration_since(current_time) < earliest {
+            earliest = t.duration_since(current_time);
+        }
+    }
+    for t in internal_s.values().flatten() {
+        if *t >= current_time && t.duration_since(current_time) < earliest {
+            earliest = t.duration_since(current_time);
         }
     }
 
