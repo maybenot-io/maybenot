@@ -13,6 +13,8 @@ resolver = "2"
 members = [
     # lib for the Maybenot framework
     "crates/maybenot",
+    # simulator for the Maybenot framework
+    "crates/maybenot-simulator",
 ]
 
 # Keep all lints in sync with `test/Cargo.toml`
