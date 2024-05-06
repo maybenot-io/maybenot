@@ -10,6 +10,9 @@ keywords.workspace = true
 categories.workspace = true
 repository.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 rand="0.8.5"
 byteorder="1.4.3"

@@ -309,7 +309,7 @@ pub fn sim_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
     sq: &mut SimQueue,
-    args: &SimulatorArgs,
+    args: &SimulatorArgs<'_>,
 ) -> Vec<SimEvent> {
     // the resulting simulated trace
     let mut trace: Vec<SimEvent> = vec![];

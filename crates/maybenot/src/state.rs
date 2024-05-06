@@ -10,7 +10,6 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Write;
-extern crate simple_error;
 use simple_error::bail;
 
 /// A state as part of a [`Machine`](crate::machine).

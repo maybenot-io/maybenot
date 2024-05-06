@@ -11,7 +11,6 @@ use serde::Serialize;
 use std::error::Error;
 use std::io::Write;
 use std::str::FromStr;
-extern crate simple_error;
 use hex::{decode, encode};
 use libflate::zlib::{Decoder, Encoder};
 use ring::digest::{Context, SHA256};
