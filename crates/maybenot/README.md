@@ -24,7 +24,7 @@ may still leak information about the communicated plaintext. Maybenot is a
 framework for creating defenses that hide such patterns.
 
 To simulate defenses based on Maybenot, see the [Maybenot
-simulator](https://github.com/maybenot-io/maybenot-simulator/).
+simulator](https://github.com/maybenot-io/maybenot/tree/main/crates/maybenot-simulator/).
 
 ## Design
 An instance of Maybenot repeatedly takes as *input* one or more *events*
