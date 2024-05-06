@@ -157,7 +157,7 @@ impl FromStr for Machine {
 }
 
 impl fmt::Display for Machine {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "Machine {}\n\

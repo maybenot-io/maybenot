@@ -20,7 +20,7 @@ use self::event::Event;
 pub struct Trans(pub usize, pub f32);
 
 impl fmt::Display for Trans {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {}", self.0, self.1)
     }
 }
@@ -157,7 +157,7 @@ impl State {
 }
 
 impl fmt::Display for State {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(action) = self.action {
             writeln!(f, "action: {}", action)?;
         } else {

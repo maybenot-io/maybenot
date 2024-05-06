@@ -71,7 +71,7 @@ pub enum Action {
 }
 
 impl fmt::Display for Action {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:#?}", self)
     }
 }
@@ -215,7 +215,7 @@ pub enum TriggerAction {
 }
 
 impl fmt::Display for TriggerAction {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:#?}", self)
     }
 }

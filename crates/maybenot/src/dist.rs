@@ -100,7 +100,7 @@ pub enum DistType {
 }
 
 impl fmt::Display for DistType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
@@ -118,7 +118,7 @@ pub struct Dist {
 }
 
 impl fmt::Display for Dist {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let clamp;
         if self.start > 0.0 && self.max > 0.0 {
             clamp = format!(", start {}, clamped to [0.0, {}]", self.start, self.max);
