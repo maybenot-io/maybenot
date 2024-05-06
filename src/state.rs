@@ -150,6 +150,10 @@ impl State {
         }
         None
     }
+
+    pub fn get_transitions(&self) -> &[Option<Vec<Trans>>; EVENT_NUM] {
+        &self.transitions
+    }
 }
 
 impl fmt::Display for State {
