@@ -7,9 +7,9 @@ use rand_distr::{
     Weibull,
 };
 use serde::{Deserialize, Serialize};
+use simple_error::bail;
 use std::error::Error;
 use std::fmt;
-use simple_error::bail;
 
 use crate::constants::*;
 
