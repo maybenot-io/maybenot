@@ -66,7 +66,7 @@ impl Event {
     }
 
     // to usize
-    pub fn to_usize(&self) -> usize {
+    pub const fn to_usize(&self) -> usize {
         *self as usize
     }
 }
