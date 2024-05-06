@@ -6,17 +6,16 @@ use crate::event::*;
 use crate::state::*;
 use byteorder::ByteOrder;
 use byteorder::{LittleEndian, WriteBytesExt};
-use serde::Deserialize;
-use serde::Serialize;
-use std::error::Error;
-use std::io::Write;
-use std::str::FromStr;
-extern crate simple_error;
 use hex::{decode, encode};
 use libflate::zlib::{Decoder, Encoder};
 use ring::digest::{Context, SHA256};
+use serde::Deserialize;
+use serde::Serialize;
 use simple_error::{bail, map_err_with};
+use std::error::Error;
 use std::io::Read;
+use std::io::Write;
+use std::str::FromStr;
 
 /// A probabilistic state machine (Rabin automaton) consisting of zero or more
 /// [`State`] that determine when to inject and/or block outgoing traffic.

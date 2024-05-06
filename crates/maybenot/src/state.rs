@@ -7,11 +7,10 @@ use byteorder::ByteOrder;
 use byteorder::{LittleEndian, WriteBytesExt};
 use serde::Deserialize;
 use serde::Serialize;
+use simple_error::bail;
 use std::collections::HashMap;
 use std::error::Error;
 use std::io::Write;
-extern crate simple_error;
-use simple_error::bail;
 
 /// A state as part of a [`Machine`](crate::machine).
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]

@@ -1,21 +1,35 @@
-[package]
-name = "maybenot"
-version = "1.1.1"
+[workspace.package]
 edition = "2021"
-authors = ["Tobias Pulls <tobias@pulls.name>", "Ethan Witwer <ethan@ethanwitwer.com>"]
 license = "MIT OR Apache-2.0"
 homepage = "https://maybenot.io"
-description = "A framework for traffic analysis defenses"
 keywords = [ "anonymity", "correlation", "fingerprinting", "privacy", "security" ]
 categories = [ "cryptography", "network-programming" ]
 repository = "https://github.com/maybenot-io/maybenot"
 
-[dependencies]
-rand="0.8.5"
-byteorder="1.4.3"
-simple-error = "0.3.0"
-hex = "0.4.3"
-libflate = "2.0.0"
-ring = "0.16.20"
-rand_distr = "0.4.3"
-serde = {version = "1.0.185", features = ["derive"]}
+[workspace]
+resolver = "2"
+# Please keep this list topologically sorted by dependency relation, so that
+# every crate appears _before_ any other crate that depends on it.
+members = [
+    # lib for the Maybenot framework
+    "crates/maybenot",
+    # simulator for the Maybenot framework
+    "crates/maybenot-simulator",
+]
+
+# Keep all lints in sync with `test/Cargo.toml`
+[workspace.lints.rust]
+# Security
+non_ascii_idents = "forbid"
+
+# Deny old style Rust
+rust_2018_idioms = "deny"
+macro_use_extern_crate = "deny"
+absolute_paths_not_starting_with_crate = "deny"
+
+# Easy to read style and opinionated best practices
+explicit_outlives_requirements = "warn"
+missing_abi = "deny"
+unused_lifetimes = "warn"
+unused_macro_rules = "warn"
+single_use_lifetimes = "warn"

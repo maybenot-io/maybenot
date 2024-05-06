@@ -7,10 +7,9 @@ use rand_distr::{
     Weibull,
 };
 use serde::{Deserialize, Serialize};
+use simple_error::bail;
 use std::error::Error;
 use std::fmt;
-extern crate simple_error;
-use simple_error::bail;
 
 use crate::constants::*;
 
@@ -50,7 +49,7 @@ pub enum DistType {
     Beta,
 }
 impl fmt::Display for DistType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
@@ -110,7 +109,7 @@ pub struct Dist {
 }
 
 impl fmt::Display for Dist {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut clamp = String::new();
         if self.start > 0.0 && self.max > 0.0 {
             clamp = format!(", clamped to [{}, {}]", self.start, self.max);
