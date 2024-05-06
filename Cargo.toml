@@ -14,7 +14,7 @@ members = [
     # lib for the Maybenot framework
     "crates/maybenot",
     # simulator for the Maybenot framework
-    #"crates/maybenot-simulator",
+    "crates/maybenot-simulator",
 ]
 
 # Keep all lints in sync with `test/Cargo.toml`

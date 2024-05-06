@@ -1,0 +1,29 @@
+[package]
+name = "maybenot-simulator"
+version = "1.1.1"
+description = "A simulator for the Maybenot framework"
+authors = ["Tobias Pulls <tobias@pulls.name>"]
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+priority-queue = "1.3.2"
+# defaults to relative path in workspace
+# maybenot = { path = "../maybenot/" }
+maybenot = "1.1.1"
+log = "0.4.20"
+test-log = "0.2.12"
+fastrand = "2.0.0"
+serde = "1.0.193"
+rand = "0.8.5"
+serde_json = "1.0.108"
+
+[dev-dependencies]
+env_logger = "0.10.1"
