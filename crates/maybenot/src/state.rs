@@ -4,6 +4,7 @@
 
 use crate::constants::*;
 use crate::*;
+use enum_map::Enum;
 use enum_map::EnumMap;
 use rand::RngCore;
 use serde::Deserialize;
@@ -14,6 +15,8 @@ use std::fmt;
 use self::action::Action;
 use self::counter::CounterUpdate;
 use self::event::Event;
+
+use enum_map::enum_map;
 
 /// A state index and probability for a transition.
 #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
@@ -151,8 +154,17 @@ impl State {
         None
     }
 
-    pub fn get_transitions(&self) -> &[Option<Vec<Trans>>; EVENT_NUM] {
-        &self.transitions
+    /// Get the transitions for this state as an [`EnumMap`] of [`Event`] to
+    /// vectors of [`Trans`].
+    pub fn get_transitions(&self) -> EnumMap<Event, Vec<Trans>> {
+        let mut map = enum_map! {_ => vec![]};
+        for (event, vector) in self.transitions.iter().enumerate() {
+            if let Some(vector) = vector {
+                map[Event::from_usize(event)] = vector.clone();
+            }
+        }
+
+        map
     }
 }
 
