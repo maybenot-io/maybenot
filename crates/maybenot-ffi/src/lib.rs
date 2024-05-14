@@ -7,7 +7,8 @@ use maybenot::{
 };
 
 mod error;
-pub use error::*;
+use error::Error;
+pub use error::MaybenotResult;
 
 mod ffi;
 pub use ffi::*;
@@ -99,7 +100,7 @@ pub enum MaybenotAction {
 }
 
 impl MaybenotFramework {
-    pub fn start(
+    fn start(
         machines_str: &str,
         max_padding_bytes: f64,
         max_blocking_bytes: f64,
@@ -126,7 +127,7 @@ impl MaybenotFramework {
         Ok(MaybenotFramework { framework })
     }
 
-    pub fn on_event(
+    fn on_event(
         &mut self,
         event: MaybenotEvent,
         actions: &mut [MaybeUninit<MaybenotAction>],
