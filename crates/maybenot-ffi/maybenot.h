@@ -135,6 +135,13 @@ typedef struct MaybenotAction {
 } MaybenotAction;
 
 /**
+ * Get the version of maybenot-ffi as a null terminated UTF-8-string.
+ *
+ * Example: `maybenot-ffi/1.0.1`
+ */
+const char *maybenot_version(void);
+
+/**
  * Start a new [`MaybenotFramework`] instance.
  *
  * # Safety

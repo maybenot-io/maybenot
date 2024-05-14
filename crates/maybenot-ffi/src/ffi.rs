@@ -5,6 +5,23 @@ use core::{
     slice::from_raw_parts_mut,
 };
 
+// NOTE: must be null-terminated.
+static VERSION: &str = concat!("maybenot-ffi/", env!("CARGO_PKG_VERSION"), "\0");
+
+/// Get the version of maybenot-ffi as a null terminated UTF-8-string.
+///
+/// Example: `maybenot-ffi/1.0.1`
+#[no_mangle]
+pub extern "C" fn maybenot_version() -> *const c_char {
+    debug_assert_eq!(
+        VERSION.chars().last(),
+        Some('\0'),
+        "VERSION must be null terminated"
+    );
+
+    VERSION.as_ptr().cast()
+}
+
 /// Start a new [`MaybenotFramework`] instance.
 ///
 /// # Safety
