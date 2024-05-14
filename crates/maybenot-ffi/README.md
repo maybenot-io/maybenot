@@ -1,7 +1,8 @@
 # Maybenot FFI
 
 This crate contains C FFI bindings for Maybenot, which let's you use Maybenot as a static library
-for languages other than Rust.
+for languages other than Rust. Headers are found at `maybenot-ffi/maybenot.h` and are
+auto-generated when compiling.
 
 ## Building
 You need to have [rust](https://rustup.rs/) installed.

@@ -28,7 +28,7 @@ enum MaybenotEventType {
 typedef uint32_t MaybenotEventType;
 
 /**
- * An FFI friendly result type.
+ * An FFI friendly result error code type.
  */
 enum MaybenotResult {
   /**
@@ -45,9 +45,9 @@ typedef uint32_t MaybenotResult;
 /**
  * A running Maybenot instance.
  *
- * - Create it: [ffi::maybenot_start].
- * - Feed it actions: [ffi::maybenot_on_event].
- * - Stop it: [ffi::maybenot_stop].
+ * - Create it: [maybenot_start].
+ * - Feed it actions: [maybenot_on_event].
+ * - Stop it: [maybenot_stop].
  */
 typedef struct MaybenotFramework MaybenotFramework;
 
