@@ -1,9 +1,3 @@
-mod error;
-pub use error::*;
-
-mod ffi;
-pub use ffi::*;
-
 use core::{mem::MaybeUninit, str::FromStr, time::Duration};
 use std::time::Instant;
 
@@ -11,6 +5,12 @@ use maybenot::{
     framework::{Framework, MachineId, TriggerEvent},
     machine::Machine,
 };
+
+mod error;
+pub use error::*;
+
+mod ffi;
+pub use ffi::*;
 
 /// A running Maybenot instance.
 ///
