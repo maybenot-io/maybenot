@@ -22,7 +22,7 @@ $(DESTINATION)/libmaybenot.a: $(TARGET_DIR)/libmaybenot_ffi.a
 	cp $^ $@
 
 # build the static library
-$(TARGET_DIR)/libmaybenot_ffi.a: src/*.rs Cargo.toml
+$(TARGET_DIR)/libmaybenot_ffi.a: src/*.rs Cargo.toml build.rs cbindgen.toml
 	RUSTFLAGS="-C metadata=maybenot-ffi" ${CARGO} build $(CARGOFLAGS)
 
 clean:

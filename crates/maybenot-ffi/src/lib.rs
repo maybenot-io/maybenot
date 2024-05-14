@@ -4,6 +4,9 @@ pub use error::*;
 mod ffi;
 pub use ffi::*;
 
+// version.rs gets written at compile time by build.rs
+include!(concat!(env!("OUT_DIR"), "/version.rs"));
+
 use core::{mem::MaybeUninit, str::FromStr, time::Duration};
 use std::time::Instant;
 
