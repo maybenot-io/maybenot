@@ -3,7 +3,6 @@ TARGET ?=
 PROFILE ?= release
 DESTINATION ?= .
 
-CARGOFLAGS += --locked
 TARGET_DIR := ../../target/$(TARGET)/$(PROFILE)
 
 ifeq ($(PROFILE), release)
