@@ -35,9 +35,21 @@ enum MaybenotResult {
    * Operation completed successfully
    */
   MaybenotResult_Ok = 0,
+  /**
+   * The machine string wasn't valid UTF-8
+   */
   MaybenotResult_MachineStringNotUtf8 = 1,
+  /**
+   * Failed to parse machine string
+   */
   MaybenotResult_InvalidMachineString = 2,
+  /**
+   * Failed to start framework
+   */
   MaybenotResult_StartFramework = 3,
+  /**
+   * A null pointer was encountered
+   */
   MaybenotResult_NullPointer = 4,
 };
 typedef uint32_t MaybenotResult;

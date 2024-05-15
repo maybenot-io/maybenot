@@ -1,47 +1,25 @@
-use std::str::Utf8Error;
-
 /// An FFI friendly result error code type.
 #[repr(u32)]
 #[derive(Debug, Clone, Copy)]
 pub enum MaybenotResult {
     /// Operation completed successfully
     Ok = 0,
+
+    /// The machine string wasn't valid UTF-8
     MachineStringNotUtf8 = 1,
+
+    /// Failed to parse machine string
     InvalidMachineString = 2,
+
+    /// Failed to start framework
     StartFramework = 3,
+
+    /// A null pointer was encountered
     NullPointer = 4,
 }
 
-#[derive(Clone, Debug, thiserror::Error)]
-pub enum Error {
-    #[error("The machine string wasn't valid UTF-8")]
-    MachineStringNotUtf8(#[source] Utf8Error),
-
-    #[error("Failed to parse machine string")]
-    InvalidMachineString,
-
-    #[error("Failed to start framework")]
-    StartFramework,
-
-    #[error("A null pointer was encountered")]
-    NullPointer,
-}
-
-impl From<Error> for MaybenotResult {
-    fn from(error: Error) -> Self {
-        match error {
-            Error::MachineStringNotUtf8(_) => MaybenotResult::MachineStringNotUtf8,
-            Error::InvalidMachineString => MaybenotResult::InvalidMachineString,
-            Error::StartFramework => MaybenotResult::StartFramework,
-            Error::NullPointer => MaybenotResult::NullPointer,
-        }
-    }
-}
-
-impl<T> From<Result<T, Error>> for MaybenotResult {
-    fn from(result: Result<T, Error>) -> Self {
-        result
-            .map(|_| MaybenotResult::Ok)
-            .unwrap_or_else(MaybenotResult::from)
+impl<T> From<Result<T, MaybenotResult>> for MaybenotResult {
+    fn from(result: Result<T, MaybenotResult>) -> Self {
+        result.map(|_| MaybenotResult::Ok).unwrap_or_else(|err| err)
     }
 }

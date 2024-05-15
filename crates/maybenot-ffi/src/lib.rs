@@ -7,7 +7,6 @@ use maybenot::{
 };
 
 mod error;
-use error::Error;
 pub use error::MaybenotResult;
 
 mod ffi;
@@ -105,7 +104,7 @@ impl MaybenotFramework {
         max_padding_bytes: f64,
         max_blocking_bytes: f64,
         mtu: u16,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, MaybenotResult> {
         let machines: Vec<_> = machines_str
             .lines()
             .map(|line| line.trim())
@@ -113,7 +112,7 @@ impl MaybenotFramework {
             .filter(|line| !line.starts_with('#'))
             .map(Machine::from_str)
             .collect::<Result<_, _>>()
-            .map_err(|_e| Error::InvalidMachineString)?;
+            .map_err(|_e| MaybenotResult::InvalidMachineString)?;
 
         let framework = Framework::new(
             machines,
@@ -122,7 +121,7 @@ impl MaybenotFramework {
             mtu,
             Instant::now(),
         )
-        .map_err(|_e| Error::StartFramework)?;
+        .map_err(|_e| MaybenotResult::StartFramework)?;
 
         Ok(MaybenotFramework { framework })
     }
