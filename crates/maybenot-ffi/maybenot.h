@@ -158,7 +158,8 @@ const char *maybenot_version(void);
  *
  * # Safety
  * - `machines_str` must be a null-terminated UTF-8 string, containing LF-separated machines.
- * - `out` must be a valid pointer to some valid pointer-sized memory.
+ * - `out` must be a valid pointer to some valid and aligned pointer-sized memory.
+ * - The pointer written to `out` is NOT safe to be used concurrently.
  */
 MaybenotResult maybenot_start(const char *machines_str,
                               double max_padding_bytes,
@@ -170,8 +171,7 @@ MaybenotResult maybenot_start(const char *machines_str,
  * Get the number of machines running in the [`MaybenotFramework`] instance.
  *
  * # Safety
- *
- * `this` must be a valid pointer to a [`MaybenotFramework`] instance
+ * - `this` must have been created by [`maybenot_start`].
  */
 uint64_t maybenot_num_machines(struct MaybenotFramework *this_);
 
@@ -179,7 +179,8 @@ uint64_t maybenot_num_machines(struct MaybenotFramework *this_);
  * Stop a running [`MaybenotFramework`] instance. This will free the maybenot pointer.
  *
  * # Safety
- * The pointer MUST have been created by [maybenot_start].
+ * - `this` MUST have been created by [`maybenot_start`].
+ * - `this` MUST NOT be used after it has been passed to [`maybenot_stop`].
  */
 void maybenot_stop(struct MaybenotFramework *this_);
 
@@ -187,12 +188,13 @@ void maybenot_stop(struct MaybenotFramework *this_);
  * Feed an event to the [`MaybenotFramework`] instance.
  *
  * This may generate [super::MaybenotAction]s that will be written to `actions_out`.
+ * The number of actions will be written to `num_actions_out`.
  *
  * # Safety
- * `actions_out` must have capacity for [maybenot_num_machines] items of size
- * `sizeof(MaybenotAction)` bytes.
- *
- * The number of actions will be written to `num_actions_out`.
+ * - `this` MUST have been created by [`maybenot_start`].
+ * - `actions_out` MUST have capacity for [`maybenot_num_machines`] items of size
+ *   `sizeof(MaybenotAction)` bytes.
+ * - `num_actions_out` MUST be a valid pointer where a 64bit int can be written.
  */
 MaybenotResult maybenot_on_event(struct MaybenotFramework *this_,
                                  struct MaybenotEvent event,

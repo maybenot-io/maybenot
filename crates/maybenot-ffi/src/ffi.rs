@@ -26,7 +26,8 @@ pub extern "C" fn maybenot_version() -> *const c_char {
 ///
 /// # Safety
 /// - `machines_str` must be a null-terminated UTF-8 string, containing LF-separated machines.
-/// - `out` must be a valid pointer to some valid pointer-sized memory.
+/// - `out` must be a valid pointer to some valid and aligned pointer-sized memory.
+/// - The pointer written to `out` is NOT safe to be used concurrently.
 #[no_mangle]
 pub unsafe extern "C" fn maybenot_start(
     machines_str: *const c_char,
@@ -57,8 +58,7 @@ pub unsafe extern "C" fn maybenot_start(
 /// Get the number of machines running in the [`MaybenotFramework`] instance.
 ///
 /// # Safety
-///
-/// `this` must be a valid pointer to a [`MaybenotFramework`] instance
+/// - `this` must have been created by [`maybenot_start`].
 #[no_mangle]
 pub unsafe extern "C" fn maybenot_num_machines(this: *mut MaybenotFramework) -> u64 {
     let Some(this) = (unsafe { this.as_mut() }) else {
@@ -71,7 +71,8 @@ pub unsafe extern "C" fn maybenot_num_machines(this: *mut MaybenotFramework) -> 
 /// Stop a running [`MaybenotFramework`] instance. This will free the maybenot pointer.
 ///
 /// # Safety
-/// The pointer MUST have been created by [maybenot_start].
+/// - `this` MUST have been created by [`maybenot_start`].
+/// - `this` MUST NOT be used after it has been passed to [`maybenot_stop`].
 #[no_mangle]
 pub unsafe extern "C" fn maybenot_stop(this: *mut MaybenotFramework) {
     // Reconstruct the Box<Maybenot> and drop it.
@@ -82,12 +83,13 @@ pub unsafe extern "C" fn maybenot_stop(this: *mut MaybenotFramework) {
 /// Feed an event to the [`MaybenotFramework`] instance.
 ///
 /// This may generate [super::MaybenotAction]s that will be written to `actions_out`.
+/// The number of actions will be written to `num_actions_out`.
 ///
 /// # Safety
-/// `actions_out` must have capacity for [maybenot_num_machines] items of size
-/// `sizeof(MaybenotAction)` bytes.
-///
-/// The number of actions will be written to `num_actions_out`.
+/// - `this` MUST have been created by [`maybenot_start`].
+/// - `actions_out` MUST have capacity for [`maybenot_num_machines`] items of size
+///   `sizeof(MaybenotAction)` bytes.
+/// - `num_actions_out` MUST be a valid pointer where a 64bit int can be written.
 #[no_mangle]
 pub unsafe extern "C" fn maybenot_on_event(
     this: *mut MaybenotFramework,
@@ -98,6 +100,10 @@ pub unsafe extern "C" fn maybenot_on_event(
     let Some(this) = (unsafe { this.as_mut() }) else {
         return MaybenotResult::NullPointer;
     };
+
+    if num_actions_out.is_null() {
+        return MaybenotResult::NullPointer;
+    }
 
     // SAFETY: called promises that `actions_out` points to valid memory with the capacity to
     // hold at least a `num_machines` amount of `MaybenotAction`. Rust arrays have the same
