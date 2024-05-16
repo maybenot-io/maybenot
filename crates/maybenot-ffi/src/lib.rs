@@ -19,10 +19,13 @@ pub use ffi::*;
 /// - Stop it: [maybenot_stop].
 pub struct MaybenotFramework {
     framework: Framework<Vec<Machine>>,
+
+    /// A buffer used internally for converting from [MaybenotEvent]s.
+    events_buf: Vec<TriggerEvent>,
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct MaybenotEvent {
     pub event_type: MaybenotEventType,
 
@@ -111,6 +114,8 @@ impl MaybenotFramework {
             .collect::<Result<_, _>>()
             .map_err(|_e| MaybenotResult::InvalidMachineString)?;
 
+        let machines_count = machines.len();
+
         let framework = Framework::new(
             machines,
             max_padding_bytes,
@@ -120,20 +125,32 @@ impl MaybenotFramework {
         )
         .map_err(|_e| MaybenotResult::StartFramework)?;
 
-        Ok(MaybenotFramework { framework })
+        Ok(MaybenotFramework {
+            framework,
+            events_buf: Vec::with_capacity(machines_count),
+        })
     }
 
-    fn on_event(
+    fn on_events(
         &mut self,
-        event: MaybenotEvent,
+        events: &[MaybenotEvent],
         actions: &mut [MaybeUninit<MaybenotAction>],
     ) -> usize {
+        let now = Instant::now();
+
+        // convert from the repr(C) events and store them temporarily in our buffer
+        self.events_buf.clear();
+        for &event in events {
+            self.events_buf.push(convert_event(event));
+        }
+
         let num_actions = self
             .framework
-            .trigger_events(&[convert_event(event)], Instant::now())
+            .trigger_events(&self.events_buf, now)
             // convert maybenot actions to repr(C) equivalents
             .map(convert_action)
             // write the actions to the out buffer
+            // NOTE: trigger_events will not emit more than one action per machine.
             .zip(actions.iter_mut())
             .map(|(action, out)| out.write(action))
             .count();

@@ -173,7 +173,7 @@ MaybenotResult maybenot_start(const char *machines_str,
  * # Safety
  * - `this` must have been created by [`maybenot_start`].
  */
-uint64_t maybenot_num_machines(struct MaybenotFramework *this_);
+uintptr_t maybenot_num_machines(struct MaybenotFramework *this_);
 
 /**
  * Stop a running [`MaybenotFramework`] instance. This will free the maybenot pointer.
@@ -185,18 +185,20 @@ uint64_t maybenot_num_machines(struct MaybenotFramework *this_);
 void maybenot_stop(struct MaybenotFramework *this_);
 
 /**
- * Feed an event to the [`MaybenotFramework`] instance.
+ * Feed events to the [`MaybenotFramework`] instance.
  *
  * This may generate [super::MaybenotAction]s that will be written to `actions_out`.
  * The number of actions will be written to `num_actions_out`.
  *
  * # Safety
  * - `this` MUST have been created by [`maybenot_start`].
+ * - `events` MUST be a valid pointer to an array of size `num_events`.
  * - `actions_out` MUST have capacity for [`maybenot_num_machines`] items of size
  *   `sizeof(MaybenotAction)` bytes.
  * - `num_actions_out` MUST be a valid pointer where a 64bit int can be written.
  */
-MaybenotResult maybenot_on_event(struct MaybenotFramework *this_,
-                                 struct MaybenotEvent event,
-                                 struct MaybenotAction *actions_out,
-                                 uint64_t *num_actions_out);
+MaybenotResult maybenot_on_events(struct MaybenotFramework *this_,
+                                  const struct MaybenotEvent *events,
+                                  uintptr_t num_events,
+                                  struct MaybenotAction *actions_out,
+                                  uintptr_t *num_actions_out);

@@ -4,6 +4,7 @@ use core::{
     mem::MaybeUninit,
     slice::from_raw_parts_mut,
 };
+use std::slice::from_raw_parts;
 
 // NOTE: must be null-terminated.
 static VERSION: &str = concat!("maybenot-ffi/", env!("CARGO_PKG_VERSION"), "\0");
@@ -60,12 +61,12 @@ pub unsafe extern "C" fn maybenot_start(
 /// # Safety
 /// - `this` must have been created by [`maybenot_start`].
 #[no_mangle]
-pub unsafe extern "C" fn maybenot_num_machines(this: *mut MaybenotFramework) -> u64 {
+pub unsafe extern "C" fn maybenot_num_machines(this: *mut MaybenotFramework) -> usize {
     let Some(this) = (unsafe { this.as_mut() }) else {
         return 0;
     };
 
-    this.framework.num_machines() as u64
+    this.framework.num_machines()
 }
 
 /// Stop a running [`MaybenotFramework`] instance. This will free the maybenot pointer.
@@ -80,30 +81,36 @@ pub unsafe extern "C" fn maybenot_stop(this: *mut MaybenotFramework) {
     let _this = unsafe { Box::from_raw(this) };
 }
 
-/// Feed an event to the [`MaybenotFramework`] instance.
+/// Feed events to the [`MaybenotFramework`] instance.
 ///
 /// This may generate [super::MaybenotAction]s that will be written to `actions_out`.
 /// The number of actions will be written to `num_actions_out`.
 ///
 /// # Safety
 /// - `this` MUST have been created by [`maybenot_start`].
+/// - `events` MUST be a valid pointer to an array of size `num_events`.
 /// - `actions_out` MUST have capacity for [`maybenot_num_machines`] items of size
 ///   `sizeof(MaybenotAction)` bytes.
 /// - `num_actions_out` MUST be a valid pointer where a 64bit int can be written.
 #[no_mangle]
-pub unsafe extern "C" fn maybenot_on_event(
+pub unsafe extern "C" fn maybenot_on_events(
     this: *mut MaybenotFramework,
-    event: MaybenotEvent,
+    events: *const MaybenotEvent,
+    num_events: usize,
     actions_out: *mut MaybeUninit<MaybenotAction>,
-    num_actions_out: *mut u64,
+    num_actions_out: *mut usize,
 ) -> MaybenotResult {
     let Some(this) = (unsafe { this.as_mut() }) else {
         return MaybenotResult::NullPointer;
     };
 
-    if num_actions_out.is_null() {
+    if events.is_null() || actions_out.is_null() || num_actions_out.is_null() {
         return MaybenotResult::NullPointer;
     }
+
+    // SAFETY: called promises that `events` points to valid array containing `num_events` events.
+    // Rust arrays have the same layout as C arrays.
+    let events: &[MaybenotEvent] = unsafe { from_raw_parts(events, num_events) };
 
     // SAFETY: called promises that `actions_out` points to valid memory with the capacity to
     // hold at least a `num_machines` amount of `MaybenotAction`. Rust arrays have the same
@@ -112,7 +119,7 @@ pub unsafe extern "C" fn maybenot_on_event(
     let actions: &mut [MaybeUninit<MaybenotAction>] =
         unsafe { from_raw_parts_mut(actions_out, this.framework.num_machines()) };
 
-    let num_actions = this.on_event(event, actions) as u64;
+    let num_actions = this.on_events(events, actions);
     unsafe { num_actions_out.write(num_actions) };
     MaybenotResult::Ok
 }
