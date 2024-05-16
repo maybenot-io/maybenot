@@ -16,4 +16,4 @@ crate-type = ["lib", "staticlib", "cdylib"]
 maybenot = { version = "1.1.1", path = "../maybenot" }
 
 [build-dependencies]
-cbindgen = { version = "=0.26.0", default-features = false }
+cbindgen = { version = "0.26.0", default-features = false }
