@@ -107,9 +107,6 @@ impl MaybenotFramework {
     ) -> Result<Self, MaybenotResult> {
         let machines: Vec<_> = machines_str
             .lines()
-            .map(|line| line.trim())
-            .filter(|line| !line.is_empty())
-            .filter(|line| !line.starts_with('#'))
             .map(Machine::from_str)
             .collect::<Result<_, _>>()
             .map_err(|_e| MaybenotResult::InvalidMachineString)?;
