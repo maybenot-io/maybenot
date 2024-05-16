@@ -384,8 +384,8 @@ where
             machines.as_ref().len()
         ];
 
-        for mi in 0..runtime.len() {
-            runtime[mi].state_limit = machines.as_ref()[mi].states[0].sample_limit();
+        for (machine_runtime, machine) in runtime.iter_mut().zip(machines.as_ref()) {
+            machine_runtime.state_limit = machine.states[0].sample_limit();
         }
 
         let actions = vec![None; machines.as_ref().len()];
