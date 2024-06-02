@@ -2,6 +2,9 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 1.1.2 - 2024-06-02
+- Bump `ring` to 0.17 for Windows ARM64 support (thanks Daniel Paoliello).
+
 ## 1.1.1 - 2024-04-30
 - Added `into_raw()` to MachineId to make Maybenot FFI wrapping easier.
 
