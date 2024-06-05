@@ -55,7 +55,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
     next: &SimEvent,
     sq: &mut SimQueue,
     state: &SimState<M, RngSource>,
-    recipient: &SimState<M, RngSource>,
+    recipient: &mut SimState<M, RngSource>,
     network: &Network,
     current_time: &Instant,
 ) -> bool {
@@ -177,6 +177,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     reported,
                     reporting_delay,
                     Reverse(reported),
+                    &mut recipient.rng,
                 );
 
                 return true;
@@ -194,6 +195,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 reported,
                 reporting_delay,
                 Reverse(reported),
+                &mut recipient.rng,
             );
 
             true
@@ -209,6 +211,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     next.time,
                     next.delay,
                     Reverse(next.time),
+                    &mut recipient.rng,
                 );
             } else {
                 debug!("\tqueue {}", TriggerEvent::NormalRecv);
@@ -219,6 +222,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     next.time,
                     next.delay,
                     Reverse(next.time),
+                    &mut recipient.rng,
                 );
             }
             true

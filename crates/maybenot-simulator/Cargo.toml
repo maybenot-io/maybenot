@@ -19,7 +19,6 @@ priority-queue = "1.4.0"
 maybenot = { path = "../maybenot/" }
 log = "0.4.21"
 test-log = "0.2.15"
-fastrand = "2.0.2"
 serde = "1.0.198"
 rand = "0.8.5"
 serde_json = "1.0.116"

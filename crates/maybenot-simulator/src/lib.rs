@@ -183,7 +183,7 @@ pub struct SimEvent {
     // internal flag to mark event as replace
     replace: bool,
     // prevents collisions in simulator queue (see remove() instead of pop())
-    fuzz: i32,
+    fuzz: u64,
 }
 
 /// ScheduledAction represents an action that is scheduled to be executed at a
@@ -210,6 +210,8 @@ pub struct SimState<M, R> {
     last_sent_time: Instant,
     /// integration aspects for this state
     integration: Option<Integration>,
+    /// per-state RNG, only used for fuzz in SimEvent
+    rng: Xoshiro256StarStar,
 }
 
 impl<M> SimState<M, RngSource>
@@ -224,12 +226,13 @@ where
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
     ) -> Self {
-        let rng = match insecure_rng_seed {
+        let mut rng = match insecure_rng_seed {
             // deterministic, insecure RNG
             Some(seed) => RngSource::Xoshiro(Xoshiro256StarStar::seed_from_u64(seed)),
             // secure RNG, default
             None => RngSource::Thread(rand::thread_rng()),
         };
+        let seed = rng.next_u64();
 
         Self {
             framework: Framework::new(
@@ -250,6 +253,7 @@ where
                 .checked_sub(Duration::from_millis(1000))
                 .unwrap(),
             integration,
+            rng: Xoshiro256StarStar::seed_from_u64(seed),
         }
     }
 
@@ -446,9 +450,9 @@ pub fn sim_advanced(
         // and the server. Returns true if there was network activity (i.e., a
         // packet was sent or received over the network), false otherwise.
         let network_activity = if next.client {
-            sim_network_stack(&next, sq, &client, &server, args.network, &current_time)
+            sim_network_stack(&next, sq, &client, &mut server, args.network, &current_time)
         } else {
-            sim_network_stack(&next, sq, &server, &client, args.network, &current_time)
+            sim_network_stack(&next, sq, &server, &mut client, args.network, &current_time)
         };
 
         if network_activity {
@@ -596,15 +600,19 @@ fn pick_next<M: AsRef<[Machine]>>(
             } else {
                 client.blocking_until >= current_time
             };
+        // fuzz to prevent collisions in the simulator queue
+        let fuzz: u64;
 
         if client_earliest {
             delay = client.reporting_delay();
             time = client.blocking_until + delay;
             client.blocking_until -= Duration::from_micros(1);
+            fuzz = client.rng.next_u64();
         } else {
             delay = server.reporting_delay();
             time = server.blocking_until + delay;
             server.blocking_until -= Duration::from_micros(1);
+            fuzz = server.rng.next_u64();
         }
 
         return Some(SimEvent {
@@ -612,7 +620,7 @@ fn pick_next<M: AsRef<[Machine]>>(
             event: TriggerEvent::BlockingEnd,
             time,
             delay,
-            fuzz: fastrand::i32(..),
+            fuzz,
             bypass: false,
             replace: false,
             contains_padding: false,
@@ -679,7 +687,11 @@ fn do_internal<M: AsRef<[Machine]>>(
         },
         time: target,
         delay: Duration::from_micros(0), // TODO: is this correct?
-        fuzz: fastrand::i32(..),
+        fuzz: if is_client {
+            client.rng.next_u64()
+        } else {
+            server.rng.next_u64()
+        },
         bypass: false,
         replace: false,
         contains_padding: false,
@@ -720,6 +732,12 @@ fn do_scheduled<M: AsRef<[Machine]>>(
         });
     }
 
+    let fuzz = if is_client {
+        client.rng.next_u64()
+    } else {
+        server.rng.next_u64()
+    };
+
     // no action found
     assert!(a.is_some(), "BUG: no action found");
     let a = a.unwrap();
@@ -754,7 +772,7 @@ fn do_scheduled<M: AsRef<[Machine]>>(
                 bypass,
                 replace,
                 contains_padding: true,
-                fuzz: fastrand::i32(..),
+                fuzz,
             })
         }
         TriggerAction::BlockOutgoing {
@@ -798,7 +816,7 @@ fn do_scheduled<M: AsRef<[Machine]>>(
                 bypass: event_bypass,
                 replace: false,
                 contains_padding: false,
-                fuzz: fastrand::i32(..),
+                fuzz,
             })
         }
     }
@@ -889,7 +907,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                             event: TriggerEvent::TimerBegin { machine: *machine },
                             time: *current_time,
                             delay: Duration::from_micros(0), // TODO: is this correct?
-                            fuzz: fastrand::i32(..),
+                            fuzz: state.rng.next_u64(),
                             bypass: false,
                             replace: false,
                             contains_padding: false,
@@ -912,14 +930,15 @@ fn trigger_update<M: AsRef<[Machine]>>(
 /// the trace for use with [`sim`].
 
 pub fn parse_trace(trace: &str, network: &Network) -> SimQueue {
-    parse_trace_advanced(trace, network, None, None)
+    parse_trace_advanced(trace, network, None, None, &mut rand::thread_rng())
 }
 
-pub fn parse_trace_advanced(
+pub fn parse_trace_advanced<R: RngCore>(
     trace: &str,
     network: &Network,
     client: Option<&Integration>,
     server: Option<&Integration>,
+    rng: &mut R,
 ) -> SimQueue {
     let mut sq = SimQueue::new();
 
@@ -952,6 +971,7 @@ pub fn parse_trace_advanced(
                         reported,
                         reporting_delay,
                         Reverse(reported),
+                        rng,
                     );
                 }
                 "r" | "rn" => {
@@ -969,6 +989,7 @@ pub fn parse_trace_advanced(
                         reported,
                         reporting_delay,
                         Reverse(reported),
+                        rng,
                     );
                 }
                 "sp" | "rp" => {

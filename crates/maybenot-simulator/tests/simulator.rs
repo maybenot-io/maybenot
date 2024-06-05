@@ -65,6 +65,7 @@ fn fmt_event(e: &SimEvent, base: Instant) -> String {
 }
 
 fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
+    let mut rng = rand::thread_rng();
     let mut sq = SimQueue::new();
     let integration_delay = Duration::from_micros(0);
 
@@ -85,6 +86,7 @@ fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
                         timestamp,
                         integration_delay,
                         Reverse(timestamp),
+                        &mut rng,
                     );
                 }
                 "r" | "rn" => {
@@ -97,6 +99,7 @@ fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
                         sent,
                         integration_delay,
                         Reverse(sent),
+                        &mut rng,
                     );
                 }
                 _ => {

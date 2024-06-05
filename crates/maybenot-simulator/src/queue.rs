@@ -7,6 +7,7 @@ use std::{
 
 use maybenot::event::TriggerEvent;
 use priority_queue::PriorityQueue;
+use rand::RngCore;
 
 use crate::SimEvent;
 
@@ -43,7 +44,8 @@ impl SimQueue {
         self.len() == 0
     }
 
-    pub fn push(
+    #[allow(clippy::too_many_arguments)]
+    pub fn push<R: RngCore>(
         &mut self,
         event: TriggerEvent,
         is_client: bool,
@@ -51,6 +53,7 @@ impl SimQueue {
         time: Instant,
         delay: Duration,
         priority: Reverse<Instant>,
+        rng: &mut R,
     ) {
         self.push_sim(
             SimEvent {
@@ -61,7 +64,7 @@ impl SimQueue {
                 contains_padding,
                 bypass: false,
                 replace: false,
-                fuzz: fastrand::i32(..),
+                fuzz: rng.next_u64(),
             },
             priority,
         );
