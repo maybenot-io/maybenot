@@ -1,3 +1,4 @@
+CBINDGEN ?= cbindgen
 CARGO ?= cargo
 TARGET ?=
 PROFILE ?= release
@@ -22,8 +23,12 @@ endif
 $(DESTINATION)/libmaybenot.a: $(CARGO_OUTPUT_DIR)/libmaybenot_ffi.a
 	cp $^ $@
 
+# generate maybenot.h
+maybenot.h: src/*.rs Cargo.toml cbindgen.toml
+	${CBINDGEN} -o maybenot.h
+
 # build the static library
-$(CARGO_OUTPUT_DIR)/libmaybenot_ffi.a: src/*.rs Cargo.toml build.rs cbindgen.toml
+$(CARGO_OUTPUT_DIR)/libmaybenot_ffi.a: maybenot.h src/*.rs Cargo.toml cbindgen.toml
 	RUSTFLAGS="-C metadata=maybenot-ffi" ${CARGO} build $(CARGOFLAGS)
 
 clean:
