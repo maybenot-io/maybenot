@@ -13,7 +13,7 @@ repository.workspace = true
 crate-type = ["lib", "staticlib", "cdylib"]
 
 [dependencies]
-maybenot = { version = "1.1.1", path = "../maybenot" }
+maybenot = { version = "1.1.2", path = "../maybenot" }
 
 [build-dependencies]
 cbindgen = { version = "0.26.0", default-features = false }
