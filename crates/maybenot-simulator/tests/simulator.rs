@@ -1,10 +1,7 @@
 use log::debug;
 use maybenot_simulator::{network::Network, parse_trace, queue::SimQueue, sim, SimEvent};
 
-use std::{
-    cmp::Reverse,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use maybenot::{
     action::Action,
@@ -85,7 +82,6 @@ fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
                         false,
                         timestamp,
                         integration_delay,
-                        Reverse(timestamp),
                         &mut rng,
                     );
                 }
@@ -98,7 +94,6 @@ fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
                         false,
                         sent,
                         integration_delay,
-                        Reverse(sent),
                         &mut rng,
                     );
                 }
@@ -426,10 +421,7 @@ fn test_block_and_padding() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        // the order below is not ideal, due to PriorityQueue implementation I
-        // think ... technically still fine, since the network can reorder and
-        // it's on the same time, but still a bit annoying
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rp 20,rn 20,rt 20,rt 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
         Duration::from_micros(5),
         &[m],
         &[],
@@ -540,7 +532,7 @@ fn test_bypass_machine() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rp 20,rn 20,rt 20,rt 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -568,7 +560,7 @@ fn test_bypass_machine() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rp 20,rn 20,rt 20,rt 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -596,7 +588,7 @@ fn test_bypass_machine() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rp 20,rn 20,rt 20,rt 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
         Duration::from_micros(5),
         &[m],
         &[],

@@ -1,7 +1,7 @@
 //! For simulating the network stack and network between client and server.
 
 use std::{
-    cmp::{max, Reverse},
+    cmp::max,
     time::{Duration, Instant},
 };
 
@@ -65,19 +65,16 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
         // here we simulate sending the packet into the tunnel
         TriggerEvent::NormalSent => {
             debug!("\tqueue {}", TriggerEvent::TunnelSent);
-            sq.push_sim(
-                SimEvent {
-                    event: TriggerEvent::TunnelSent,
-                    time: next.time,
-                    delay: next.delay,
-                    client: next.client,
-                    contains_padding: false,
-                    bypass: next.bypass,
-                    replace: next.replace,
-                    fuzz: next.fuzz,
-                },
-                Reverse(next.time),
-            );
+            sq.push_sim(SimEvent {
+                event: TriggerEvent::TunnelSent,
+                time: next.time,
+                delay: next.delay,
+                client: next.client,
+                contains_padding: false,
+                bypass: next.bypass,
+                replace: next.replace,
+                fuzz: next.fuzz,
+            });
             false
         }
         // here we simulate sending the packet into the tunnel
@@ -105,7 +102,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 // network replace window? FIXME: here be bugs related to
                 // integration delays.
                 let peek = sq.peek_blocking(state.blocking_bypassable, next.client);
-                if let Some((queued, _)) = peek {
+                if let Some(queued) = peek {
                     let queued = queued.clone();
                     debug!(
                         "\treplace with queued? {:?} <= {:?}",
@@ -130,26 +127,23 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                         // change flags and potentially time, which
                         // changes the priority
                         sq.remove(&queued);
-                        sq.push_sim(tmp.clone(), Reverse(tmp.time));
+                        sq.push_sim(tmp.clone());
                         return false;
                     }
                 }
             }
             // nothing to replace with (or we're not replacing), so queue up
             debug!("\tqueue {}", TriggerEvent::TunnelSent);
-            sq.push_sim(
-                SimEvent {
-                    event: TriggerEvent::TunnelSent,
-                    time: next.time,
-                    delay: next.delay,
-                    client: next.client,
-                    contains_padding: true,
-                    bypass: next.bypass,
-                    replace: next.replace,
-                    fuzz: next.fuzz,
-                },
-                Reverse(next.time),
-            );
+            sq.push_sim(SimEvent {
+                event: TriggerEvent::TunnelSent,
+                time: next.time,
+                delay: next.delay,
+                client: next.client,
+                contains_padding: true,
+                bypass: next.bypass,
+                replace: next.replace,
+                fuzz: next.fuzz,
+            });
             false
         }
         TriggerEvent::TunnelSent => {
@@ -176,7 +170,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     false,
                     reported,
                     reporting_delay,
-                    Reverse(reported),
                     &mut recipient.rng,
                 );
 
@@ -194,7 +187,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 true,
                 reported,
                 reporting_delay,
-                Reverse(reported),
                 &mut recipient.rng,
             );
 
@@ -210,7 +202,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     true,
                     next.time,
                     next.delay,
-                    Reverse(next.time),
                     &mut recipient.rng,
                 );
             } else {
@@ -221,7 +212,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     false,
                     next.time,
                     next.delay,
-                    Reverse(next.time),
                     &mut recipient.rng,
                 );
             }

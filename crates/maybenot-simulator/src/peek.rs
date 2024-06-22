@@ -20,7 +20,7 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
     if sq.is_empty() {
         return (Duration::MAX, None);
     }
-    let peek = sq.peek().unwrap().0.clone();
+    let peek = sq.peek().unwrap().clone();
 
     // easy: non-blocking event first
     if !peek.event.is_event(Event::TunnelSent) {
@@ -103,12 +103,10 @@ fn peek_queue_earliest_side(
     // OK, bummer, we have to peek for the next blocking and non-blocking: note
     // that this takes into account if blocking is bypassable or not, picking the
     // earliest next event from the queue.
-    let peek_blocking = sq
-        .peek_blocking(blocking_bypassable, is_client)
-        .map(|(e, _)| e.clone());
+    let peek_blocking = sq.peek_blocking(blocking_bypassable, is_client).cloned();
     let peek_non_blocking = sq
         .peek_non_blocking(blocking_bypassable, is_client)
-        .map(|(e, _)| e.clone());
+        .cloned();
 
     // easy: no events to consider
     if peek_blocking.is_none() && peek_non_blocking.is_none() {

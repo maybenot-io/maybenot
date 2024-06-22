@@ -14,7 +14,6 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-priority-queue = "1.4.0"
 # defaults to relative path in workspace
 maybenot = { path = "../maybenot/" }
 log = "0.4.21"

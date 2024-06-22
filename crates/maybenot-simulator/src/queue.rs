@@ -1,12 +1,11 @@
 //! The main queue of events in the simulator.
 
 use std::{
-    cmp::Reverse,
+    collections::BinaryHeap,
     time::{Duration, Instant},
 };
 
 use maybenot::event::TriggerEvent;
-use priority_queue::PriorityQueue;
 use rand::RngCore;
 
 use crate::SimEvent;
@@ -52,32 +51,28 @@ impl SimQueue {
         contains_padding: bool,
         time: Instant,
         delay: Duration,
-        priority: Reverse<Instant>,
         rng: &mut R,
     ) {
-        self.push_sim(
-            SimEvent {
-                event,
-                time,
-                delay,
-                client: is_client,
-                contains_padding,
-                bypass: false,
-                replace: false,
-                fuzz: rng.next_u64(),
-            },
-            priority,
-        );
+        self.push_sim(SimEvent {
+            event,
+            time,
+            delay,
+            client: is_client,
+            contains_padding,
+            bypass: false,
+            replace: false,
+            fuzz: rng.next_u64(),
+        });
     }
 
-    pub fn push_sim(&mut self, item: SimEvent, priority: Reverse<Instant>) {
+    pub fn push_sim(&mut self, item: SimEvent) {
         match item.client {
-            true => self.client.push(item, priority),
-            false => self.server.push(item, priority),
+            true => self.client.push(item),
+            false => self.server.push(item),
         }
     }
 
-    pub fn peek(&self) -> Option<(&SimEvent, &Reverse<Instant>)> {
+    pub fn peek(&self) -> Option<&SimEvent> {
         match self.len() {
             0 => None,
             _ => {
@@ -85,9 +80,10 @@ impl SimQueue {
                 let c = self.client.peek();
                 let s = self.server.peek();
 
-                match before(c, s) {
-                    true => c,
-                    false => s,
+                if c > s {
+                    c
+                } else {
+                    s
                 }
             }
         }
@@ -100,11 +96,7 @@ impl SimQueue {
         }
     }
 
-    pub fn peek_blocking(
-        &self,
-        blocking_bypassable: bool,
-        is_client: bool,
-    ) -> Option<(&SimEvent, &Reverse<Instant>)> {
+    pub fn peek_blocking(&self, blocking_bypassable: bool, is_client: bool) -> Option<&SimEvent> {
         match is_client {
             true => peak_blocking(&self.client, blocking_bypassable),
             false => peak_blocking(&self.server, blocking_bypassable),
@@ -115,7 +107,7 @@ impl SimQueue {
         &self,
         blocking_bypassable: bool,
         is_client: bool,
-    ) -> Option<(&SimEvent, &Reverse<Instant>)> {
+    ) -> Option<&SimEvent> {
         match is_client {
             true => peak_non_blocking(&self.client, blocking_bypassable),
             false => peak_non_blocking(&self.server, blocking_bypassable),
@@ -123,10 +115,7 @@ impl SimQueue {
     }
 }
 
-fn peak_blocking(
-    queue: &EventQueue,
-    blocking_bypassable: bool,
-) -> Option<(&SimEvent, &Reverse<Instant>)> {
+fn peak_blocking(queue: &EventQueue, blocking_bypassable: bool) -> Option<&SimEvent> {
     if blocking_bypassable {
         // only blocking events are then blocking
         queue.peek_blocking()
@@ -136,26 +125,25 @@ fn peak_blocking(
         let b = queue.peek_blocking();
         let bb = queue.peek_blocking_bypassable();
 
-        match before(b, bb) {
-            true => b,
-            false => bb,
+        if b > bb {
+            b
+        } else {
+            bb
         }
     }
 }
 
-fn peak_non_blocking(
-    queue: &EventQueue,
-    blocking_bypassable: bool,
-) -> Option<(&SimEvent, &Reverse<Instant>)> {
+fn peak_non_blocking(queue: &EventQueue, blocking_bypassable: bool) -> Option<&SimEvent> {
     if blocking_bypassable {
         // if the current blocking is not bypassable, then we need to
         // consider blocking_bypassable as a non_blocking event
         let bb = queue.peek_blocking_bypassable();
         let n = queue.peek_non_blocking();
 
-        match before(bb, n) {
-            true => bb,
-            false => n,
+        if bb > n {
+            bb
+        } else {
+            n
         }
     } else {
         // only non_blocking events are then non_blocking
@@ -172,17 +160,17 @@ fn peak_non_blocking(
 /// 3. non_blocking: events that are always not blocking.
 #[derive(Debug, Clone)]
 struct EventQueue {
-    blocking: PriorityQueue<SimEvent, Reverse<Instant>>,
-    blocking_bypassable: PriorityQueue<SimEvent, Reverse<Instant>>,
-    non_blocking: PriorityQueue<SimEvent, Reverse<Instant>>,
+    blocking: BinaryHeap<SimEvent>,
+    blocking_bypassable: BinaryHeap<SimEvent>,
+    non_blocking: BinaryHeap<SimEvent>,
 }
 
 impl EventQueue {
     pub fn new() -> EventQueue {
         EventQueue {
-            blocking: PriorityQueue::new(),
-            blocking_bypassable: PriorityQueue::new(),
-            non_blocking: PriorityQueue::new(),
+            blocking: BinaryHeap::with_capacity(1024),
+            blocking_bypassable: BinaryHeap::with_capacity(1024),
+            non_blocking: BinaryHeap::with_capacity(5000),
         }
     }
 
@@ -190,21 +178,21 @@ impl EventQueue {
         self.blocking.len() + self.blocking_bypassable.len() + self.non_blocking.len()
     }
 
-    pub fn push(&mut self, item: SimEvent, priority: Reverse<Instant>) {
+    pub fn push(&mut self, item: SimEvent) {
         match item.event {
             TriggerEvent::TunnelSent => {
                 match item.bypass {
-                    true => self.blocking_bypassable.push(item, priority),
-                    false => self.blocking.push(item, priority),
+                    true => self.blocking_bypassable.push(item),
+                    false => self.blocking.push(item),
                 };
             }
             _ => {
-                self.non_blocking.push(item, priority);
+                self.non_blocking.push(item);
             }
         }
     }
 
-    pub fn peek(&self) -> Option<(&SimEvent, &Reverse<Instant>)> {
+    pub fn peek(&self) -> Option<&SimEvent> {
         match self.len() {
             0 => None,
             _ => {
@@ -214,10 +202,10 @@ impl EventQueue {
                 let n = self.non_blocking.peek();
 
                 // is b first?
-                if before(b, bb) && before(b, n) {
+                if b > bb && b > n {
                     b
                 // is bb first?
-                } else if before(bb, n) {
+                } else if bb > n {
                     bb
                 // has to be n then
                 } else {
@@ -231,39 +219,25 @@ impl EventQueue {
         match item.event {
             TriggerEvent::TunnelSent => {
                 match item.bypass {
-                    true => self.blocking_bypassable.remove(item),
-                    false => self.blocking.remove(item),
+                    true => self.blocking_bypassable.pop(),
+                    false => self.blocking.pop(),
                 };
             }
             _ => {
-                self.non_blocking.remove(item);
+                self.non_blocking.pop();
             }
         }
     }
 
-    pub fn peek_blocking(&self) -> Option<(&SimEvent, &Reverse<Instant>)> {
+    pub fn peek_blocking(&self) -> Option<&SimEvent> {
         self.blocking.peek()
     }
 
-    pub fn peek_blocking_bypassable(&self) -> Option<(&SimEvent, &Reverse<Instant>)> {
+    pub fn peek_blocking_bypassable(&self) -> Option<&SimEvent> {
         self.blocking_bypassable.peek()
     }
 
-    pub fn peek_non_blocking(&self) -> Option<(&SimEvent, &Reverse<Instant>)> {
+    pub fn peek_non_blocking(&self) -> Option<&SimEvent> {
         self.non_blocking.peek()
-    }
-}
-
-fn before(
-    a: Option<(&SimEvent, &Reverse<Instant>)>,
-    b: Option<(&SimEvent, &Reverse<Instant>)>,
-) -> bool {
-    // is a before b?
-    match a {
-        Some((_, ai)) => match b {
-            Some((_, bi)) => ai.0.cmp(&bi.0).is_le(),
-            None => true, // something is before nothing
-        },
-        None => false,
     }
 }

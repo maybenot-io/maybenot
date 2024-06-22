@@ -108,7 +108,7 @@ pub mod peek;
 pub mod queue;
 
 use std::{
-    cmp::{Ordering, Reverse},
+    cmp::Ordering,
     collections::HashMap,
     time::{Duration, Instant},
 };
@@ -184,6 +184,41 @@ pub struct SimEvent {
     replace: bool,
     // prevents collisions in simulator queue (see remove() instead of pop())
     fuzz: u64,
+}
+
+/// Helper function to convert a TriggerEvent to a usize for sorting purposes.
+fn event_to_usize(e: &TriggerEvent) -> usize {
+    match e {
+        // tunnel before normal before padding
+        TriggerEvent::TunnelSent => 0,
+        TriggerEvent::NormalSent => 1,
+        TriggerEvent::PaddingSent { .. } => 2,
+        TriggerEvent::TunnelRecv => 3,
+        TriggerEvent::NormalRecv => 4,
+        TriggerEvent::PaddingRecv => 5,
+        // begin before end
+        TriggerEvent::BlockingBegin { .. } => 6,
+        TriggerEvent::BlockingEnd => 7,
+        TriggerEvent::TimerBegin { .. } => 8,
+        TriggerEvent::TimerEnd { .. } => 9,
+    }
+}
+
+// for SimEvent, implement Ord and PartialOrd to allow for sorting by time
+impl Ord for SimEvent {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // reverse order to get the smallest time first
+        self.time
+            .cmp(&other.time)
+            .then_with(|| event_to_usize(&self.event).cmp(&event_to_usize(&other.event)))
+            .reverse()
+    }
+}
+
+impl PartialOrd for SimEvent {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 /// ScheduledAction represents an action that is scheduled to be executed at a
@@ -379,10 +414,16 @@ pub fn sim_advanced(
     args: &SimulatorArgs<'_>,
 ) -> Vec<SimEvent> {
     // the resulting simulated trace
-    let mut trace: Vec<SimEvent> = vec![];
+    let expected_trace_len = if args.max_trace_length > 0 {
+        args.max_trace_length
+    } else {
+        // a rough estimate of the number of events in the trace
+        sq.len() * 2
+    };
+    let mut trace: Vec<SimEvent> = Vec::with_capacity(expected_trace_len);
 
     // put the mocked current time at the first event
-    let mut current_time = sq.peek().unwrap().0.time;
+    let mut current_time = sq.peek().unwrap().time;
 
     let mut client = SimState::new(
         machines_client,
@@ -634,7 +675,7 @@ fn pick_next<M: AsRef<[Machine]>>(
         let target = current_time + i;
         let act = do_internal(client, server, target);
         if let Some(a) = act {
-            sq.push_sim(a.clone(), Reverse(a.time));
+            sq.push_sim(a.clone());
         }
         return pick_next(sq, client, server, current_time);
     }
@@ -645,7 +686,7 @@ fn pick_next<M: AsRef<[Machine]>>(
     let target = current_time + s;
     let act = do_scheduled(client, server, target);
     if let Some(a) = act {
-        sq.push_sim(a.clone(), Reverse(a.time));
+        sq.push_sim(a.clone());
     }
     pick_next(sq, client, server, current_time)
 }
@@ -901,19 +942,16 @@ fn trigger_update<M: AsRef<[Machine]>>(
                         .scheduled_internal
                         .insert(*machine, Some(*current_time + *duration));
                     // TimerBegin event
-                    sq.push_sim(
-                        SimEvent {
-                            client: is_client,
-                            event: TriggerEvent::TimerBegin { machine: *machine },
-                            time: *current_time,
-                            delay: Duration::from_micros(0), // TODO: is this correct?
-                            fuzz: state.rng.next_u64(),
-                            bypass: false,
-                            replace: false,
-                            contains_padding: false,
-                        },
-                        Reverse(*current_time),
-                    );
+                    sq.push_sim(SimEvent {
+                        client: is_client,
+                        event: TriggerEvent::TimerBegin { machine: *machine },
+                        time: *current_time,
+                        delay: Duration::from_micros(0), // TODO: is this correct?
+                        fuzz: state.rng.next_u64(),
+                        bypass: false,
+                        replace: false,
+                        contains_padding: false,
+                    });
                 }
             }
         };
@@ -970,7 +1008,6 @@ pub fn parse_trace_advanced<R: RngCore>(
                         false,
                         reported,
                         reporting_delay,
-                        Reverse(reported),
                         rng,
                     );
                 }
@@ -988,7 +1025,6 @@ pub fn parse_trace_advanced<R: RngCore>(
                         false,
                         reported,
                         reporting_delay,
-                        Reverse(reported),
                         rng,
                     );
                 }
