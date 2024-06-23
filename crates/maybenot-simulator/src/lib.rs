@@ -109,7 +109,6 @@ pub mod queue;
 
 use std::{
     cmp::Ordering,
-    collections::HashMap,
     time::{Duration, Instant},
 };
 
@@ -182,8 +181,6 @@ pub struct SimEvent {
     bypass: bool,
     // internal flag to mark event as replace
     replace: bool,
-    // prevents collisions in simulator queue (see remove() instead of pop())
-    fuzz: u64,
 }
 
 /// Helper function to convert a TriggerEvent to a usize for sorting purposes.
@@ -234,9 +231,9 @@ pub struct SimState<M, R> {
     /// an instance of the Maybenot framework
     framework: Framework<M, R>,
     /// scheduled action timers
-    scheduled_action: HashMap<MachineId, Option<ScheduledAction>>,
+    scheduled_action: Vec<Option<ScheduledAction>>,
     /// scheduled internal timers
-    scheduled_internal: HashMap<MachineId, Option<Instant>>,
+    scheduled_internal: Vec<Option<Instant>>,
     /// blocking time (active if in the future, relative to current_time)
     blocking_until: Instant,
     /// whether the active blocking bypassable or not
@@ -245,8 +242,6 @@ pub struct SimState<M, R> {
     last_sent_time: Instant,
     /// integration aspects for this state
     integration: Option<Integration>,
-    /// per-state RNG, only used for fuzz in SimEvent
-    rng: Xoshiro256StarStar,
 }
 
 impl<M> SimState<M, RngSource>
@@ -261,13 +256,14 @@ where
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
     ) -> Self {
-        let mut rng = match insecure_rng_seed {
+        let rng = match insecure_rng_seed {
             // deterministic, insecure RNG
             Some(seed) => RngSource::Xoshiro(Xoshiro256StarStar::seed_from_u64(seed)),
             // secure RNG, default
             None => RngSource::Thread(rand::thread_rng()),
         };
-        let seed = rng.next_u64();
+
+        let num_machines = machines.as_ref().len();
 
         Self {
             framework: Framework::new(
@@ -278,8 +274,8 @@ where
                 rng,
             )
             .unwrap(),
-            scheduled_action: HashMap::new(),
-            scheduled_internal: HashMap::new(),
+            scheduled_action: vec![None; num_machines],
+            scheduled_internal: vec![None; num_machines],
             // has to be in the past
             blocking_until: current_time.checked_sub(Duration::from_micros(1)).unwrap(),
             blocking_bypassable: false,
@@ -288,7 +284,6 @@ where
                 .checked_sub(Duration::from_millis(1000))
                 .unwrap(),
             integration,
-            rng: Xoshiro256StarStar::seed_from_u64(seed),
         }
     }
 
@@ -423,7 +418,7 @@ pub fn sim_advanced(
     let mut trace: Vec<SimEvent> = Vec::with_capacity(expected_trace_len);
 
     // put the mocked current time at the first event
-    let mut current_time = sq.peek().unwrap().time;
+    let mut current_time = sq.peek().0.unwrap().time;
 
     let mut client = SimState::new(
         machines_client,
@@ -603,7 +598,7 @@ fn pick_next<M: AsRef<[Machine]>>(
     debug!("\tpick_next(): peek_internal = {:?}", i);
     let b = peek_blocked_exp(&client.blocking_until, &server.blocking_until, current_time);
     debug!("\tpick_next(): peek_blocked_exp = {:?}", b);
-    let (q, q_peek) = peek_queue(sq, client, server, s.min(b), current_time);
+    let (q, qid, q_is_client) = peek_queue(sq, client, server, s, current_time);
     debug!("\tpick_next(): peek_queue = {:?}", q);
 
     // no next?
@@ -616,13 +611,14 @@ fn pick_next<M: AsRef<[Machine]>>(
     // bulk trigger events in the framework.
     if q <= s && q <= i && q <= b {
         debug!("\tpick_next(): picked queue");
-        sq.remove(q_peek.as_ref().unwrap());
-
+        let tmp = sq.remove(qid, q_is_client);
+        tmp.as_ref()?;
+        let mut tmp = tmp.unwrap();
         // check if blocking moves the event forward in time
-        let mut tmp = q_peek.unwrap();
         if current_time + q > tmp.time {
             tmp.time = current_time + q;
         }
+
         return Some(tmp);
     }
 
@@ -641,19 +637,15 @@ fn pick_next<M: AsRef<[Machine]>>(
             } else {
                 client.blocking_until >= current_time
             };
-        // fuzz to prevent collisions in the simulator queue
-        let fuzz: u64;
 
         if client_earliest {
             delay = client.reporting_delay();
             time = client.blocking_until + delay;
             client.blocking_until -= Duration::from_micros(1);
-            fuzz = client.rng.next_u64();
         } else {
             delay = server.reporting_delay();
             time = server.blocking_until + delay;
             server.blocking_until -= Duration::from_micros(1);
-            fuzz = server.rng.next_u64();
         }
 
         return Some(SimEvent {
@@ -661,7 +653,6 @@ fn pick_next<M: AsRef<[Machine]>>(
             event: TriggerEvent::BlockingEnd,
             time,
             delay,
-            fuzz,
             bypass: false,
             replace: false,
             contains_padding: false,
@@ -699,23 +690,28 @@ fn do_internal<M: AsRef<[Machine]>>(
     let mut machine: Option<MachineId> = None;
     let mut is_client = false;
 
-    client.scheduled_internal.retain(|mi, t| {
-        if *t == Some(target) {
-            machine = Some(*mi);
-            is_client = true;
-            return false;
+    for (id, opt) in client.scheduled_internal.iter_mut().enumerate() {
+        if let Some(a) = opt {
+            if *a == target {
+                machine = Some(MachineId::from_raw(id));
+                is_client = true;
+                *opt = None;
+                break;
+            }
         }
-        true
-    });
+    }
 
     if machine.is_none() {
-        server.scheduled_internal.retain(|mi, t| {
-            if *t == Some(target) {
-                machine = Some(*mi);
-                return false;
+        for (id, opt) in server.scheduled_internal.iter_mut().enumerate() {
+            if let Some(a) = opt {
+                if *a == target {
+                    machine = Some(MachineId::from_raw(id));
+                    is_client = false;
+                    *opt = None;
+                    break;
+                }
             }
-            true
-        });
+        }
     }
 
     assert!(machine.is_some(), "BUG: no internal action found");
@@ -728,11 +724,6 @@ fn do_internal<M: AsRef<[Machine]>>(
         },
         time: target,
         delay: Duration::from_micros(0), // TODO: is this correct?
-        fuzz: if is_client {
-            client.rng.next_u64()
-        } else {
-            server.rng.next_u64()
-        },
         bypass: false,
         replace: false,
         contains_padding: false,
@@ -748,36 +739,30 @@ fn do_scheduled<M: AsRef<[Machine]>>(
     let mut a: Option<ScheduledAction> = None;
     let mut is_client = false;
 
-    client.scheduled_action.retain(|&_mi, sa| {
-        if let Some(sa) = sa {
-            if a.is_none() && sa.time == target {
+    for opt in client.scheduled_action.iter_mut() {
+        if let Some(sa) = opt {
+            if sa.time == target {
                 a = Some(sa.clone());
                 is_client = true;
-                return false;
-            };
+                *opt = None;
+                break;
+            }
         }
-        true
-    });
+    }
 
     // cannot schedule a None action, so if we found one, done
     if a.is_none() {
-        server.scheduled_action.retain(|&_mi, sa| {
-            if let Some(sa) = sa {
-                if a.is_none() && sa.time == target {
+        for opt in server.scheduled_action.iter_mut() {
+            if let Some(sa) = opt {
+                if sa.time == target {
                     a = Some(sa.clone());
                     is_client = false;
-                    return false;
-                };
+                    *opt = None;
+                    break;
+                }
             }
-            true
-        });
+        }
     }
-
-    let fuzz = if is_client {
-        client.rng.next_u64()
-    } else {
-        server.rng.next_u64()
-    };
 
     // no action found
     assert!(a.is_some(), "BUG: no action found");
@@ -813,7 +798,6 @@ fn do_scheduled<M: AsRef<[Machine]>>(
                 bypass,
                 replace,
                 contains_padding: true,
-                fuzz,
             })
         }
         TriggerAction::BlockOutgoing {
@@ -857,7 +841,6 @@ fn do_scheduled<M: AsRef<[Machine]>>(
                 bypass: event_bypass,
                 replace: false,
                 contains_padding: false,
-                fuzz,
             })
         }
     }
@@ -883,14 +866,14 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 // cancel actions
                 match timer {
                     Timer::Action => {
-                        state.scheduled_action.insert(*machine, None);
+                        state.scheduled_action[machine.into_raw()] = None;
                     }
                     Timer::Internal => {
-                        state.scheduled_internal.insert(*machine, None);
+                        state.scheduled_internal[machine.into_raw()] = None;
                     }
                     Timer::All => {
-                        state.scheduled_action.insert(*machine, None);
-                        state.scheduled_internal.insert(*machine, None);
+                        state.scheduled_action[machine.into_raw()] = None;
+                        state.scheduled_internal[machine.into_raw()] = None;
                     }
                 }
             }
@@ -900,13 +883,10 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 replace: _,
                 machine,
             } => {
-                state.scheduled_action.insert(
-                    *machine,
-                    Some(ScheduledAction {
-                        action: action.clone(),
-                        time: *current_time + *timeout + trigger_delay,
-                    }),
-                );
+                state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
+                    action: action.clone(),
+                    time: *current_time + *timeout + trigger_delay,
+                });
             }
             TriggerAction::BlockOutgoing {
                 timeout,
@@ -915,13 +895,10 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 replace: _,
                 machine,
             } => {
-                state.scheduled_action.insert(
-                    *machine,
-                    Some(ScheduledAction {
-                        action: action.clone(),
-                        time: *current_time + *timeout + trigger_delay,
-                    }),
-                );
+                state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
+                    action: action.clone(),
+                    time: *current_time + *timeout + trigger_delay,
+                });
             }
             TriggerAction::UpdateTimer {
                 duration,
@@ -929,25 +906,17 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 machine,
             } => {
                 // get current internal timer duration, if any
-                let current = state
-                    .scheduled_internal
-                    .get(machine)
-                    .cloned()
-                    .unwrap_or(Some(*current_time))
-                    .unwrap();
+                let current = state.scheduled_internal[machine.into_raw()].unwrap_or(*current_time);
 
                 // update the timer
                 if *replace || current < *current_time + *duration {
-                    state
-                        .scheduled_internal
-                        .insert(*machine, Some(*current_time + *duration));
+                    state.scheduled_internal[machine.into_raw()] = Some(*current_time + *duration);
                     // TimerBegin event
                     sq.push_sim(SimEvent {
                         client: is_client,
                         event: TriggerEvent::TimerBegin { machine: *machine },
                         time: *current_time,
                         delay: Duration::from_micros(0), // TODO: is this correct?
-                        fuzz: state.rng.next_u64(),
                         bypass: false,
                         replace: false,
                         contains_padding: false,
@@ -968,15 +937,14 @@ fn trigger_update<M: AsRef<[Machine]>>(
 /// the trace for use with [`sim`].
 
 pub fn parse_trace(trace: &str, network: &Network) -> SimQueue {
-    parse_trace_advanced(trace, network, None, None, &mut rand::thread_rng())
+    parse_trace_advanced(trace, network, None, None)
 }
 
-pub fn parse_trace_advanced<R: RngCore>(
+pub fn parse_trace_advanced(
     trace: &str,
     network: &Network,
     client: Option<&Integration>,
     server: Option<&Integration>,
-    rng: &mut R,
 ) -> SimQueue {
     let mut sq = SimQueue::new();
 
@@ -1008,7 +976,6 @@ pub fn parse_trace_advanced<R: RngCore>(
                         false,
                         reported,
                         reporting_delay,
-                        rng,
                     );
                 }
                 "r" | "rn" => {
@@ -1025,7 +992,6 @@ pub fn parse_trace_advanced<R: RngCore>(
                         false,
                         reported,
                         reporting_delay,
-                        rng,
                     );
                 }
                 "sp" | "rp" => {

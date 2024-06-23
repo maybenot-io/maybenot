@@ -59,7 +59,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
     network: &Network,
     current_time: &Instant,
 ) -> bool {
-    let side = if next.client { "client" } else { "server" }.to_string();
+    let side = if next.client { "client" } else { "server" };
 
     match next.event {
         // here we simulate sending the packet into the tunnel
@@ -73,7 +73,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 contains_padding: false,
                 bypass: next.bypass,
                 replace: next.replace,
-                fuzz: next.fuzz,
             });
             false
         }
@@ -101,9 +100,9 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 // can replace with normal that's queued to be sent within the
                 // network replace window? FIXME: here be bugs related to
                 // integration delays.
-                let peek = sq.peek_blocking(state.blocking_bypassable, next.client);
-                if let Some(queued) = peek {
-                    let queued = queued.clone();
+                if let (Some(queued), qid) =
+                    sq.peek_blocking(state.blocking_bypassable, next.client)
+                {
                     debug!(
                         "\treplace with queued? {:?} <= {:?}",
                         queued.time.duration_since(next.time),
@@ -123,11 +122,12 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                         tmp.replace = false;
                         // we send the NormalSent now since it is queued
                         tmp.time = next.time;
+
                         // we need to remove and push, because we
                         // change flags and potentially time, which
                         // changes the priority
-                        sq.remove(&queued);
-                        sq.push_sim(tmp.clone());
+                        sq.pop_blocking(qid, state.blocking_bypassable, next.client);
+                        sq.push_sim(tmp);
                         return false;
                     }
                 }
@@ -142,7 +142,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 contains_padding: true,
                 bypass: next.bypass,
                 replace: next.replace,
-                fuzz: next.fuzz,
             });
             false
         }
@@ -170,7 +169,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     false,
                     reported,
                     reporting_delay,
-                    &mut recipient.rng,
                 );
 
                 return true;
@@ -187,7 +185,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 true,
                 reported,
                 reporting_delay,
-                &mut recipient.rng,
             );
 
             true
@@ -202,7 +199,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     true,
                     next.time,
                     next.delay,
-                    &mut recipient.rng,
                 );
             } else {
                 debug!("\tqueue {}", TriggerEvent::NormalRecv);
@@ -212,7 +208,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     false,
                     next.time,
                     next.delay,
-                    &mut recipient.rng,
                 );
             }
             true

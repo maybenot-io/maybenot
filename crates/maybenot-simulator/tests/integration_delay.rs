@@ -58,8 +58,7 @@ fn run_sim(
         100000000,s,100";
     let network = Network::new(Duration::from_millis(5));
 
-    let mut input_trace =
-        parse_trace_advanced(raw_trace, &network, client, server, &mut rand::thread_rng());
+    let mut input_trace = parse_trace_advanced(raw_trace, &network, client, server);
 
     let mut args = SimulatorArgs::new(&network, 100, true);
     args.client_integration = client;
