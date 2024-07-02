@@ -13,6 +13,7 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
     sq: &SimQueue,
     client: &SimState<M, RngSource>,
     server: &SimState<M, RngSource>,
+    network_delay_sum: Duration,
     earliest: Duration,
     current_time: Instant,
 ) -> (Duration, Queue, bool) {
@@ -20,12 +21,21 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
     if sq.is_empty() {
         return (Duration::MAX, Queue::Blocking, false);
     }
-    let (peek, queue, is_client) = sq.peek();
+
+    // peek, taking any accumulated network delay into account, computing the
+    // duration since the current time for the peeked event
+    let (peek, queue, duration_since) = sq.peek(network_delay_sum, current_time);
     let peek = peek.unwrap();
+
+    // if the earliest peeked is *after* the earliest found by other peeks(),
+    // then looking further is pointless as far as pick_next() is concerned
+    if duration_since > earliest {
+        return (Duration::MAX, Queue::Blocking, false);
+    }
 
     // easy: non-blocking event first
     if !peek.event.is_event(Event::TunnelSent) {
-        return (peek.time.duration_since(current_time), queue, is_client);
+        return (duration_since, queue, peek.client);
     }
 
     let client_blocking = client.blocking_until > current_time;
@@ -33,20 +43,12 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
 
     // easy: no active blocking to consider
     if !client_blocking && !server_blocking {
-        return (peek.time.duration_since(current_time), queue, is_client);
+        return (duration_since, queue, peek.client);
     }
 
     // lucky: peek not blocked means it's earliest
     if (peek.client && !client_blocking) || (!peek.client && !server_blocking) {
-        return (peek.time.duration_since(current_time), queue, is_client);
-    }
-
-    // another way out: if the earliest peeked is *after* the earliest found by
-    // peek_scheduled() and peek_blocked_exp(), then looking further is
-    // pointless as far as pick_next() is concerned (note that this is OK
-    // because blocking can only delay any event further)
-    if peek.time.duration_since(current_time) > earliest {
-        return (Duration::MAX, Queue::Blocking, false);
+        return (duration_since, queue, peek.client);
     }
 
     // peek is blocked but the event is padding that should bypass blocking AND
@@ -64,7 +66,7 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
             && (peek.event.is_event(Event::TunnelSent))
             && peek.bypass)
     {
-        return (peek.time.duration_since(current_time), queue, is_client);
+        return (duration_since, queue, peek.client);
     }
 
     // not lucky, things get ugly...we have to consider both sides: find
@@ -102,8 +104,8 @@ fn peek_queue_earliest_side(
     is_client: bool,
 ) -> (Duration, Queue, bool) {
     // OK, bummer, we have to peek for the next blocking and non-blocking: note
-    // that this takes into account if blocking is bypassable or not, picking the
-    // earliest next event from the queue.
+    // that this takes into account if blocking is bypassable or not, picking
+    // the earliest next event from the queue.
     let (peek_blocking, bid) = sq.peek_blocking(blocking_bypassable, is_client);
     let (peek_non_blocking, nid) = sq.peek_non_blocking(blocking_bypassable, is_client);
 
@@ -116,7 +118,7 @@ fn peek_queue_earliest_side(
     if peek_blocking.is_none() {
         return (
             peek_non_blocking.unwrap().time.duration_since(current_time),
-            Queue::NonBlocking,
+            nid,
             is_client,
         );
     }

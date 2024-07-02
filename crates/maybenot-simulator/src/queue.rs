@@ -7,7 +7,7 @@ use std::{
 
 use maybenot::event::TriggerEvent;
 
-use crate::SimEvent;
+use crate::{event_to_usize, SimEvent};
 
 /// SimQueue represents the queue of events that are to be processed by the
 /// simulator. It is a wrapper around an EventQueue for the client and an
@@ -42,7 +42,6 @@ impl SimQueue {
         self.len() == 0
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn push(
         &mut self,
         event: TriggerEvent,
@@ -54,11 +53,12 @@ impl SimQueue {
         self.push_sim(SimEvent {
             event,
             time,
-            delay,
+            integration_delay: delay,
             client: is_client,
             contains_padding,
             bypass: false,
             replace: false,
+            base_delay: None,
         });
     }
 
@@ -69,193 +69,294 @@ impl SimQueue {
         }
     }
 
-    pub fn peek(&self) -> (Option<&SimEvent>, Queue, bool) {
+    pub fn peek(
+        &self,
+        network_delay_sum: Duration,
+        current_time: Instant,
+    ) -> (Option<&SimEvent>, Queue, Duration) {
         match self.len() {
-            0 => (None, Queue::Blocking, false),
+            0 => (None, Queue::Blocking, Duration::default()),
             _ => {
-                // peak all, per def, it's one of them
-                let (c, cq) = self.client.peek();
-                let (s, sq) = self.server.peek();
+                // peek all, per def, it's one of them
+                let (c, cq, cd) = self.client.peek(network_delay_sum, current_time);
+                let (s, sq, sd) = self.server.peek(network_delay_sum, current_time);
 
-                if c > s {
-                    (c, cq, true)
-                } else {
-                    (s, sq, false)
+                // if one of the queues is empty, return the other, otherwise
+                // compare based on the smallest duration, and if equal, based
+                // on the event type: this is needed due to peek() above
+                // accounting for the network delay sum for base events
+                match (c, s) {
+                    (None, Some(_)) => (s, sq, sd),
+                    (Some(_), None) => (c, cq, cd),
+                    (None, None) => (None, Queue::Blocking, Duration::default()),
+                    (Some(ce), Some(se)) => {
+                        if cd
+                            .cmp(&sd)
+                            .then_with(|| event_to_usize(&ce.event).cmp(&event_to_usize(&se.event)))
+                            == std::cmp::Ordering::Less
+                        {
+                            (c, cq, cd)
+                        } else {
+                            (s, sq, sd)
+                        }
+                    }
                 }
             }
         }
     }
 
-    pub fn remove(&mut self, q: Queue, is_client: bool) -> Option<SimEvent> {
+    pub fn pop(
+        &mut self,
+        q: Queue,
+        is_client: bool,
+        network_delay_sum: Duration,
+    ) -> Option<SimEvent> {
         match is_client {
-            true => self.client.remove(q),
-            false => self.server.remove(q),
+            true => self.client.pop(q, network_delay_sum),
+            false => self.server.pop(q, network_delay_sum),
         }
     }
 
-    pub fn peek_blocking(
-        &self,
-        blocking_bypassable: bool,
-        is_client: bool,
-    ) -> (Option<&SimEvent>, Queue) {
+    pub fn peek_blocking(&self, bypassable: bool, is_client: bool) -> (Option<&SimEvent>, Queue) {
         match is_client {
-            true => peak_blocking(&self.client, blocking_bypassable),
-            false => peak_blocking(&self.server, blocking_bypassable),
+            true => peek_blocking(&self.client, bypassable),
+            false => peek_blocking(&self.server, bypassable),
         }
     }
 
     pub fn pop_blocking(
         &mut self,
         q: Queue,
-        blocking_bypassable: bool,
+        bypassable: bool,
         is_client: bool,
+        network_delay_sum: Duration,
     ) -> Option<SimEvent> {
-        if blocking_bypassable {
+        if bypassable {
             match is_client {
                 true => self.client.blocking.pop(),
                 false => self.server.blocking.pop(),
             }
         } else {
-            self.remove(q, is_client)
+            self.pop(q, is_client, network_delay_sum)
         }
     }
 
     pub fn peek_non_blocking(
         &self,
-        blocking_bypassable: bool,
+        bypassable: bool,
         is_client: bool,
     ) -> (Option<&SimEvent>, Queue) {
         match is_client {
-            true => peak_non_blocking(&self.client, blocking_bypassable),
-            false => peak_non_blocking(&self.server, blocking_bypassable),
+            true => peek_non_blocking(&self.client, bypassable),
+            false => peek_non_blocking(&self.server, bypassable),
+        }
+    }
+
+    pub fn get_first_time(&self) -> Option<Instant> {
+        let c = self.client.get_first_base_time();
+        let s = self.server.get_first_base_time();
+
+        match (c, s) {
+            (Some(ct), Some(st)) => Some(ct.min(st)),
+            (Some(ct), None) => Some(ct),
+            (None, Some(st)) => Some(st),
+            (None, None) => None,
         }
     }
 }
 
-fn peak_blocking(queue: &EventQueue, blocking_bypassable: bool) -> (Option<&SimEvent>, Queue) {
-    if blocking_bypassable {
+fn peek_blocking(queue: &EventQueue, bypassable: bool) -> (Option<&SimEvent>, Queue) {
+    if bypassable {
         // only blocking events are then blocking
         (queue.peek_blocking(), Queue::Blocking)
     } else {
         // if the current blocking is not bypassable, then we need to
-        // consider blocking_bypassable events as also blocking
+        // consider bypassable events as also blocking
         let b = queue.peek_blocking();
-        let bb = queue.peek_blocking_bypassable();
+        let bb = queue.peek_bypassable();
 
         if b > bb {
             (b, Queue::Blocking)
         } else {
-            (bb, Queue::BlockingBypassable)
+            (bb, Queue::Bypassable)
         }
     }
 }
 
-fn peak_non_blocking(queue: &EventQueue, blocking_bypassable: bool) -> (Option<&SimEvent>, Queue) {
-    if blocking_bypassable {
-        // if the current blocking is not bypassable, then we need to
-        // consider blocking_bypassable as a non_blocking event
-        let bb = queue.peek_blocking_bypassable();
-        let n = queue.peek_non_blocking();
+fn peek_non_blocking(queue: &EventQueue, bypassable: bool) -> (Option<&SimEvent>, Queue) {
+    if bypassable {
+        // if the current blocking is bypassable, then we need to consider
+        // bypassable as non-blocking
+        let bb = queue.peek_bypassable();
+        let (n, nq) = queue.peek_non_blocking();
 
         if bb > n {
-            (bb, Queue::BlockingBypassable)
+            (bb, Queue::Bypassable)
         } else {
-            (n, Queue::NonBlocking)
+            (n, nq)
         }
     } else {
-        // only non_blocking events are then non_blocking
-        (queue.peek_non_blocking(), Queue::NonBlocking)
+        queue.peek_non_blocking()
     }
 }
 
 #[derive(Debug, Clone)]
 pub enum Queue {
     Blocking,
-    BlockingBypassable,
-    NonBlocking,
+    Bypassable,
+    Internal,
+    Base,
 }
 
 /// EventQueue represents the queue of events that are waiting to be processed
-/// in order (time-wise). The queue is split into three parts:
-/// 1. blocking: events that are blocking, i.e., that must take blocking into
-///    account.
-/// 2. blocking_bypassable: events that are blocking, but that MAY be bypassed
-///    (depending on the type of active blocking).
-/// 3. non_blocking: events that are always not blocking.
+/// in order (time-wise). The queue is split into four parts:
+/// - base: TriggerEvent::NormalSent events that are from the parsed base trace
+/// - blocking: TunnelSent events that may be blocked by blocking machines
+/// - bypassable: TunnelSent events that are blocked with bypassable blocking
+/// - internal: all other events
 #[derive(Debug, Clone)]
 struct EventQueue {
+    base: BinaryHeap<SimEvent>,
     blocking: BinaryHeap<SimEvent>,
-    blocking_bypassable: BinaryHeap<SimEvent>,
-    non_blocking: BinaryHeap<SimEvent>,
+    bypassable: BinaryHeap<SimEvent>,
+    internal: BinaryHeap<SimEvent>,
 }
 
 impl EventQueue {
-    pub fn new() -> EventQueue {
+    fn new() -> EventQueue {
         EventQueue {
+            // TriggerEvent::NormalSent is the only event in the base trace
+            base: BinaryHeap::with_capacity(4096),
+            // TriggerEvent::TunnelSent is the only event that can be blocking
+            // or bypassable
             blocking: BinaryHeap::with_capacity(1024),
-            blocking_bypassable: BinaryHeap::with_capacity(1024),
-            non_blocking: BinaryHeap::with_capacity(5000),
+            bypassable: BinaryHeap::with_capacity(1024),
+            // all events that are not TriggerEvent::TunnelSent or
+            // TriggerEvent::NormalSent are internal
+            internal: BinaryHeap::with_capacity(1024),
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.blocking.len() + self.blocking_bypassable.len() + self.non_blocking.len()
+    fn len(&self) -> usize {
+        self.blocking.len() + self.bypassable.len() + self.internal.len() + self.base.len()
     }
 
-    pub fn push(&mut self, item: SimEvent) {
+    fn push(&mut self, item: SimEvent) {
         match item.event {
             TriggerEvent::TunnelSent => {
                 match item.bypass {
-                    true => self.blocking_bypassable.push(item),
+                    true => self.bypassable.push(item),
                     false => self.blocking.push(item),
                 };
             }
+            // from parse_trace_advanced(), the only place where we push
+            // TriggerEvent::NormalSent from a base trace
+            TriggerEvent::NormalSent => {
+                self.base.push(item);
+            }
             _ => {
-                self.non_blocking.push(item);
+                self.internal.push(item);
             }
         }
     }
 
-    pub fn peek(&self) -> (Option<&SimEvent>, Queue) {
+    fn peek(
+        &self,
+        network_delay_sum: Duration,
+        current_time: Instant,
+    ) -> (Option<&SimEvent>, Queue, Duration) {
         match self.len() {
-            0 => (None, Queue::Blocking),
+            0 => (None, Queue::Blocking, Duration::default()),
             _ => {
-                // peak all, per def, it's one of them
-                let b = self.blocking.peek();
-                let bb = self.blocking_bypassable.peek();
-                let n = self.non_blocking.peek();
+                // peek all, per def, it's one of them
+                let (mut first, mut q) = (self.blocking.peek(), Queue::Blocking);
+                let n = self.bypassable.peek();
+                if n > first {
+                    first = n;
+                    q = Queue::Bypassable;
+                }
+                let n = self.internal.peek();
+                if n > first {
+                    first = n;
+                    q = Queue::Internal;
+                }
 
-                // is b first?
-                if b > bb && b > n {
-                    (b, Queue::Blocking)
-                // is bb first?
-                } else if bb > n {
-                    (bb, Queue::BlockingBypassable)
-                // has to be n then
+                // for the base queue, we need to consider the network delay sum
+                // to determine the actual time of the event
+                let duration_since: Duration;
+                let n = self.base.peek();
+                if before(n, first, network_delay_sum) {
+                    first = n;
+                    q = Queue::Base;
+                    duration_since =
+                        (first.unwrap().time + network_delay_sum).duration_since(current_time);
                 } else {
-                    (n, Queue::NonBlocking)
+                    duration_since = first.unwrap().time.duration_since(current_time);
+                }
+                (first, q, duration_since)
+            }
+        }
+    }
+
+    /// remove an event from the queue
+    fn pop(&mut self, q: Queue, network_delay_sum: Duration) -> Option<SimEvent> {
+        match q {
+            Queue::Blocking => self.blocking.pop(),
+            Queue::Bypassable => self.bypassable.pop(),
+            Queue::Internal => self.internal.pop(),
+            Queue::Base => {
+                if network_delay_sum == Duration::default() {
+                    self.base.pop()
+                } else {
+                    let mut item = self.base.pop().unwrap();
+                    item.time += network_delay_sum;
+                    Some(item)
                 }
             }
         }
     }
 
-    pub fn remove(&mut self, q: Queue) -> Option<SimEvent> {
-        match q {
-            Queue::Blocking => self.blocking.pop(),
-            Queue::BlockingBypassable => self.blocking_bypassable.pop(),
-            Queue::NonBlocking => self.non_blocking.pop(),
-        }
-    }
-
-    pub fn peek_blocking(&self) -> Option<&SimEvent> {
+    /// peek the next blocking event
+    fn peek_blocking(&self) -> Option<&SimEvent> {
         self.blocking.peek()
     }
 
-    pub fn peek_blocking_bypassable(&self) -> Option<&SimEvent> {
-        self.blocking_bypassable.peek()
+    /// peek the next bypassable event
+    fn peek_bypassable(&self) -> Option<&SimEvent> {
+        self.bypassable.peek()
     }
 
-    pub fn peek_non_blocking(&self) -> Option<&SimEvent> {
-        self.non_blocking.peek()
+    /// peek the next non-blocking event
+    fn peek_non_blocking(&self) -> (Option<&SimEvent>, Queue) {
+        let i = self.internal.peek();
+        let b = self.base.peek();
+        if i > b {
+            (i, Queue::Internal)
+        } else {
+            (b, Queue::Base)
+        }
+    }
+
+    /// get the first time of the base queue: should only be used for the
+    /// simulator's current time at startup
+    pub fn get_first_base_time(&self) -> Option<Instant> {
+        self.base.peek().map(|e| e.time)
+    }
+}
+
+// determine if a, with network delay sum, is before b: uses the same ordering
+// as the binary heap, from SimEvent::cmp()
+fn before(a: Option<&SimEvent>, b: Option<&SimEvent>, a_network_delay_sum: Duration) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => {
+            let a_time = a.time + a_network_delay_sum;
+            let b_time = b.time;
+            a_time
+                .cmp(&b_time)
+                .then_with(|| event_to_usize(&a.event).cmp(&event_to_usize(&b.event)))
+                == std::cmp::Ordering::Less
+        }
+        (Some(_), None) => true,
+        _ => false,
     }
 }

@@ -56,7 +56,7 @@ fn run_sim(
         32000000,r,100
         56000000,s,100
         100000000,s,100";
-    let network = Network::new(Duration::from_millis(5));
+    let network = Network::new(Duration::from_millis(5), None);
 
     let mut input_trace = parse_trace_advanced(raw_trace, &network, client, server);
 

@@ -35,7 +35,7 @@
 //!
 //! // The network model for simulating the network between the client and the
 //! // server. Currently just a delay.
-//! let network = Network::new(Duration::from_millis(10));
+//! let network = Network::new(Duration::from_millis(10), None);
 //!
 //! // Parse the raw trace into a queue of events for the simulator. This uses
 //! // the delay to generate a queue of events at the client and server in such
@@ -114,7 +114,7 @@ use std::{
 
 use integration::Integration;
 use log::debug;
-use network::Network;
+use network::{Network, NetworkBottleneck};
 use queue::SimQueue;
 
 use maybenot::{Framework, Machine, MachineId, Timer, TriggerAction, TriggerEvent};
@@ -171,16 +171,23 @@ impl RngCore for RngSource {
 /// events that are produced by the simulator (the resulting trace).
 #[derive(PartialEq, Hash, Eq, Clone, Debug)]
 pub struct SimEvent {
+    /// the actual event
     pub event: TriggerEvent,
+    /// the time of the event taking place
     pub time: Instant,
-    pub delay: Duration,
+    /// the delay of the event due to integration
+    pub integration_delay: Duration,
+    /// flag to track if the event is from the client
     pub client: bool,
-    // flag to track padding or normal packet
+    /// flag to track padding or normal packet
     pub contains_padding: bool,
-    // internal flag to mark event as bypass
+    /// internal flag to mark event as bypass
     bypass: bool,
-    // internal flag to mark event as replace
+    /// internal flag to mark event as replace
     replace: bool,
+    /// internal duration to propagate base trace delay from one party to the
+    /// other due to bottleneck and blocking
+    base_delay: Option<Duration>,
 }
 
 /// Helper function to convert a TriggerEvent to a usize for sorting purposes.
@@ -338,7 +345,7 @@ pub fn sim(
     max_trace_length: usize,
     only_network_activity: bool,
 ) -> Vec<SimEvent> {
-    let network = Network::new(delay);
+    let network = Network::new(delay, None);
     let args = SimulatorArgs::new(&network, max_trace_length, only_network_activity);
     sim_advanced(machines_client, machines_server, sq, &args)
 }
@@ -418,7 +425,7 @@ pub fn sim_advanced(
     let mut trace: Vec<SimEvent> = Vec::with_capacity(expected_trace_len);
 
     // put the mocked current time at the first event
-    let mut current_time = sq.peek().0.unwrap().time;
+    let mut current_time = sq.get_first_time().unwrap();
 
     let mut client = SimState::new(
         machines_client,
@@ -437,9 +444,11 @@ pub fn sim_advanced(
         args.insecure_rng_seed,
     );
 
+    let mut network = NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1));
+
     let mut sim_iterations = 0;
     let start_time = current_time;
-    while let Some(next) = pick_next(sq, &mut client, &mut server, current_time) {
+    while let Some(next) = pick_next(sq, &mut client, &mut server, &mut network, current_time) {
         debug!("#########################################################");
         debug!("sim(): main loop start");
 
@@ -486,9 +495,9 @@ pub fn sim_advanced(
         // and the server. Returns true if there was network activity (i.e., a
         // packet was sent or received over the network), false otherwise.
         let network_activity = if next.client {
-            sim_network_stack(&next, sq, &client, &mut server, args.network, &current_time)
+            sim_network_stack(&next, sq, &client, &mut server, &mut network, &current_time)
         } else {
-            sim_network_stack(&next, sq, &server, &mut client, args.network, &current_time)
+            sim_network_stack(&next, sq, &server, &mut client, &mut network, &current_time)
         };
 
         if network_activity {
@@ -522,24 +531,24 @@ pub fn sim_advanced(
             match next.event {
                 TriggerEvent::NormalSent => {
                     // remove the reporting delay
-                    n.time -= n.delay;
+                    n.time -= n.integration_delay;
                 }
                 TriggerEvent::PaddingSent { .. } => {
                     // padding packet adds the action delay
-                    n.time += n.delay;
+                    n.time += n.integration_delay;
                 }
                 TriggerEvent::TunnelSent => {
                     if n.contains_padding {
                         // padding packet adds the action delay
-                        n.time += n.delay;
+                        n.time += n.integration_delay;
                     } else {
                         // normal packet removes the reporting delay
-                        n.time -= n.delay;
+                        n.time -= n.integration_delay;
                     }
                 }
                 TriggerEvent::TunnelRecv | TriggerEvent::PaddingRecv | TriggerEvent::NormalRecv => {
                     // remove the reporting delay
-                    n.time -= n.delay;
+                    n.time -= n.integration_delay;
                 }
 
                 _ => {}
@@ -580,6 +589,7 @@ fn pick_next<M: AsRef<[Machine]>>(
     sq: &mut SimQueue,
     client: &mut SimState<M, RngSource>,
     server: &mut SimState<M, RngSource>,
+    network: &mut NetworkBottleneck,
     current_time: Instant,
 ) -> Option<SimEvent> {
     // find the earliest scheduled, blocked, and queued events to determine the
@@ -598,7 +608,14 @@ fn pick_next<M: AsRef<[Machine]>>(
     debug!("\tpick_next(): peek_internal = {:?}", i);
     let b = peek_blocked_exp(&client.blocking_until, &server.blocking_until, current_time);
     debug!("\tpick_next(): peek_blocked_exp = {:?}", b);
-    let (q, qid, q_is_client) = peek_queue(sq, client, server, s, current_time);
+    let (q, qid, q_is_client) = peek_queue(
+        sq,
+        client,
+        server,
+        network.aggregate_base_delay,
+        s.min(i).min(b),
+        current_time,
+    );
     debug!("\tpick_next(): peek_queue = {:?}", q);
 
     // no next?
@@ -611,11 +628,23 @@ fn pick_next<M: AsRef<[Machine]>>(
     // bulk trigger events in the framework.
     if q <= s && q <= i && q <= b {
         debug!("\tpick_next(): picked queue");
-        let tmp = sq.remove(qid, q_is_client);
+        let tmp = sq.pop(qid, q_is_client, network.aggregate_base_delay);
         tmp.as_ref()?;
         let mut tmp = tmp.unwrap();
         // check if blocking moves the event forward in time
         if current_time + q > tmp.time {
+            if q > Duration::default() && !tmp.contains_padding {
+                // NOTE: this blocking is also considered a delay, but only if
+                // it moves time forward (otherwise, it's a question of sending
+                // rate / pps) and it doesn't contain padding.
+                tmp.base_delay = Some((current_time + q) - tmp.time);
+                debug!(
+                    "\tpick_next(): blocking to delay base events by {:#?}",
+                    (current_time + q) - tmp.time
+                );
+            }
+
+            // move the event forward in time
             tmp.time = current_time + q;
         }
 
@@ -652,10 +681,11 @@ fn pick_next<M: AsRef<[Machine]>>(
             client: client_earliest,
             event: TriggerEvent::BlockingEnd,
             time,
-            delay,
+            integration_delay: delay,
             bypass: false,
             replace: false,
             contains_padding: false,
+            base_delay: None,
         });
     }
 
@@ -668,7 +698,7 @@ fn pick_next<M: AsRef<[Machine]>>(
         if let Some(a) = act {
             sq.push_sim(a.clone());
         }
-        return pick_next(sq, client, server, current_time);
+        return pick_next(sq, client, server, network, current_time);
     }
 
     // what's left is scheduled actions: find the action act on the action,
@@ -679,7 +709,7 @@ fn pick_next<M: AsRef<[Machine]>>(
     if let Some(a) = act {
         sq.push_sim(a.clone());
     }
-    pick_next(sq, client, server, current_time)
+    pick_next(sq, client, server, network, current_time)
 }
 
 fn do_internal<M: AsRef<[Machine]>>(
@@ -723,10 +753,11 @@ fn do_internal<M: AsRef<[Machine]>>(
             machine: machine.unwrap(),
         },
         time: target,
-        delay: Duration::from_micros(0), // TODO: is this correct?
+        integration_delay: Duration::from_micros(0), // TODO: is this correct?
         bypass: false,
         replace: false,
         contains_padding: false,
+        base_delay: None,
     })
 }
 
@@ -793,11 +824,12 @@ fn do_scheduled<M: AsRef<[Machine]>>(
             Some(SimEvent {
                 event: TriggerEvent::PaddingSent { machine },
                 time: a.time,
-                delay: action_delay,
+                integration_delay: action_delay,
                 client: is_client,
                 bypass,
                 replace,
                 contains_padding: true,
+                base_delay: None,
             })
         }
         TriggerAction::BlockOutgoing {
@@ -836,11 +868,12 @@ fn do_scheduled<M: AsRef<[Machine]>>(
             Some(SimEvent {
                 event: TriggerEvent::BlockingBegin { machine },
                 time: reported,
-                delay: total_delay,
+                integration_delay: total_delay,
                 client: is_client,
                 bypass: event_bypass,
                 replace: false,
                 contains_padding: false,
+                base_delay: None,
             })
         }
     }
@@ -916,10 +949,11 @@ fn trigger_update<M: AsRef<[Machine]>>(
                         client: is_client,
                         event: TriggerEvent::TimerBegin { machine: *machine },
                         time: *current_time,
-                        delay: Duration::from_micros(0), // TODO: is this correct?
+                        integration_delay: Duration::from_micros(0), // TODO: is this correct?
                         bypass: false,
                         replace: false,
                         contains_padding: false,
+                        base_delay: None,
                     });
                 }
             }

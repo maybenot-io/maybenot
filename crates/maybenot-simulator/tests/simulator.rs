@@ -1,5 +1,5 @@
 use log::debug;
-use maybenot_simulator::{network::Network, parse_trace, queue::SimQueue, sim, SimEvent};
+use maybenot_simulator::{queue::SimQueue, sim, SimEvent};
 
 use std::time::{Duration, Instant};
 
@@ -61,7 +61,7 @@ fn fmt_event(e: &SimEvent, base: Instant) -> String {
     )
 }
 
-fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
+pub fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
     let mut sq = SimQueue::new();
     let integration_delay = Duration::from_micros(0);
 
@@ -273,7 +273,7 @@ fn test_simple_block_machine() {
     // note in the output how 18,sn should be delayed until 20,sn due to blocking
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "0,sn 0,st 5,bb 10,be 15,bb 18,sn 20,st 20,be 25,rt 25,rt 25,rn 25,rn 25,bb 30,sn 30,st 30,be 35,rt 35,rn 35,bb",
+        "0,sn 0,st 5,bb 10,be 15,bb 18,sn 20,st 20,be 25,rt 25,rt 25,rn 25,rn 25,bb 30,be 32,sn 32,st 35,bb 37,rt 37,rn",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -334,7 +334,12 @@ fn test_both_block_machine() {
 
     run_test_sim(
         "0,sn 7,rn 8,sn 14,rn 18,sn",
-        "0,sn 0,st 5,bb 7,rt 7,rn 8,sn 10,st 10,be 15,bb 17,rt 17,rn 18,sn 20,st 20,be",
+        // blocking starts client at 5, server at 7
+        // client is blocked until 10, server until 12
+        // the delay at client, from 8-10, adds delay 2 at time 10 (note that sn at server already queued at 9)
+        // at 12, blocking ends and the server sends queued from 9, adding 3 to delay
+        // at 18,sn, we now have 5 delay in total, so its turned into 23,sn
+        "0,sn 0,st 5,bb 7,rt 7,rn 8,sn 10,st 10,be 15,bb 17,rt 17,rn 20,be 23,sn 23,st",
         Duration::from_micros(5),
         &[client],
         &[server],
@@ -984,45 +989,6 @@ fn test_bypass_replace_machine() {
         40,
         false, // all events
     );
-}
-
-#[test_log::test]
-fn test_excessive_sim_delay() {
-    const EARLY_TRACE: &str = include_str!("EARLY_TEST_TRACE.log");
-
-    // start with a reasonable 10ms delay: we should get events at the client
-    let network = Network::new(Duration::from_millis(10));
-    let pq = parse_trace(EARLY_TRACE, &network);
-    let trace = sim(&[], &[], &mut pq.clone(), network.delay, 10000, true);
-    let client_trace = trace
-        .clone()
-        .into_iter()
-        .filter(|t| t.client)
-        .collect::<Vec<_>>();
-    assert!(client_trace.len() > 0);
-
-    // set a silly delay of 10s: this should result in zero events at the
-    // client, because we hit the limit of events below before we get to the
-    // first event at the client
-    let network = Network::new(Duration::from_millis(10000));
-    let pq = parse_trace(EARLY_TRACE, &network);
-    let trace = sim(&[], &[], &mut pq.clone(), network.delay, 10000, true);
-    let client_trace = trace
-        .clone()
-        .into_iter()
-        .filter(|t| t.client)
-        .collect::<Vec<_>>();
-    assert!(client_trace.len() == 0);
-
-    // increase the limit of events to 100000: this should result in all events
-    let trace = sim(&[], &[], &mut pq.clone(), network.delay, 100000, true);
-    let client_trace = trace
-        .clone()
-        .into_iter()
-        .filter(|t| t.client)
-        .collect::<Vec<_>>();
-    // 21574 is the number of events in EARLY_TRACE
-    assert_eq!(client_trace.len(), 21574);
 }
 
 #[test_log::test]

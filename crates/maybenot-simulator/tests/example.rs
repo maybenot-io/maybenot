@@ -57,7 +57,7 @@ fn simulator_example_use() {
 
     // The network model for simulating the network between the client and the
     // server. Currently just a delay.
-    let network = Network::new(Duration::from_millis(10));
+    let network = Network::new(Duration::from_millis(10), None);
 
     // Parse the raw trace into a queue of events for the simulator. This uses
     // the delay to generate a queue of events at the client and server in such
