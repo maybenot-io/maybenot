@@ -18,6 +18,9 @@ use crate::{event_to_usize, SimEvent};
 pub struct SimQueue {
     client: EventQueue,
     server: EventQueue,
+    // The maximum number of packets/cells (depends on trace) per second before
+    // adding delay due to a simulated bottleneck. None means no limit.
+    pub(crate) max_pps: Option<usize>,
 }
 
 impl Default for SimQueue {
@@ -31,6 +34,7 @@ impl SimQueue {
         SimQueue {
             client: EventQueue::new(),
             server: EventQueue::new(),
+            max_pps: None,
         }
     }
 

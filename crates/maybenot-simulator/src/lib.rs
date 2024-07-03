@@ -114,7 +114,7 @@ use std::{
 
 use integration::Integration;
 use log::debug;
-use network::{Network, NetworkBottleneck};
+use network::{Network, NetworkBottleneck, WindowCount};
 use queue::SimQueue;
 
 use maybenot::{Framework, Machine, MachineId, Timer, TriggerAction, TriggerEvent};
@@ -444,7 +444,8 @@ pub fn sim_advanced(
         args.insecure_rng_seed,
     );
 
-    let mut network = NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1));
+    let mut network =
+        NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
 
     let mut sim_iterations = 0;
     let start_time = current_time;
@@ -981,6 +982,10 @@ pub fn parse_trace_advanced(
     server: Option<&Integration>,
 ) -> SimQueue {
     let mut sq = SimQueue::new();
+    let mut sent_window = WindowCount::new(Duration::from_secs(1));
+    let mut recv_window = WindowCount::new(Duration::from_secs(1));
+    let mut sent_max_pps = 0;
+    let mut recv_max_pps = 0;
 
     // we just need a random starting time to make sure that we don't start from
     // absolute 0
@@ -1011,6 +1016,11 @@ pub fn parse_trace_advanced(
                         reported,
                         reporting_delay,
                     );
+
+                    let m = sent_window.add(&timestamp);
+                    if m > sent_max_pps {
+                        sent_max_pps = m;
+                    }
                 }
                 "r" | "rn" => {
                     // sent by server delay time ago
@@ -1027,6 +1037,11 @@ pub fn parse_trace_advanced(
                         reported,
                         reporting_delay,
                     );
+
+                    let m = recv_window.add(&timestamp);
+                    if m > recv_max_pps {
+                        recv_max_pps = m;
+                    }
                 }
                 "sp" | "rp" => {
                     // TODO: figure out of ignoring is the right thing to do
@@ -1037,6 +1052,8 @@ pub fn parse_trace_advanced(
             }
         }
     }
+
+    sq.max_pps = Some(sent_max_pps.max(recv_max_pps));
 
     sq
 }

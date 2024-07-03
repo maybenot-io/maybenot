@@ -1,7 +1,10 @@
 //! For simulating the network stack and network between client and server.
 
 use std::{
-    cmp::max, collections::VecDeque, fmt, time::{Duration, Instant}
+    cmp::max,
+    collections::VecDeque,
+    fmt,
+    time::{Duration, Instant},
 };
 
 use log::debug;
@@ -15,7 +18,7 @@ pub struct Network {
     // The delay between the client and server.
     pub delay: Duration,
     // The maximum number of packets/cells (depends on trace) per second before
-    // adding delay due to a simulated bottleneck. None means no limit.
+    // adding delay due to a simulated bottleneck. None means trace limit.
     pub pps: Option<usize>,
 }
 
@@ -36,7 +39,11 @@ impl Network {
 impl fmt::Display for Network {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.pps {
-            Some(pps) => write!(f, "Network {{ delay {:?}, bottleneck {:?}pps }}", self.delay, pps),
+            Some(pps) => write!(
+                f,
+                "Network {{ delay {:?}, bottleneck {:?}pps }}",
+                self.delay, pps
+            ),
             None => write!(f, "Network {{ delay {:?}, ∞ pps }}", self.delay),
         }
     }
@@ -61,8 +68,8 @@ pub struct NetworkBottleneck {
 }
 
 impl NetworkBottleneck {
-    pub fn new(network: Network, window: Duration) -> Self {
-        let pps = network.pps.unwrap_or(usize::MAX);
+    pub fn new(network: Network, window: Duration, queue_pps: Option<usize>) -> Self {
+        let pps = network.pps.unwrap_or(queue_pps.unwrap_or(usize::MAX));
         // average delay, based on window and limit
         let added_delay = window / pps as u32;
 
@@ -102,7 +109,7 @@ impl NetworkBottleneck {
 }
 
 #[derive(Debug, Clone)]
-struct WindowCount {
+pub(crate) struct WindowCount {
     window: Duration,
     timestamps: VecDeque<Instant>,
 }
