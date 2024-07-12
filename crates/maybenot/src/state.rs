@@ -59,7 +59,7 @@ impl State {
     /// Note that state indexes are 0-based and determined by the order in which
     /// states are added to the [`Machine`].
     pub fn new(t: EnumMap<Event, Vec<Trans>>) -> Self {
-        const ARRAY_NO_TRANS: std::option::Option<Vec<Trans>> = None;
+        const ARRAY_NO_TRANS: Option<Vec<Trans>> = None;
         let mut transitions = [ARRAY_NO_TRANS; EVENT_NUM];
         for (event, vector) in t {
             if !vector.is_empty() {
