@@ -62,9 +62,8 @@ pub fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
     let integration_delay = Duration::from_micros(0);
 
     // format we expect to parse: 0,s 18,s 25,r 25,r 30,s 35,r
-    let lines: Vec<&str> = s.split(' ').collect();
-    for l in lines {
-        let parts: Vec<&str> = l.split(',').collect();
+    for line in s.split(' ') {
+        let parts: Vec<&str> = line.split(',').collect();
         if parts.len() == 2 {
             let timestamp = starting_time + Duration::from_micros(parts[0].parse::<u64>().unwrap());
 
