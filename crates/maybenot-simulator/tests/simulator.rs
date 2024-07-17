@@ -34,7 +34,7 @@ fn run_test_sim(
         max_trace_length,
         only_packets,
     );
-    let mut fmt = fmt_trace(trace, client);
+    let mut fmt = fmt_trace(&trace, client);
     if fmt.len() > output.len() {
         fmt = fmt.get(0..output.len()).unwrap().to_string();
     }
@@ -42,7 +42,7 @@ fn run_test_sim(
     assert_eq!(output, fmt);
 }
 
-fn fmt_trace(trace: Vec<SimEvent>, client: bool) -> String {
+fn fmt_trace(trace: &[SimEvent], client: bool) -> String {
     let base = trace[0].time;
     let mut s: String = "".to_string();
     for i in 0..trace.len() {
