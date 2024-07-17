@@ -30,10 +30,10 @@ jobs:
           default: true
 
       - name: Build
-        run: cargo build --all-targets --locked
+        run: cargo build --all-targets
 
       - name: Test
-        run: cargo test --locked
+        run: cargo test
 
       # Make sure documentation builds without warnings (broken links etc)
       - name: Generate documentation

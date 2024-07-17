@@ -24,4 +24,4 @@ jobs:
       - name: Clippy check
         env:
           RUSTFLAGS: --deny warnings
-        run: cargo clippy --locked --all-targets
+        run: cargo clippy --all-targets
