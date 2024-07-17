@@ -573,16 +573,16 @@ mod tests {
     fn no_machines() {
         let machines = vec![];
         let f = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::thread_rng());
-        assert!(!f.is_err());
+        assert!(f.is_ok());
     }
 
     #[test]
     fn reuse_machines() {
         let machines = vec![];
         let f1 = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::thread_rng());
-        assert!(!f1.is_err());
+        assert!(f1.is_ok());
         let f2 = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::thread_rng());
-        assert!(!f2.is_err());
+        assert!(f2.is_ok());
     }
 
     #[test]
