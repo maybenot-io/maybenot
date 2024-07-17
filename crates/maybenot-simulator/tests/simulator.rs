@@ -940,17 +940,15 @@ fn test_bypass_replace_machine() {
         true, // only packets
     );
     // bump the limit to 5
-    if let Some(ref mut a) = m.states[2].action {
-        if let Action::SendPadding { limit, .. } = a {
-            *limit = Some(Dist {
-                dist: DistType::Uniform {
-                    low: 5.0,
-                    high: 5.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            });
-        }
+    if let Some(Action::SendPadding { ref mut limit, .. }) = m.states[2].action {
+        *limit = Some(Dist {
+            dist: DistType::Uniform {
+                low: 5.0,
+                high: 5.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        });
     };
     run_test_sim(
         "0,sn 2,sn 2,sn 2,sn 2,sn 6,rn 6,rn 7,sn",
