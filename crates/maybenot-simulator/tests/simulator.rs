@@ -43,7 +43,7 @@ fn run_test_sim(
 }
 
 fn fmt_trace(trace: Vec<SimEvent>, client: bool) -> String {
-    let base = trace[0].time.clone();
+    let base = trace[0].time;
     let mut s: String = "".to_string();
     for i in 0..trace.len() {
         if trace[i].client == client {
