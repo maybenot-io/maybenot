@@ -7,7 +7,6 @@ use crate::constants::*;
 use crate::*;
 use std::fmt;
 use std::hash::Hash;
-use std::time::Duration;
 
 use self::dist::Dist;
 
@@ -164,7 +163,7 @@ impl Action {
 
 /// The action to be taken by the framework user.
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub enum TriggerAction {
+pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// Cancel the timer for a machine.
     Cancel { machine: MachineId, timer: Timer },
     /// Schedule padding to be injected after the given timeout for a machine.
@@ -181,7 +180,7 @@ pub enum TriggerAction {
     /// blocking may be bypassed, then non-padding packets MAY replace the
     /// padding packet AND bypass the active blocking.
     SendPadding {
-        timeout: Duration,
+        timeout: T::Duration,
         bypass: bool,
         replace: bool,
         machine: MachineId,
@@ -196,8 +195,8 @@ pub enum TriggerAction {
     /// currently ongoing blocking of outgoing traffic. If the flag is false,
     /// the longest of the two durations MUST be used.
     BlockOutgoing {
-        timeout: Duration,
-        duration: Duration,
+        timeout: T::Duration,
+        duration: T::Duration,
         bypass: bool,
         replace: bool,
         machine: MachineId,
@@ -208,7 +207,7 @@ pub enum TriggerAction {
     /// timer duration. If the flag is false, the longest of the two durations
     /// MUST be used.
     UpdateTimer {
-        duration: Duration,
+        duration: T::Duration,
         replace: bool,
         machine: MachineId,
     },
