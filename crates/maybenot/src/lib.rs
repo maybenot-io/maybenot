@@ -410,9 +410,11 @@ mod tests {
                 }
             }
 
-            // All done, continue the loop. We break below for the example test
-            // to not get stuck.
-            break;
+            // In real usage the loop would continue here. But since this is just an example test
+            // that should terminate, we add a break here to make the test finish.
+            if true {
+                break;
+            }
         }
     }
 }
