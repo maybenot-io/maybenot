@@ -45,9 +45,9 @@ fn run_test_sim(
 fn fmt_trace(trace: &[SimEvent], client: bool) -> String {
     let base = trace[0].time;
     let mut s: String = "".to_string();
-    for i in 0..trace.len() {
-        if trace[i].client == client {
-            s = format!("{} {}", s, fmt_event(&trace[i], base));
+    for trace in trace {
+        if trace.client == client {
+            s = format!("{} {}", s, fmt_event(trace, base));
         }
     }
     s.trim().to_string()
