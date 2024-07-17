@@ -14,6 +14,7 @@ use maybenot::{
 
 use enum_map::enum_map;
 
+#[allow(clippy::too_many_arguments)]
 fn run_test_sim(
     input: &str,
     output: &str,
