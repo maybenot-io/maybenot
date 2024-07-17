@@ -1,0 +1,67 @@
+---
+name: Build and test
+on:
+  pull_request:
+    paths:
+      - .github/workflows/build-and-test.yml
+      - '**/*.rs'
+      - Cargo.toml
+      - Cargo.lock
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: --deny warnings
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        # Keep MSRV in sync with rust-version in Cargo.toml
+        rust: [stable, beta, nightly, 1.77.0]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af #v1.0.7
+        with:
+          toolchain: ${{ matrix.rust }}
+          profile: minimal
+          default: true
+
+      - name: Build
+        run: cargo build --all-targets --locked
+
+      - name: Test
+        run: cargo test --locked
+
+      # Make sure documentation builds without warnings (broken links etc)
+      - name: Generate documentation
+        if: matrix.rust == 'stable'
+        run: RUSTDOCFLAGS="--deny warnings" cargo doc
+
+  # Make sure the library builds with all dependencies downgraded to their
+  # oldest versions allowed by the semver spec. This ensures we have not
+  # under-specified any dependency
+  minimal-versions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af #v1.0.7
+        with:
+          toolchain: stable
+          profile: minimal
+
+      - name: Install nightly Rust
+        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af #v1.0.7
+        with:
+          toolchain: nightly
+          profile: minimal
+
+      - name: Downgrade dependencies to minimal versions
+        run: cargo +nightly update -Z minimal-versions
+
+      - name: Compile with minimal versions
+        run: cargo +stable check --workspace --all-features --all-targets --locked

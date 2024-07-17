@@ -5,6 +5,8 @@ homepage = "https://maybenot.io"
 keywords = [ "anonymity", "correlation", "fingerprinting", "privacy", "security" ]
 categories = [ "cryptography", "network-programming" ]
 repository = "https://github.com/maybenot-io/maybenot"
+# Keep MSRV in sync with oldest Rust version in CI in .github/workflows/build-and-test.yml
+rust-version = "1.77.0"
 
 [workspace]
 resolver = "2"
