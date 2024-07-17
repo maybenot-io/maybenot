@@ -129,7 +129,7 @@ fn run_sim(
     n: usize,
 ) {
     for _ in 0..n {
-        sim_advanced(client, server, &mut input.clone(), &args);
+        sim_advanced(client, server, &mut input.clone(), args);
     }
 }
 
