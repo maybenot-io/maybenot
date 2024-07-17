@@ -54,11 +54,7 @@ fn fmt_trace(trace: &[SimEvent], client: bool) -> String {
 }
 
 fn fmt_event(e: &SimEvent, base: Instant) -> String {
-    format!(
-        "{:1},{}",
-        e.time.duration_since(base).as_micros(),
-        e.event.to_string()
-    )
+    format!("{:1},{}", e.time.duration_since(base).as_micros(), e.event)
 }
 
 pub fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
