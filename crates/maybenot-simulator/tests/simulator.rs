@@ -14,6 +14,7 @@ use maybenot::{
 
 use enum_map::enum_map;
 
+#[allow(clippy::too_many_arguments)]
 fn run_test_sim(
     input: &str,
     output: &str,
@@ -34,7 +35,7 @@ fn run_test_sim(
         max_trace_length,
         only_packets,
     );
-    let mut fmt = fmt_trace(trace, client);
+    let mut fmt = fmt_trace(&trace, client);
     if fmt.len() > output.len() {
         fmt = fmt.get(0..output.len()).unwrap().to_string();
     }
@@ -42,23 +43,19 @@ fn run_test_sim(
     assert_eq!(output, fmt);
 }
 
-fn fmt_trace(trace: Vec<SimEvent>, client: bool) -> String {
-    let base = trace[0].time.clone();
+fn fmt_trace(trace: &[SimEvent], client: bool) -> String {
+    let base = trace[0].time;
     let mut s: String = "".to_string();
-    for i in 0..trace.len() {
-        if trace[i].client == client {
-            s = format!("{} {}", s, fmt_event(&trace[i], base));
+    for trace in trace {
+        if trace.client == client {
+            s = format!("{} {}", s, fmt_event(trace, base));
         }
     }
     s.trim().to_string()
 }
 
 fn fmt_event(e: &SimEvent, base: Instant) -> String {
-    format!(
-        "{:1},{}",
-        e.time.duration_since(base).as_micros(),
-        e.event.to_string()
-    )
+    format!("{:1},{}", e.time.duration_since(base).as_micros(), e.event)
 }
 
 pub fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
@@ -66,9 +63,8 @@ pub fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
     let integration_delay = Duration::from_micros(0);
 
     // format we expect to parse: 0,s 18,s 25,r 25,r 30,s 35,r
-    let lines: Vec<&str> = s.split(" ").collect();
-    for l in lines {
-        let parts: Vec<&str> = l.split(",").collect();
+    for line in s.split(' ') {
+        let parts: Vec<&str> = line.split(',').collect();
         if parts.len() == 2 {
             let timestamp = starting_time + Duration::from_micros(parts[0].parse::<u64>().unwrap());
 
@@ -945,17 +941,15 @@ fn test_bypass_replace_machine() {
         true, // only packets
     );
     // bump the limit to 5
-    if let Some(ref mut a) = m.states[2].action {
-        if let Action::SendPadding { limit, .. } = a {
-            *limit = Some(Dist {
-                dist: DistType::Uniform {
-                    low: 5.0,
-                    high: 5.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            });
-        }
+    if let Some(Action::SendPadding { ref mut limit, .. }) = m.states[2].action {
+        *limit = Some(Dist {
+            dist: DistType::Uniform {
+                low: 5.0,
+                high: 5.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        });
     };
     run_test_sim(
         "0,sn 2,sn 2,sn 2,sn 2,sn 6,rn 6,rn 7,sn",

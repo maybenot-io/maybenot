@@ -24,7 +24,7 @@ fn test_network_excessive_delay() {
         .into_iter()
         .filter(|t| t.client)
         .collect::<Vec<_>>();
-    assert!(client_trace.len() > 0);
+    assert!(!client_trace.is_empty());
 
     // set a silly delay of 10s: this should result in zero events at the
     // client, because we hit the limit of events below before we get to the

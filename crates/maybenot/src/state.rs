@@ -160,7 +160,7 @@ impl State {
         let mut map = enum_map! {_ => vec![]};
         for (event, vector) in self.transitions.iter().enumerate() {
             if let Some(vector) = vector {
-                map[Event::from_usize(event)] = vector.clone();
+                map[Event::from_usize(event)].clone_from(vector);
             }
         }
 

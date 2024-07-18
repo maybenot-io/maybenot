@@ -7,7 +7,7 @@
 //! The intended use is to first parse a trace (e.g., from a pcap file or a
 //! Website Fingerprinting dataset) using [`parse_trace`], and then simulate the
 //! trace using [`sim`] together with one or more Maybenot
-//! [`Machines`](maybenot::machine::Machine) running at the client and/or
+//! [`Machines`](maybenot::Machine) running at the client and/or
 //! server. The output of the simulator can then be parsed to produce a
 //! simulated trace that then in turn can be used to, e.g., train a Website
 //! Fingerprinting attack.

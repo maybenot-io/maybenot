@@ -1,12 +1,5 @@
 use rand::{Rng, RngCore};
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, time::Duration};
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Bin {
-    range: (f64, f64),
-    probability: f64,
-}
 
 /// Represents a Maybenot integration and its associated delays. This can happen
 /// in the case of Maybenot being integrated, e.g., in user space with a
