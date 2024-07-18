@@ -140,12 +140,6 @@ impl WindowCount {
     }
 }
 
-/// The network replace window is the time window in which we can replace
-/// padding with existing padding or normal packets already queued (or about to
-/// be queued up). The behavior here is tricky, since it'll differ how different
-/// implementations handle it.
-const NETWORK_REPLACE_WINDOW: Duration = Duration::from_micros(1);
-
 // This is the only place where the simulator simulates the entire network
 // between the client and the server.
 //
@@ -184,69 +178,73 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 integration_delay: next.integration_delay,
                 client: next.client,
                 contains_padding: false,
-                bypass: next.bypass,
-                replace: next.replace,
-                base_delay: None,
+                bypass: false,
+                replace: false,
+                propagate_base_delay: None,
             });
             false
         }
         // here we simulate sending the packet into the tunnel
         TriggerEvent::PaddingSent { .. } => {
             if next.replace {
-                // replace flag is set:
-                // - if we just sent a packet, we can skip sending the padding
-                // - if we have a normal packet queued up to be sent within the
-                //   network replace window, we can replace the padding with that
-
-                // check if we can replace with last sent up to the network
-                // replace window: this probably poorly simulates an egress
-                // queue where it takes up to 1us to send the packet
-                debug!(
-                    "\treplace with earlier? {:?} <= {:?}",
-                    next.time.duration_since(state.last_sent_time),
-                    NETWORK_REPLACE_WINDOW
-                );
-                if next.time.duration_since(state.last_sent_time) <= NETWORK_REPLACE_WINDOW {
-                    debug!("replacing normal sent with last sent @{}", side);
-                    return false;
-                }
-
-                // can replace with normal that's queued to be sent within the
-                // network replace window? FIXME: here be bugs related to
-                // integration delays.
+                // replace flag is set: if we have a normal packet queued up /
+                // blocked, we can replace the padding with that FIXME: here be
+                // bugs related to integration delays
                 if let (Some(queued), qid) =
                     sq.peek_blocking(state.blocking_bypassable, next.client)
                 {
-                    debug!(
-                        "\treplace with queued? {:?} <= {:?}",
-                        queued.time.duration_since(next.time),
-                        NETWORK_REPLACE_WINDOW
-                    );
                     if queued.client == next.client
-                        && queued.time.duration_since(next.time) <= NETWORK_REPLACE_WINDOW
                         && TriggerEvent::TunnelSent == queued.event
                         && !queued.contains_padding
                     {
-                        debug!("replacing padding sent with normal sent @{}", side,);
-                        // let the NormalSent event bypass
-                        // blocking by making a copy of the event
-                        // with the appropriate flags set
-                        let mut tmp = queued.clone();
-                        tmp.bypass = true;
-                        tmp.replace = false;
-                        // we send the NormalSent now since it is queued
-                        tmp.time = next.time;
+                        // two options:
+                        // 1. the padding has the bypass flag set, so we need to
+                        //    propagate the flag to the queued packet
+                        // 2. the bypass flag is not set, which is also the case
+                        //    for normal packets, so we do nothing
+                        if !next.bypass {
+                            debug!(
+                                "\treplaced padding sent with blocked queued normal @{}",
+                                side
+                            );
+                            return false;
+                        }
 
-                        // we need to remove and push, because we
-                        // change flags and potentially time, which
-                        // changes the priority
-                        sq.pop_blocking(
-                            qid,
-                            state.blocking_bypassable,
-                            next.client,
-                            network.aggregate_base_delay,
+                        // we need to remove and re-insert to get the packet
+                        // into the correct internal queue with the new flags
+                        let mut entry = sq
+                            .pop_blocking(
+                                qid,
+                                state.blocking_bypassable,
+                                next.client,
+                                network.aggregate_base_delay,
+                            )
+                            .unwrap();
+                        entry.bypass = true;
+                        entry.replace = false;
+                        // per definition, we are going to replace padding with
+                        // a blocked queued normal packet that was either queued
+                        // at the same time as the padding (recall: padding has
+                        // lower priority than normal base events in the
+                        // simulator) or has been queued for some time
+                        entry.propagate_base_delay = if current_time > &entry.time {
+                            // it was delayed, propagate the delay to the
+                            // receiver
+                            Some(*current_time - entry.time)
+                        } else {
+                            None
+                        };
+                        debug!(
+                            "\treplaced bypassable padding sent with blocked queued normal TunnelSent @{}",
+                            side
                         );
-                        sq.push_sim(tmp);
+                        if let Some(delay) = entry.propagate_base_delay {
+                            debug!(
+                                "\tblocking delayed base TunnelSent by {:?}, propagating in event",
+                                delay
+                            );
+                        }
+                        sq.push_sim(entry);
                         return false;
                     }
                 }
@@ -261,17 +259,22 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 contains_padding: true,
                 bypass: next.bypass,
                 replace: next.replace,
-                base_delay: None,
+                propagate_base_delay: None,
             });
             false
         }
         TriggerEvent::TunnelSent => {
-            debug!("\tqueue {:#?}", TriggerEvent::TunnelRecv);
             let reporting_delay = recipient.reporting_delay();
             let (network_delay, mut baseline_delay) = network.sample(current_time, next.client);
+            if let Some(pps_delay) = baseline_delay {
+                debug!(
+                    "\tadding {:?} delay to packet due to {:?}pps limit",
+                    pps_delay, network.pps
+                );
+            }
 
             // blocked TunnelSent may have a base delay to propagate
-            match (next.base_delay, baseline_delay) {
+            match (next.propagate_base_delay, baseline_delay) {
                 (Some(baseline), Some(delay)) => {
                     baseline_delay = Some(baseline + delay);
                 }
@@ -305,14 +308,18 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     contains_padding: false,
                     bypass: false,
                     replace: false,
-                    base_delay: baseline_delay,
+                    propagate_base_delay: baseline_delay,
                 });
+                debug!(
+                    "\tqueue {:#?}, arriving at recipient in {:?}",
+                    TriggerEvent::TunnelRecv,
+                    reported - *current_time
+                );
                 return true;
             }
 
-            // padding, less complicated
-            debug!("\tqueue {:#?}", TriggerEvent::TunnelRecv);
-            // action delay + network + recipient reporting delay
+            // padding, less complicated: action delay + network + recipient
+            // reporting delay
             let reported = next.time + next.integration_delay + network_delay + reporting_delay;
             sq.push_sim(SimEvent {
                 event: TriggerEvent::TunnelRecv,
@@ -324,13 +331,17 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 replace: false,
                 // NOTE: padding does not contribute to delaying the base trace
                 // (beyond filling the bottleneck window)
-                base_delay: None,
+                propagate_base_delay: baseline_delay,
             });
-
+            debug!(
+                "\tqueue {:#?}, arriving at recipient in {:?}",
+                TriggerEvent::TunnelRecv,
+                reported - *current_time
+            );
             true
         }
         TriggerEvent::TunnelRecv => {
-            if let Some(bottleneck) = next.base_delay {
+            if let Some(bottleneck) = next.propagate_base_delay {
                 // NOTE: we add the delay to the sum of delays, but this is
                 // overly conservative (for client->server direction), because
                 // it is first once application data arrives (later than in the

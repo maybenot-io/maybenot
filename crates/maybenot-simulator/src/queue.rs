@@ -62,7 +62,7 @@ impl SimQueue {
             contains_padding,
             bypass: false,
             replace: false,
-            base_delay: None,
+            propagate_base_delay: None,
         });
     }
 
@@ -82,26 +82,30 @@ impl SimQueue {
             0 => (None, Queue::Blocking, Duration::default()),
             _ => {
                 // peek all, per def, it's one of them
-                let (c, cq, cd) = self.client.peek(network_delay_sum, current_time);
-                let (s, sq, sd) = self.server.peek(network_delay_sum, current_time);
+                let (client, client_queue, client_duration) =
+                    self.client.peek(network_delay_sum, current_time);
+                let (server, server_queue, server_duration) =
+                    self.server.peek(network_delay_sum, current_time);
 
                 // if one of the queues is empty, return the other, otherwise
                 // compare based on the smallest duration, and if equal, based
                 // on the event type: this is needed due to peek() above
                 // accounting for the network delay sum for base events
-                match (c, s) {
-                    (None, Some(_)) => (s, sq, sd),
-                    (Some(_), None) => (c, cq, cd),
+                match (client, server) {
+                    (Some(_), None) => (client, client_queue, client_duration),
+                    (None, Some(_)) => (server, server_queue, server_duration),
                     (None, None) => (None, Queue::Blocking, Duration::default()),
-                    (Some(ce), Some(se)) => {
-                        if cd
-                            .cmp(&sd)
-                            .then_with(|| event_to_usize(&ce.event).cmp(&event_to_usize(&se.event)))
-                            == std::cmp::Ordering::Less
+                    (Some(client_event), Some(server_event)) => {
+                        let ordering = client_duration.cmp(&server_duration).then_with(|| {
+                            event_to_usize(&client_event.event)
+                                .cmp(&event_to_usize(&server_event.event))
+                        });
+                        if ordering == std::cmp::Ordering::Less
+                            || ordering == std::cmp::Ordering::Equal
                         {
-                            (c, cq, cd)
+                            (client, client_queue, client_duration)
                         } else {
-                            (s, sq, sd)
+                            (server, server_queue, server_duration)
                         }
                     }
                 }
@@ -121,10 +125,14 @@ impl SimQueue {
         }
     }
 
-    pub fn peek_blocking(&self, bypassable: bool, is_client: bool) -> (Option<&SimEvent>, Queue) {
+    pub fn peek_blocking(
+        &self,
+        active_blocking_bypassable: bool,
+        is_client: bool,
+    ) -> (Option<&SimEvent>, Queue) {
         match is_client {
-            true => peek_blocking(&self.client, bypassable),
-            false => peek_blocking(&self.server, bypassable),
+            true => peek_blocking(&self.client, active_blocking_bypassable),
+            false => peek_blocking(&self.server, active_blocking_bypassable),
         }
     }
 
@@ -149,10 +157,11 @@ impl SimQueue {
         &self,
         bypassable: bool,
         is_client: bool,
+        network_delay_sum: Duration,
     ) -> (Option<&SimEvent>, Queue) {
         match is_client {
-            true => peek_non_blocking(&self.client, bypassable),
-            false => peek_non_blocking(&self.server, bypassable),
+            true => peek_non_blocking(&self.client, bypassable, network_delay_sum),
+            false => peek_non_blocking(&self.server, bypassable, network_delay_sum),
         }
     }
 
@@ -169,8 +178,11 @@ impl SimQueue {
     }
 }
 
-fn peek_blocking(queue: &EventQueue, bypassable: bool) -> (Option<&SimEvent>, Queue) {
-    if bypassable {
+fn peek_blocking(
+    queue: &EventQueue,
+    active_blocking_bypassable: bool,
+) -> (Option<&SimEvent>, Queue) {
+    if active_blocking_bypassable {
         // only blocking events are then blocking
         (queue.peek_blocking(), Queue::Blocking)
     } else {
@@ -187,12 +199,16 @@ fn peek_blocking(queue: &EventQueue, bypassable: bool) -> (Option<&SimEvent>, Qu
     }
 }
 
-fn peek_non_blocking(queue: &EventQueue, bypassable: bool) -> (Option<&SimEvent>, Queue) {
+fn peek_non_blocking(
+    queue: &EventQueue,
+    bypassable: bool,
+    network_delay_sum: Duration,
+) -> (Option<&SimEvent>, Queue) {
     if bypassable {
         // if the current blocking is bypassable, then we need to consider
         // bypassable as non-blocking
         let bb = queue.peek_bypassable();
-        let (n, nq) = queue.peek_non_blocking();
+        let (n, nq) = queue.peek_non_blocking(network_delay_sum);
 
         if bb > n {
             (bb, Queue::Bypassable)
@@ -200,11 +216,11 @@ fn peek_non_blocking(queue: &EventQueue, bypassable: bool) -> (Option<&SimEvent>
             (n, nq)
         }
     } else {
-        queue.peek_non_blocking()
+        queue.peek_non_blocking(network_delay_sum)
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Queue {
     Blocking,
     Bypassable,
@@ -272,13 +288,16 @@ impl EventQueue {
         match self.len() {
             0 => (None, Queue::Blocking, Duration::default()),
             _ => {
-                // peek all, per def, it's one of them
-                let (mut first, mut q) = (self.blocking.peek(), Queue::Blocking);
-                let n = self.bypassable.peek();
+                // peek all, per def, it's one of them: we prioritize in order
+                // of base, bypassable, blocking, and lastly internal
+                let (mut first, mut q) = (self.bypassable.peek(), Queue::Bypassable);
+
+                let n = self.blocking.peek();
                 if n > first {
                     first = n;
-                    q = Queue::Bypassable;
+                    q = Queue::Blocking;
                 }
+
                 let n = self.internal.peek();
                 if n > first {
                     first = n;
@@ -331,13 +350,13 @@ impl EventQueue {
     }
 
     /// peek the next non-blocking event
-    fn peek_non_blocking(&self) -> (Option<&SimEvent>, Queue) {
-        let i = self.internal.peek();
+    fn peek_non_blocking(&self, network_delay_sum: Duration) -> (Option<&SimEvent>, Queue) {
         let b = self.base.peek();
-        if i > b {
-            (i, Queue::Internal)
-        } else {
+        let i = self.internal.peek();
+        if before(b, i, network_delay_sum) {
             (b, Queue::Base)
+        } else {
+            (i, Queue::Internal)
         }
     }
 
@@ -348,17 +367,18 @@ impl EventQueue {
     }
 }
 
-// determine if a, with network delay sum, is before b: uses the same ordering
-// as the binary heap, from SimEvent::cmp()
+// determine if a, with network delay sum, is before or at b: uses the same
+// ordering as the binary heap, from SimEvent::cmp()
 fn before(a: Option<&SimEvent>, b: Option<&SimEvent>, a_network_delay_sum: Duration) -> bool {
     match (a, b) {
         (Some(a), Some(b)) => {
             let a_time = a.time + a_network_delay_sum;
             let b_time = b.time;
-            a_time
+            let ordering = a_time
                 .cmp(&b_time)
-                .then_with(|| event_to_usize(&a.event).cmp(&event_to_usize(&b.event)))
-                == std::cmp::Ordering::Less
+                .then_with(|| event_to_usize(&a.event).cmp(&event_to_usize(&b.event)));
+            // prefer a if it's equal, since it's the base event
+            ordering == std::cmp::Ordering::Less || ordering == std::cmp::Ordering::Equal
         }
         (Some(_), None) => true,
         _ => false,

@@ -62,6 +62,7 @@ enum StateChange {
 /// channel, and produces as *output* zero or more [`TriggerAction`], such as to
 /// *send padding* traffic or *block outgoing* traffic. One or more [`Machine`]
 /// determine what [`TriggerAction`] to take based on [`TriggerEvent`].
+#[derive(Clone, Debug)]
 pub struct Framework<M, R> {
     // updated each time the framework is triggered
     current_time: Instant,

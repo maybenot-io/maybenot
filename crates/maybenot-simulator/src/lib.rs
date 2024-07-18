@@ -124,13 +124,14 @@ use rand_xoshiro::Xoshiro256StarStar;
 
 use crate::{
     network::sim_network_stack,
-    peek::{peek_blocked_exp, peek_internal, peek_queue, peek_scheduled},
+    peek::{peek_blocked_exp, peek_queue, peek_scheduled_action, peek_scheduled_internal_timer},
 };
 
 // Enum to encapsulate different RngCore sources: in the Maybenot Framework, the
 // RngCore trait is not ?Sized (unnecessary overhead for the framework), so we
 // have to work around this by using an enum to support selecting rng source as
 // a simulation option.
+#[derive(Debug)]
 enum RngSource {
     Thread(ThreadRng),
     Xoshiro(Xoshiro256StarStar),
@@ -187,7 +188,7 @@ pub struct SimEvent {
     replace: bool,
     /// internal duration to propagate base trace delay from one party to the
     /// other due to bottleneck and blocking
-    base_delay: Option<Duration>,
+    propagate_base_delay: Option<Duration>,
 }
 
 /// Helper function to convert a TriggerEvent to a usize for sorting purposes.
@@ -234,19 +235,18 @@ pub struct ScheduledAction {
 }
 
 /// The state of the client or the server in the simulator.
+#[derive(Debug)]
 pub struct SimState<M, R> {
     /// an instance of the Maybenot framework
     framework: Framework<M, R>,
     /// scheduled action timers
     scheduled_action: Vec<Option<ScheduledAction>>,
     /// scheduled internal timers
-    scheduled_internal: Vec<Option<Instant>>,
-    /// blocking time (active if in the future, relative to current_time)
-    blocking_until: Instant,
+    scheduled_internal_timer: Vec<Option<Instant>>,
+    /// blocking until time, active is set
+    blocking_until: Option<Instant>,
     /// whether the active blocking bypassable or not
     blocking_bypassable: bool,
-    /// time of the last sent packet
-    last_sent_time: Instant,
     /// integration aspects for this state
     integration: Option<Integration>,
 }
@@ -282,14 +282,9 @@ where
             )
             .unwrap(),
             scheduled_action: vec![None; num_machines],
-            scheduled_internal: vec![None; num_machines],
-            // has to be in the past
-            blocking_until: current_time.checked_sub(Duration::from_micros(1)).unwrap(),
+            scheduled_internal_timer: vec![None; num_machines],
+            blocking_until: None,
             blocking_bypassable: false,
-            // has to be far in the past
-            last_sent_time: current_time
-                .checked_sub(Duration::from_millis(1000))
-                .unwrap(),
             integration,
         }
     }
@@ -443,6 +438,8 @@ pub fn sim_advanced(
         args.server_integration.cloned(),
         args.insecure_rng_seed,
     );
+    debug!("sim(): client machines {}", machines_client.len());
+    debug!("sim(): server machines {}", machines_server.len());
 
     let mut network =
         NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
@@ -469,26 +466,25 @@ pub fn sim_advanced(
 
         // status
         debug!(
-            "sim(): at time {:#?}",
-            current_time.duration_since(start_time)
+            "sim(): at time {:#?}, aggregate network base delay {:#?}",
+            current_time.duration_since(start_time),
+            network.aggregate_base_delay
         );
         if next.client {
             debug!("sim(): @client next\n{:#?}", next);
         } else {
             debug!("sim(): @server next\n{:#?}", next);
         }
-
-        // if the client is blocked
-        if client.blocking_until > current_time {
+        if let Some(blocking_until) = client.blocking_until {
             debug!(
                 "sim(): client is blocked until time {:#?}",
-                client.blocking_until.duration_since(start_time)
+                blocking_until.duration_since(start_time)
             );
         }
-        if server.blocking_until > current_time {
+        if let Some(blocking_until) = server.blocking_until {
             debug!(
                 "sim(): server is blocked until time {:#?}",
-                server.blocking_until.duration_since(start_time)
+                blocking_until.duration_since(start_time)
             );
         }
 
@@ -501,23 +497,12 @@ pub fn sim_advanced(
             sim_network_stack(&next, sq, &server, &mut client, &mut network, &current_time)
         };
 
-        if network_activity {
-            // update last packet stats in state
-            if next.event == TriggerEvent::TunnelSent {
-                if next.client {
-                    client.last_sent_time = current_time;
-                } else {
-                    server.last_sent_time = current_time;
-                }
-            }
-        }
-
         // get actions, update scheduled actions
         if next.client {
-            debug!("sim(): trigger @client framework\n{:#?}", next.event);
+            debug!("sim(): trigger @client framework {:?}", next.event);
             trigger_update(&mut client, &next, &current_time, sq, true);
         } else {
-            debug!("sim(): trigger @server framework\n{:#?}", next.event);
+            debug!("sim(): trigger @server framework {:?}", next.event);
             trigger_update(&mut server, &next, &current_time, sq, false);
         }
 
@@ -593,22 +578,26 @@ fn pick_next<M: AsRef<[Machine]>>(
     network: &mut NetworkBottleneck,
     current_time: Instant,
 ) -> Option<SimEvent> {
-    // find the earliest scheduled, blocked, and queued events to determine the
-    // next event
-    let s = peek_scheduled(
+    // find the earliest action, timer, blocked, and queued events to determine
+    // the next event
+    let s = peek_scheduled_action(
         &client.scheduled_action,
         &server.scheduled_action,
         current_time,
     );
-    debug!("\tpick_next(): peek_scheduled = {:?}", s);
-    let i = peek_internal(
-        &client.scheduled_internal,
-        &server.scheduled_internal,
+    debug!("\tpick_next(): peek_scheduled_action = {:?}", s);
+
+    let i = peek_scheduled_internal_timer(
+        &client.scheduled_internal_timer,
+        &server.scheduled_internal_timer,
         current_time,
     );
-    debug!("\tpick_next(): peek_internal = {:?}", i);
-    let b = peek_blocked_exp(&client.blocking_until, &server.blocking_until, current_time);
+    debug!("\tpick_next(): peek_scheduled_internal_timer = {:?}", i);
+
+    let (b, b_is_client) =
+        peek_blocked_exp(client.blocking_until, server.blocking_until, current_time);
     debug!("\tpick_next(): peek_blocked_exp = {:?}", b);
+
     let (q, qid, q_is_client) = peek_queue(
         sq,
         client,
@@ -628,20 +617,24 @@ fn pick_next<M: AsRef<[Machine]>>(
     // framework than inside it. On overload, the user of the framework will
     // bulk trigger events in the framework.
     if q <= s && q <= i && q <= b {
-        debug!("\tpick_next(): picked queue");
-        let tmp = sq.pop(qid, q_is_client, network.aggregate_base_delay);
-        tmp.as_ref()?;
-        let mut tmp = tmp.unwrap();
+        debug!(
+            "\tpick_next(): picked queue, is_client {}, queue {:?}",
+            q_is_client, qid
+        );
+        let mut tmp = sq
+            .pop(qid, q_is_client, network.aggregate_base_delay)
+            .unwrap();
+        debug!("\tpick_next(): popped from queue {:?}", tmp);
         // check if blocking moves the event forward in time
         if current_time + q > tmp.time {
             if q > Duration::default() && !tmp.contains_padding {
                 // NOTE: this blocking is also considered a delay, but only if
                 // it moves time forward (otherwise, it's a question of sending
                 // rate / pps) and it doesn't contain padding.
-                tmp.base_delay = Some((current_time + q) - tmp.time);
+                tmp.propagate_base_delay = Some((current_time + q) - tmp.time);
                 debug!(
-                    "\tpick_next(): blocking to delay base events by {:#?}",
-                    (current_time + q) - tmp.time
+                    "\tpick_next(): blocking delayed base TunnelSent by {:#?}, propagating in event",
+                    tmp.propagate_base_delay.unwrap()
                 );
             }
 
@@ -658,44 +651,34 @@ fn pick_next<M: AsRef<[Machine]>>(
         debug!("\tpick_next(): picked blocking");
         // create SimEvent and move blocking into (what soon will be) the past
         // to indicate that it has been processed
-        let time: Instant;
         // ASSUMPTION: block outgoing is reported from integration
         let delay: Duration;
-        let client_earliest =
-            if client.blocking_until >= current_time && server.blocking_until >= current_time {
-                client.blocking_until <= server.blocking_until
-            } else {
-                client.blocking_until >= current_time
-            };
-
-        if client_earliest {
+        if b_is_client {
             delay = client.reporting_delay();
-            time = client.blocking_until + delay;
-            client.blocking_until -= Duration::from_micros(1);
+            client.blocking_until = None;
         } else {
             delay = server.reporting_delay();
-            time = server.blocking_until + delay;
-            server.blocking_until -= Duration::from_micros(1);
+            server.blocking_until = None;
         }
 
         return Some(SimEvent {
-            client: client_earliest,
+            client: b_is_client,
             event: TriggerEvent::BlockingEnd,
-            time,
+            time: current_time + b + delay,
             integration_delay: delay,
             bypass: false,
             replace: false,
             contains_padding: false,
-            base_delay: None,
+            propagate_base_delay: None,
         });
     }
 
     // next we pick internal events, which should be faster than scheduled
     // actions due to less work
     if i <= s {
-        debug!("\tpick_next(): picked internal");
+        debug!("\tpick_next(): picked internal timer");
         let target = current_time + i;
-        let act = do_internal(client, server, target);
+        let act = do_internal_timer(client, server, target);
         if let Some(a) = act {
             sq.push_sim(a.clone());
         }
@@ -704,16 +687,16 @@ fn pick_next<M: AsRef<[Machine]>>(
 
     // what's left is scheduled actions: find the action act on the action,
     // putting the event into the sim queue, and then recurse
-    debug!("\tpick_next(): picked scheduled");
+    debug!("\tpick_next(): picked scheduled action");
     let target = current_time + s;
-    let act = do_scheduled(client, server, target);
+    let act = do_scheduled_action(client, server, target);
     if let Some(a) = act {
         sq.push_sim(a.clone());
     }
     pick_next(sq, client, server, network, current_time)
 }
 
-fn do_internal<M: AsRef<[Machine]>>(
+fn do_internal_timer<M: AsRef<[Machine]>>(
     client: &mut SimState<M, RngSource>,
     server: &mut SimState<M, RngSource>,
     target: Instant,
@@ -721,7 +704,7 @@ fn do_internal<M: AsRef<[Machine]>>(
     let mut machine: Option<MachineId> = None;
     let mut is_client = false;
 
-    for (id, opt) in client.scheduled_internal.iter_mut().enumerate() {
+    for (id, opt) in client.scheduled_internal_timer.iter_mut().enumerate() {
         if let Some(a) = opt {
             if *a == target {
                 machine = Some(MachineId::from_raw(id));
@@ -733,7 +716,7 @@ fn do_internal<M: AsRef<[Machine]>>(
     }
 
     if machine.is_none() {
-        for (id, opt) in server.scheduled_internal.iter_mut().enumerate() {
+        for (id, opt) in server.scheduled_internal_timer.iter_mut().enumerate() {
             if let Some(a) = opt {
                 if *a == target {
                     machine = Some(MachineId::from_raw(id));
@@ -758,11 +741,11 @@ fn do_internal<M: AsRef<[Machine]>>(
         bypass: false,
         replace: false,
         contains_padding: false,
-        base_delay: None,
+        propagate_base_delay: None,
     })
 }
 
-fn do_scheduled<M: AsRef<[Machine]>>(
+fn do_scheduled_action<M: AsRef<[Machine]>>(
     client: &mut SimState<M, RngSource>,
     server: &mut SimState<M, RngSource>,
     target: Instant,
@@ -830,7 +813,7 @@ fn do_scheduled<M: AsRef<[Machine]>>(
                 bypass,
                 replace,
                 contains_padding: true,
-                base_delay: None,
+                propagate_base_delay: None,
             })
         }
         TriggerAction::BlockOutgoing {
@@ -852,14 +835,14 @@ fn do_scheduled<M: AsRef<[Machine]>>(
 
             // should we update client/server blocking?
             if is_client {
-                if replace || block > client.blocking_until {
-                    client.blocking_until = block;
+                if replace || block > client.blocking_until.unwrap_or(a.time) {
+                    client.blocking_until = Some(block);
                     client.blocking_bypassable = bypass;
                 }
                 event_bypass = client.blocking_bypassable;
             } else {
-                if replace || block > server.blocking_until {
-                    server.blocking_until = block;
+                if replace || block > server.blocking_until.unwrap_or(a.time) {
+                    server.blocking_until = Some(block);
                     server.blocking_bypassable = bypass;
                 }
                 event_bypass = server.blocking_bypassable;
@@ -874,7 +857,7 @@ fn do_scheduled<M: AsRef<[Machine]>>(
                 bypass: event_bypass,
                 replace: false,
                 contains_padding: false,
-                base_delay: None,
+                propagate_base_delay: None,
             })
         }
     }
@@ -896,6 +879,10 @@ fn trigger_update<M: AsRef<[Machine]>>(
     {
         match action {
             TriggerAction::Cancel { machine, timer } => {
+                debug!(
+                    "\ttrigger_update(): cancel action {:?} {:?}",
+                    machine, timer
+                );
                 // here we make a simplifying assumption of no trigger delay for
                 // cancel actions
                 match timer {
@@ -903,11 +890,11 @@ fn trigger_update<M: AsRef<[Machine]>>(
                         state.scheduled_action[machine.into_raw()] = None;
                     }
                     Timer::Internal => {
-                        state.scheduled_internal[machine.into_raw()] = None;
+                        state.scheduled_internal_timer[machine.into_raw()] = None;
                     }
                     Timer::All => {
                         state.scheduled_action[machine.into_raw()] = None;
-                        state.scheduled_internal[machine.into_raw()] = None;
+                        state.scheduled_internal_timer[machine.into_raw()] = None;
                     }
                 }
             }
@@ -917,6 +904,10 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 replace: _,
                 machine,
             } => {
+                debug!(
+                    "\ttrigger_update(): send padding action {:?} {:?}",
+                    timeout, machine
+                );
                 state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
                     action: action.clone(),
                     time: *current_time + *timeout + trigger_delay,
@@ -929,6 +920,10 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 replace: _,
                 machine,
             } => {
+                debug!(
+                    "\ttrigger_update(): block outgoing action {:?} {:?}",
+                    timeout, machine
+                );
                 state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
                     action: action.clone(),
                     time: *current_time + *timeout + trigger_delay,
@@ -939,12 +934,18 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 replace,
                 machine,
             } => {
+                debug!(
+                    "\ttrigger_update(): update timer action {:?} {:?}",
+                    duration, machine
+                );
                 // get current internal timer duration, if any
-                let current = state.scheduled_internal[machine.into_raw()].unwrap_or(*current_time);
+                let current =
+                    state.scheduled_internal_timer[machine.into_raw()].unwrap_or(*current_time);
 
                 // update the timer
                 if *replace || current < *current_time + *duration {
-                    state.scheduled_internal[machine.into_raw()] = Some(*current_time + *duration);
+                    state.scheduled_internal_timer[machine.into_raw()] =
+                        Some(*current_time + *duration);
                     // TimerBegin event
                     sq.push_sim(SimEvent {
                         client: is_client,
@@ -954,7 +955,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                         bypass: false,
                         replace: false,
                         contains_padding: false,
-                        base_delay: None,
+                        propagate_base_delay: None,
                     });
                 }
             }
@@ -1024,7 +1025,7 @@ pub fn parse_trace_advanced(
                 }
                 "r" | "rn" => {
                     // sent by server delay time ago
-                    let sent = timestamp.checked_sub(network.delay).unwrap();
+                    let sent = timestamp - network.delay;
                     // but reported to the Maybenot framework at the server with delay
                     let reporting_delay = server
                         .map(|i| i.reporting_delay())
