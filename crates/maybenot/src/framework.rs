@@ -44,6 +44,7 @@ struct MachineRuntime<T: crate::time::Instant> {
     normal_sent: u64,
     blocking_duration: T::Duration,
     machine_start: T,
+    allowed_blocked_microsec: T::Duration,
     counter_a: u64,
     counter_b: u64,
 }
@@ -115,10 +116,6 @@ where
         current_time: T,
         rng: R,
     ) -> Result<Self, Error> {
-        for m in machines.as_ref() {
-            m.validate()?;
-        }
-
         if !(0.0..=1.0).contains(&max_padding_frac) {
             Err(Error::PaddingLimit)?;
         }
@@ -126,19 +123,21 @@ where
             Err(Error::BlockingLimit)?;
         }
 
-        let runtime = vec![
-            MachineRuntime {
+        let mut runtime = Vec::with_capacity(machines.as_ref().len());
+        for m in machines.as_ref() {
+            m.validate()?;
+            runtime.push(MachineRuntime {
                 current_state: 0,
                 state_limit: 0,
                 padding_sent: 0,
                 normal_sent: 0,
                 blocking_duration: T::Duration::zero(),
                 machine_start: current_time,
+                allowed_blocked_microsec: T::Duration::from_micros(m.allowed_blocked_microsec),
                 counter_a: 0,
                 counter_b: 0,
-            };
-            machines.as_ref().len()
-        ];
+            });
+        }
 
         let actions = vec![None; machines.as_ref().len()];
 
@@ -510,7 +509,7 @@ where
 
         // machine allowed blocking duration first, since it bypasses the
         // other two types of limits
-        if m_block_dur < T::Duration::from_micros(machine.allowed_blocked_microsec) {
+        if m_block_dur < runtime.allowed_blocked_microsec {
             // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
