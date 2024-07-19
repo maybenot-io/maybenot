@@ -174,8 +174,14 @@ where
     }
 
     /// Trigger zero or more [`TriggerEvent`] for all machines running in the
-    /// framework. The current time SHOULD be the current time at time of
+    /// framework.
+    ///
+    /// The `current_time` SHOULD be the current time at time of
     /// calling the method (e.g., [`Instant::now()`](std::time::Instant::now())).
+    /// The `current_time` must be a monotonically nondecreasing clock. This means that the time
+    /// passed in must never be earlier than what was given to [`Framework::new()`] or a previous
+    /// call to `trigger_event` for the same framework instance.
+    ///
     /// Returns an iterator of zero or more [`TriggerAction`] that MUST be taken by the caller.
     pub fn trigger_events(
         &mut self,
