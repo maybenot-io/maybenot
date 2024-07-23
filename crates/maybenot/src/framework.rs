@@ -4,8 +4,6 @@
 use rand_core::RngCore;
 
 use crate::*;
-use std::time::Duration;
-use std::time::Instant;
 
 use self::action::Action;
 use self::constants::STATE_END;
@@ -13,6 +11,7 @@ use self::constants::STATE_LIMIT_MAX;
 use self::counter::Counter;
 use self::counter::Operation;
 use self::event::Event;
+use crate::time::Duration as _;
 
 /// An opaque token representing one machine running inside the framework.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -38,13 +37,14 @@ impl MachineId {
 }
 
 #[derive(Debug, Clone)]
-struct MachineRuntime {
+struct MachineRuntime<T: crate::time::Instant> {
     current_state: usize,
     state_limit: u64,
     padding_sent: u64,
     normal_sent: u64,
-    blocking_duration: Duration,
-    machine_start: Instant,
+    blocking_duration: T::Duration,
+    machine_start: T,
+    allowed_blocked_microsec: T::Duration,
     counter_a: u64,
     counter_b: u64,
 }
@@ -63,55 +63,59 @@ enum StateChange {
 /// *send padding* traffic or *block outgoing* traffic. One or more [`Machine`]
 /// determine what [`TriggerAction`] to take based on [`TriggerEvent`].
 #[derive(Clone, Debug)]
-pub struct Framework<M, R> {
+pub struct Framework<M, R, T = std::time::Instant>
+where
+    T: crate::time::Instant,
+{
     // updated each time the framework is triggered
-    current_time: Instant,
+    current_time: T,
     // random number generator, used for sampling distributions and transitions
     rng: R,
     // we allocate the actions vector once and reuse it, handing out references
     // as part of the iterator in [`Framework::trigger_events`].
-    actions: Vec<Option<TriggerAction>>,
+    actions: Vec<Option<TriggerAction<T>>>,
     // the machines are immutable, but we need to keep track of their runtime
     // state (size independent of number of states in the machine).
     machines: M,
-    runtime: Vec<MachineRuntime>,
+    runtime: Vec<MachineRuntime<T>>,
     // padding accounting
     max_padding_frac: f64,
     normal_sent_packets: u64,
     padding_sent_packets: u64,
     // blocking accounting
     max_blocking_frac: f64,
-    blocking_duration: Duration,
-    blocking_started: Instant,
+    blocking_duration: T::Duration,
+    blocking_started: T,
     blocking_active: bool,
-    framework_start: Instant,
+    framework_start: T,
 }
 
-impl<M, R> Framework<M, R>
+impl<M, R, T> Framework<M, R, T>
 where
     M: AsRef<[Machine]>,
     R: RngCore,
+    T: crate::time::Instant,
 {
-    /// Create a new framework instance with zero or more [`Machine`]. The max
-    /// padding/blocking fractions are enforced as a total across all machines.
+    /// Create a new framework instance with zero or more [`Machine`].
+    ///
+    /// The max padding/blocking fractions are enforced as a total across all machines.
     /// The only way those limits can be violated are through
     /// [`Machine::allowed_padding_packets`] and
-    /// [`Machine::allowed_blocked_microsec`], respectively. The current time is
-    /// handed to the framework here (and later in [`Self::trigger_events()`]) to
-    /// make some types of use cases of the framework easier (weird machines and
-    /// for simulation). Returns an error on any invalid [`Machine`] or limits
-    /// not being fractions [0.0, 1.0].
+    /// [`Machine::allowed_blocked_microsec`], respectively.
+    ///
+    /// The current time is handed to the framework here (and later in [`Self::trigger_events()`])
+    /// to make some types of use cases of the framework easier (weird machines and
+    /// for simulation). The generic time type also allows for using custom time sources.
+    /// This can for example improve performance.
+    ///
+    /// Returns an error on any invalid [`Machine`] or limits not being fractions [0.0, 1.0].
     pub fn new(
         machines: M,
         max_padding_frac: f64,
         max_blocking_frac: f64,
-        current_time: Instant,
+        current_time: T,
         rng: R,
     ) -> Result<Self, Error> {
-        for m in machines.as_ref() {
-            m.validate()?;
-        }
-
         if !(0.0..=1.0).contains(&max_padding_frac) {
             Err(Error::PaddingLimit)?;
         }
@@ -119,19 +123,21 @@ where
             Err(Error::BlockingLimit)?;
         }
 
-        let runtime = vec![
-            MachineRuntime {
+        let mut runtime = Vec::with_capacity(machines.as_ref().len());
+        for m in machines.as_ref() {
+            m.validate()?;
+            runtime.push(MachineRuntime {
                 current_state: 0,
                 state_limit: 0,
                 padding_sent: 0,
                 normal_sent: 0,
-                blocking_duration: Duration::from_secs(0),
+                blocking_duration: T::Duration::zero(),
                 machine_start: current_time,
+                allowed_blocked_microsec: T::Duration::from_micros(m.allowed_blocked_microsec),
                 counter_a: 0,
                 counter_b: 0,
-            };
-            machines.as_ref().len()
-        ];
+            });
+        }
 
         let actions = vec![None; machines.as_ref().len()];
 
@@ -147,7 +153,7 @@ where
             framework_start: current_time,
             blocking_active: false,
             blocking_started: current_time,
-            blocking_duration: Duration::from_secs(0),
+            blocking_duration: T::Duration::zero(),
             padding_sent_packets: 0,
             normal_sent_packets: 0,
         };
@@ -167,14 +173,20 @@ where
     }
 
     /// Trigger zero or more [`TriggerEvent`] for all machines running in the
-    /// framework. The current time SHOULD be the current time at time of
-    /// calling the method (e.g., [`Instant::now()`]). Returns an iterator of
-    /// zero or more [`TriggerAction`] that MUST be taken by the caller.
+    /// framework.
+    ///
+    /// The `current_time` SHOULD be the current time at time of
+    /// calling the method (e.g., [`Instant::now()`](std::time::Instant::now())).
+    /// The `current_time` must be a monotonically nondecreasing clock. This means that the time
+    /// passed in must never be earlier than what was given to [`Framework::new()`] or a previous
+    /// call to `trigger_event` for the same framework instance.
+    ///
+    /// Returns an iterator of zero or more [`TriggerAction`] that MUST be taken by the caller.
     pub fn trigger_events(
         &mut self,
         events: &[TriggerEvent],
-        current_time: Instant,
-    ) -> impl Iterator<Item = &TriggerAction> {
+        current_time: T,
+    ) -> impl Iterator<Item = &TriggerAction<T>> {
         // reset all actions
         self.actions.fill(None);
 
@@ -261,9 +273,11 @@ where
                 }
             }
             TriggerEvent::BlockingEnd => {
-                let mut blocked: Duration = Duration::from_secs(0);
+                let mut blocked = T::Duration::zero();
                 if self.blocking_active {
-                    blocked = self.current_time.duration_since(self.blocking_started);
+                    blocked = self
+                        .current_time
+                        .saturating_duration_since(self.blocking_started);
                     self.blocking_duration += blocked;
                     self.blocking_active = false;
                 }
@@ -409,7 +423,7 @@ where
                 Action::SendPadding {
                     bypass, replace, ..
                 } => Some(TriggerAction::SendPadding {
-                    timeout: Duration::from_micros(action.sample_timeout(&mut self.rng)),
+                    timeout: T::Duration::from_micros(action.sample_timeout(&mut self.rng)),
                     bypass,
                     replace,
                     machine: index,
@@ -417,14 +431,14 @@ where
                 Action::BlockOutgoing {
                     bypass, replace, ..
                 } => Some(TriggerAction::BlockOutgoing {
-                    timeout: Duration::from_micros(action.sample_timeout(&mut self.rng)),
-                    duration: Duration::from_micros(action.sample_duration(&mut self.rng)),
+                    timeout: T::Duration::from_micros(action.sample_timeout(&mut self.rng)),
+                    duration: T::Duration::from_micros(action.sample_duration(&mut self.rng)),
                     bypass,
                     replace,
                     machine: index,
                 }),
                 Action::UpdateTimer { replace, .. } => Some(TriggerAction::UpdateTimer {
-                    duration: Duration::from_micros(action.sample_duration(&mut self.rng)),
+                    duration: T::Duration::from_micros(action.sample_duration(&mut self.rng)),
                     replace,
                     machine: index,
                 }),
@@ -449,7 +463,7 @@ where
         }
     }
 
-    fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
+    fn below_action_limits(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
 
         let Some(action) = current.action else {
@@ -464,7 +478,7 @@ where
         }
     }
 
-    fn below_limit_blocking(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
+    fn below_limit_blocking(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
         // blocking action
 
@@ -485,13 +499,17 @@ where
         let mut g_block_dur = self.blocking_duration;
         if self.blocking_active {
             // account for ongoing blocking as well, add duration
-            m_block_dur += self.current_time.duration_since(self.blocking_started);
-            g_block_dur += self.current_time.duration_since(self.blocking_started);
+            m_block_dur += self
+                .current_time
+                .saturating_duration_since(self.blocking_started);
+            g_block_dur += self
+                .current_time
+                .saturating_duration_since(self.blocking_started);
         }
 
         // machine allowed blocking duration first, since it bypasses the
         // other two types of limits
-        if m_block_dur < Duration::from_micros(machine.allowed_blocked_microsec) {
+        if m_block_dur < runtime.allowed_blocked_microsec {
             // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
@@ -499,11 +517,10 @@ where
         // does the machine limit say no, if set?
         if machine.max_blocking_frac > 0.0 {
             // TODO: swap to m_block_dur.div_duration_f64()
-            let f: f64 = m_block_dur.as_micros() as f64
-                / self
-                    .current_time
-                    .duration_since(runtime.machine_start)
-                    .as_micros() as f64;
+            let f: f64 = m_block_dur.div_duration_f64(
+                self.current_time
+                    .saturating_duration_since(runtime.machine_start),
+            );
             if f >= machine.max_blocking_frac {
                 return false;
             }
@@ -512,11 +529,10 @@ where
         // does the framework say no?
         if self.max_blocking_frac > 0.0 {
             // TODO: swap to g_block_dur.div_duration_f64()
-            let f: f64 = g_block_dur.as_micros() as f64
-                / self
-                    .current_time
-                    .duration_since(self.framework_start)
-                    .as_micros() as f64;
+            let f: f64 = g_block_dur.div_duration_f64(
+                self.current_time
+                    .saturating_duration_since(self.framework_start),
+            );
             if f >= self.max_blocking_frac {
                 return false;
             }
@@ -526,7 +542,7 @@ where
         runtime.state_limit > 0
     }
 
-    fn below_limit_padding(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
+    fn below_limit_padding(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
         // no limits apply if not made up padding count
         if runtime.padding_sent < machine.allowed_padding_packets {
             return runtime.state_limit > 0;

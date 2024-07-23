@@ -212,6 +212,7 @@ pub mod event;
 mod framework;
 mod machine;
 pub mod state;
+pub mod time;
 
 pub use crate::action::{Timer, TriggerAction};
 pub use crate::error::Error;

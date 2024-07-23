@@ -26,6 +26,9 @@ Manually generated changelog, for now. We follow semantic versioning.
   may behave differently than expected. v1 machines are now deprecated.
 - Machines are now serialized exclusively with Serde, and the custom format
   used in v1 has been removed.
+- Make it possible to run framework with different time sources. Exposes
+  `Instant` and `Duration` traits that can be implemented for any type.
+  Still uses `std::time` types by default.
 
 ## 1.1.0 - 2024-04-06
 - Limits sampled on framework init to allow self-transition to first state.
