@@ -516,7 +516,6 @@ where
 
         // does the machine limit say no, if set?
         if machine.max_blocking_frac > 0.0 {
-            // TODO: swap to m_block_dur.div_duration_f64()
             let f: f64 = m_block_dur.div_duration_f64(
                 self.current_time
                     .saturating_duration_since(runtime.machine_start),
@@ -528,7 +527,6 @@ where
 
         // does the framework say no?
         if self.max_blocking_frac > 0.0 {
-            // TODO: swap to g_block_dur.div_duration_f64()
             let f: f64 = g_block_dur.div_duration_f64(
                 self.current_time
                     .saturating_duration_since(self.framework_start),
