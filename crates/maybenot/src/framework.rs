@@ -175,13 +175,21 @@ where
     /// Trigger zero or more [`TriggerEvent`] for all machines running in the
     /// framework.
     ///
-    /// The `current_time` SHOULD be the current time at time of
-    /// calling the method (e.g., [`Instant::now()`](std::time::Instant::now())).
-    /// The `current_time` must be a monotonically nondecreasing clock. This means that the time
-    /// passed in must never be earlier than what was given to [`Framework::new()`] or a previous
-    /// call to `trigger_event` for the same framework instance.
+    /// The `current_time` SHOULD be the current time at the time of calling the
+    /// method (e.g., [`Instant::now()`](std::time::Instant::now())).
     ///
-    /// Returns an iterator of zero or more [`TriggerAction`] that MUST be taken by the caller.
+    /// In more detail, the `current_time` SHOULD be a monotonically
+    /// nondecreasing clock. This means that the time passed SHOULD never be
+    /// earlier than what was given to [`Framework::new()`] or a previous call
+    /// to `trigger_events` for the same framework instance. If this requirement
+    /// is not followed, blocking durations MAY be inaccurately accounted for,
+    /// leading to less or more [`TriggerAction::BlockOutgoing`] than intended
+    /// by set framework and machine limits. The consequences of this depend on
+    /// the running machines (e.g., a machine may also pad as a consequence of
+    /// blocking) and the use-case for the user of the framework.
+    ///
+    /// Returns an iterator of zero or more [`TriggerAction`] that MUST be taken
+    /// by the caller.
     pub fn trigger_events(
         &mut self,
         events: &[TriggerEvent],
