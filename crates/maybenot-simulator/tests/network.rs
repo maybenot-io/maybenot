@@ -96,69 +96,6 @@ fn test_network_bottleneck() {
 }
 
 #[test_log::test]
-fn test_network_aggregate_base_delay() {
-    // a simple machine that blocks for 5us
-    let s0 = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
-        _ => vec![],
-    });
-
-    let mut s1 = State::new(enum_map! {
-        _ => vec![],
-    });
-    s1.action = Some(Action::BlockOutgoing {
-        bypass: false,
-        replace: false,
-        timeout: Dist {
-            dist: DistType::Uniform {
-                low: 0.0,
-                high: 0.0,
-            },
-            start: 0.0,
-            max: 0.0,
-        },
-        duration: Dist {
-            dist: DistType::Uniform {
-                low: 5.0,
-                high: 5.0,
-            },
-            start: 0.0,
-            max: 0.0,
-        },
-        limit: None,
-    });
-    let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1]).unwrap();
-
-    let input = "0,sn\n1000,sn\n2000,sn\n7000,sn\n11000,sn\n12000,rn\n";
-    let network = Network::new(Duration::from_micros(3), None);
-    let mut sq = parse_trace(input, &network);
-    let args = SimulatorArgs::new(&network, 20, true);
-
-    let trace = sim_advanced(&[m], &[], &mut sq, &args);
-    let client_trace = trace
-        .clone()
-        .into_iter()
-        .filter(|t| t.client)
-        .collect::<Vec<_>>();
-    assert_eq!(client_trace.len(), 6);
-    assert_eq!(
-        client_trace[1].time - client_trace[0].time,
-        Duration::from_micros(5)
-    );
-    assert_eq!(client_trace[1].time, client_trace[2].time);
-    assert_eq!(
-        client_trace[4].time - client_trace[0].time,
-        Duration::from_micros(15)
-    );
-    // the event at 12us is delayed by 4us, due to the block at 0s first
-    // impacting the event at 1us --- delaying it 4us due to 5us block
-    assert_eq!(
-        client_trace[5].time - client_trace[0].time,
-        Duration::from_micros(16)
-    );
-}
-
-#[test_log::test]
 fn test_network_aggregate_base_delay_on_bypass_replace() {
     // this test combined the bypass and replace flags for blocking and padding,
     // as well as our network model that causes aggregate base delays ... it's
@@ -241,56 +178,60 @@ fn test_network_aggregate_base_delay_on_bypass_replace() {
     result.push_str("2,sp ");
     // the normal packet from 1us is sent, now at 2us, propagating the base
     // delay of 1us in it: arriving at the receiver at 5us, due to the 3us
-    // network delay, and updating the base delay to 1us *for both client and
-    // server*
+    // network delay,and queueing a base delay of 1us to come into effect in 2x
+    // delay = 2*3us + 5us = 11us
     result.push_str("2,st ");
     // at at 5us, the blocking ends, so the first thing that happens is that the
     // blocked packet from 2us is sent, causing the base delay of 3us to be
-    // propagated, arriving at the receiver at 8us
+    // propagated, arriving at the server at 8us
     result.push_str("5,st ");
     // the blocking end event at the client (has lower priority than the st so
     // it happens after, but still at time 5us)
     result.push_str("5,be ");
 
-    // NOTE: in between this and the next event in the client trace, the two
-    // normal packets have arrived at the server and thus propagated the base
-    // delay to both parties, now at 3+1=4us in total
+    // NOTE: at 8us, the two normal packets have arrived at the server and
+    // queued a base delay of 3+1=4us in total, to come into effect in 2x delay
+    // = 2*3us + 8us = 14us
 
-    // in the base trace, the 8us sn event should be delayed by in total 4us
-    result.push_str("12,sn ");
+    // from the base trace
+    result.push_str("8,sn ");
     // the packet is sent
-    result.push_str("12,st ");
+    result.push_str("8,st ");
 
     // NOTE: in between this and the next event in the client trace:
-    // - the 12,rn event at the server is sent at 12-3+4=13us
+    // - the 12,rn event at the server is sent at 12-3=9us
     // - this causes the server's machine to start blocking for 5us and
     //   transitioning, scheduling padding to be sent in 2us
-    // - at 14, the 12,rn event (in the base trace) at the server is blocked
+    // - at 10, the 13,rn event (in the base trace) at the server is blocked
+    // - at 11, the server receives the packet sent at 8us
+    // - at 11, the padding is sent at the server and replaces the blocked
+    //   packet at 10, with a base delay of 1us to be propagated to the client
+    // - at 11, the delayed queueing of the base delay of 1us from the padding
+    //   packet at 2us is in effect
 
-    // 4us later, the 11,sn event in the base trace is sent at 15us
-    result.push_str("15,sn ");
+    // the 11,sn event in the base trace is delayed by 1us, so it's sent at 12us
+    result.push_str("12,sn ");
     // in a packet
-    result.push_str("15,st ");
-
-    // NOTE: at 15, the server machine's padding timer expires, causing the
-    // padding packet to be replaced with the queued up normal packet from 12us,
-    // and the packet is sent at 15us with a 1us base delay to be propagated, in
-    // (global) effect at 18us upon reception
-
-    // the 12us rn event, sent at 13us, arrives in a packet
-    result.push_str("16,rt ");
+    result.push_str("12,st ");
+    // the 12us rn event
+    result.push_str("12,rt ");
     // and the event is received
-    result.push_str("16,rn ");
+    result.push_str("12,rn ");
 
-    // the 14us sn event is sent at 18us
-    result.push_str("18,sn ");
+    // the padding packet the server sent @11us
+    result.push_str("14,rt ");
+    // and its a normal packet
+    result.push_str("14,rn ");
+
+    // now, at 14, the aggregate base delay of 3us is also in effect that was
+    // queued before from the client's blocking AND the propagated delay from
+    // the server's padding is directly in effect (because it's from the server
+    // to client), in total 5us
+
+    // the 14us sn event is sent at 19us
+    result.push_str("19,sn ");
     // the event is sent
-    result.push_str("18,st ");
-    // the padding packet the server sent @15us
-    result.push_str("18,rt ");
-    // and the actual padding, not normal: this moves the aggregate base delay
-    // up to 5us
-    result.push_str("18,rn ");
+    result.push_str("19,st ");
 
     // the 15us sn event is sent at 20us
     result.push_str("20,sn ");
@@ -302,7 +243,7 @@ fn test_network_aggregate_base_delay_on_bypass_replace() {
 
 #[test_log::test]
 fn test_ratio3_machine() {
-    // The purpose of this test is to test a large parte of the simulator, using
+    // The purpose of this test is to test a large part of the simulator, using
     // bypassable blocking to create a constant-rate defense on one side of the
     // tunnel, with significant simulated delays as a consequence.
 
@@ -359,7 +300,9 @@ fn test_ratio3_machine() {
     // 3300ms,r
     // 3300ms,r
 
-    let network = Network::new(Duration::from_millis(50), None);
+    // NOTE the 50ms network delay between the client and the server
+    let delay = Duration::from_millis(50);
+    let network = Network::new(delay, None);
     let pq = parse_trace(BE000_TRACE, &network);
     let trace = sim(
         &[ratio3_machine()],
@@ -395,12 +338,15 @@ fn test_ratio3_machine() {
     assert_eq!(client_trace[3].time - first, Duration::from_millis(690));
     assert!(client_trace[3].event.is_event(Event::TunnelRecv));
     // we have received 3 packets, the client will pad and replace once with the
-    // packet queued at 180ms, propagating a delay of 690-180=510ms
+    // packet queued at 180ms, propagating a delay of 690-180=510ms, coming into
+    // effect at time 690 + 3x delay = 840
     let mut aggregate_delay = Duration::from_millis(510);
     assert_eq!(client_trace[4].time - first, Duration::from_millis(690));
     assert!(client_trace[4].event.is_event(Event::TunnelSent));
     assert!(!client_trace[4].contains_padding);
     // two sends are blocked and queued up starting at 700ms
+
+    // the aggregate delay is now in effect
 
     for event in client_trace.iter().take(12).skip(5) {
         // next, we have 7 received packets, happening at the exact same time
@@ -413,13 +359,13 @@ fn test_ratio3_machine() {
         assert!(event.event.is_event(Event::TunnelRecv));
     }
     // the ratio3 machine only has time to trigger padding once, now sending the
-    // packet queued at 430ms
+    // packet queued at 430ms, which will trigger more aggregated delay into
+    // effect at 990+3x delay = 1140
     assert_eq!(
         client_trace[12].time - first,
         Duration::from_millis(990) + aggregate_delay
     );
     assert!(client_trace[12].event.is_event(Event::TunnelSent));
-    aggregate_delay += Duration::from_millis(990) + aggregate_delay - Duration::from_millis(430);
 
     for event in client_trace.iter().take(16).skip(13) {
         // 3 received packets, happening at the exact same time again
@@ -434,13 +380,22 @@ fn test_ratio3_machine() {
     let first_delayed_sent_blocked = Duration::from_millis(1120) + aggregate_delay;
 
     // the ratio3 machine triggers one padding, sending the packet queued at
-    // 700ms
+    // 700ms, which will trigger more aggregated delay into effect at 1120+3x
+    // delay = 1270
     assert_eq!(
         client_trace[16].time - first,
         Duration::from_millis(1120) + aggregate_delay
     );
     assert!(client_trace[16].event.is_event(Event::TunnelSent));
-    aggregate_delay += Duration::from_millis(1120) + aggregate_delay - Duration::from_millis(700);
+
+    let prev_aggregate_delay = aggregate_delay;
+    // at 1140ms, the aggregate delay is in effect from the previously sent
+    aggregate_delay += Duration::from_millis(990) + aggregate_delay - Duration::from_millis(430);
+
+    // at 1270ms, the aggregate delay is in effect from the previously sent at
+    // 1120ms (note that we need to use the previous aggregate delay here)
+    aggregate_delay +=
+        Duration::from_millis(1120) + prev_aggregate_delay - Duration::from_millis(700);
 
     // receive one packet at 1380ms
     assert_eq!(
@@ -461,12 +416,13 @@ fn test_ratio3_machine() {
     }
 
     // the ratio3 machine triggers one padding, sending the second packet queued
-    // at 700ms
+    // at 700ms, with aggregate delay into effect at 1680+3x delay = 1830 ...
     assert_eq!(
         client_trace[20].time - first,
         Duration::from_millis(1680) + aggregate_delay
     );
     assert!(client_trace[20].event.is_event(Event::TunnelSent));
+    // ... which is next
     aggregate_delay += Duration::from_millis(1680) + aggregate_delay - Duration::from_millis(700);
     // at 1930ms, two send packets are blocked
 
@@ -496,15 +452,14 @@ fn test_ratio3_machine() {
     // one sent is blocked
 
     // the ratio3 machine triggers one padding, sending the packet queued at
-    // 1120ms
+    // 1120ms, with aggregate delay into effect at 2430+3x delay = 2580 ...
     assert_eq!(
         client_trace[26].time - first,
         Duration::from_millis(2430) + aggregate_delay
     );
     assert!(client_trace[26].event.is_event(Event::TunnelSent));
-    assert_eq!(aggregate_delay, Duration::from_millis(8140));
+    // ... which is next
     aggregate_delay += Duration::from_millis(2430) + aggregate_delay - first_delayed_sent_blocked;
-    assert_eq!(aggregate_delay, Duration::from_millis(16010));
 
     // one sent is blocked at 2880ms
 
@@ -536,7 +491,7 @@ fn test_ratio3_machine() {
     }
 
     aggregate_delay += Duration::from_millis(3220) + aggregate_delay - second_delay_sent_blocked;
-    assert_eq!(aggregate_delay, Duration::from_millis(30280));
+    assert_eq!(aggregate_delay, Duration::from_millis(24930));
 }
 
 pub fn ratio3_machine() -> Machine {

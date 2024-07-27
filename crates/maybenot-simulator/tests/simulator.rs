@@ -156,7 +156,7 @@ fn test_simple_block_machine() {
     // note in the output how 18,sn should be delayed until 20,sn due to blocking
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "0,sn 0,st 5,bb 10,be 15,bb 18,sn 20,st 20,be 25,rt 25,rt 25,rn 25,rn 25,bb 30,be 32,sn 32,st 35,bb 37,rt 37,rn",
+        "0,sn 0,st 5,bb 10,be 15,bb 18,sn 20,st 20,be 25,rt 25,rt 25,rn 25,rn 25,bb 30,sn 30,st 30,be 35,rt 35,rn 35,bb",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -219,10 +219,11 @@ fn test_both_block_machine() {
         "0,sn 7,rn 8,sn 14,rn 18,sn",
         // blocking starts client at 5, server at 7
         // client is blocked until 10, server until 12
-        // the delay at client, from 8-10, adds delay 2 at time 10 (note that sn at server already queued at 9)
+        // the delay at client, from 8-10, adds delay 2 in effect at 10+3x5=25
         // at 12, blocking ends and the server sends queued from 9, adding 3 to delay
-        // at 18,sn, we now have 5 delay in total, so its turned into 23,sn
-        "0,sn 0,st 5,bb 7,rt 7,rn 8,sn 10,st 10,be 15,bb 17,rt 17,rn 20,be 23,sn 23,st",
+        // the blocking from the server goes into effect at 15, adding 3 to base delay
+        // at 18,sn, we now have 3 base delay in total, so its turned into 21,sn
+        "0,sn 0,st 5,bb 7,rt 7,rn 8,sn 10,st 10,be 15,bb 17,rt 17,rn 20,be 21,sn 21,st",
         Duration::from_micros(5),
         &[client],
         &[server],

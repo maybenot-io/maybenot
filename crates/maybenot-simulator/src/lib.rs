@@ -578,8 +578,8 @@ fn pick_next<M: AsRef<[Machine]>>(
     network: &mut NetworkBottleneck,
     current_time: Instant,
 ) -> Option<SimEvent> {
-    // find the earliest action, timer, blocked, and queued events to determine
-    // the next event
+    // find the earliest scheduled action, internal timer, block expiry,
+    // aggregate delay, and queued events to determine the next event
     let s = peek_scheduled_action(
         &client.scheduled_action,
         &server.scheduled_action,
@@ -598,23 +598,39 @@ fn pick_next<M: AsRef<[Machine]>>(
         peek_blocked_exp(client.blocking_until, server.blocking_until, current_time);
     debug!("\tpick_next(): peek_blocked_exp = {:?}", b);
 
+    let n = network.peek_aggregate_delay(current_time);
+    debug!("\tpick_next(): peek_aggregate_delay = {:?}", n);
+
     let (q, qid, q_is_client) = peek_queue(
         sq,
         client,
         server,
         network.aggregate_base_delay,
-        s.min(i).min(b),
+        s.min(i).min(b).min(n),
         current_time,
     );
     debug!("\tpick_next(): peek_queue = {:?}", q);
 
     // no next?
-    if s == Duration::MAX && i == Duration::MAX && b == Duration::MAX && q == Duration::MAX {
+    if s == Duration::MAX
+        && i == Duration::MAX
+        && b == Duration::MAX
+        && n == Duration::MAX
+        && q == Duration::MAX
+    {
         return None;
     }
 
-    // We prioritize the queue: in general, stuff happens faster outside the
-    // framework than inside it. On overload, the user of the framework will
+    // We prioritize the aggregate delay first: it is fundamental and may lead
+    // to further delays for picked_queue
+    if n <= s && n <= i && n <= b && n <= q {
+        debug!("\tpick_next(): picked aggregate delay");
+        network.pop_aggregate_delay();
+        return pick_next(sq, client, server, network, current_time);
+    }
+
+    // We prioritize the queue next: in general, stuff happens faster outside
+    // the framework than inside it. On overload, the user of the framework will
     // bulk trigger events in the framework.
     if q <= s && q <= i && q <= b {
         debug!(
