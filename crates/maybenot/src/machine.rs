@@ -135,7 +135,11 @@ impl FromStr for Machine {
         let s = &s[2..];
 
         // base64 decoding has a fixed ratio of ~4:3
-        let compressed = BASE64_STANDARD.decode(s.as_bytes()).unwrap();
+        let compressed = BASE64_STANDARD.decode(s.as_bytes());
+        if compressed.is_err() {
+            Err(Error::Machine("base64 decoding failed".to_string()))?;
+        }
+        let compressed = compressed.unwrap();
         // decompress, but scared of exceeding memory limits / zlib bombs
         let mut decoder = ZlibDecoder::new(compressed.as_slice());
         let mut buf = vec![0; MAX_DECOMPRESSED_SIZE];
