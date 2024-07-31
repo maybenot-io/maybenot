@@ -50,7 +50,12 @@ pub enum Action {
     /// constant-rate defenses, when set along with the replace flag.
     ///
     /// The replace flag determines if the action duration MUST replace any
-    /// existing blocking.
+    /// existing blocking. Note that the blocking with the replace flag is
+    /// always allowed if blocking is currently active, regardless of any limits
+    /// set. This is to make it possible to create a machine that is guaranteed
+    /// to prevent indefinite blocking (but comes at the cost of making it
+    /// possible for a machine that indefinitely refresh blocking by using the
+    /// replace flag).
     BlockOutgoing {
         bypass: bool,
         replace: bool,
