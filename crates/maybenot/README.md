@@ -37,8 +37,8 @@ subject to *limits* on the amount of padding and blocking they can schedule.
 
 <p align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/maybenot-io/maybenot/main/overview-dark.svg">
-  <img alt="design overview" src="https://raw.githubusercontent.com/maybenot-io/maybenot/main/overview-light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/maybenot-io/maybenot/main/crates/maybenot/overview-dark.svg">
+  <img alt="design overview" src="https://raw.githubusercontent.com/maybenot-io/maybenot/main/crates/maybenot/overview-light.svg">
 </picture>
 </p>
 
