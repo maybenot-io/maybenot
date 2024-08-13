@@ -4,7 +4,10 @@ Manually generated changelog, for now. We follow semantic versioning.
 
 ## 2.0.0 - TBA
 
-- Substantial refactoring and interface simplification.
+- Substantial refactoring and interface simplification. As an integrator, the
+  main integration focus should be triggering one or more `TriggerEvent` with
+  `trigger_events()` in an instance of the framework and properly handling the
+  returned `TriggerAction` iterator.
 - Changed terminology from "non-padding" to "normal" throughout the framework,
   including relevant event names (now `NormalSent` and `NormalRecv` instead of
   `NonPaddingSent` and `NonPaddingRecv`).
