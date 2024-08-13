@@ -3,34 +3,38 @@
 Manually generated changelog, for now. We follow semantic versioning.
 
 ## 2.0.0 - TBA
+
 - Substantial refactoring and interface simplification.
 - Changed terminology from "non-padding" to "normal" throughout the framework,
-  including relevant event names (now NormalSent and NormalRecv instead of
-  NonPaddingSent and NonPaddingRecv).
+  including relevant event names (now `NormalSent` and `NormalRecv` instead of
+  `NonPaddingSent` and `NonPaddingRecv`).
 - Bytes/MTU are no longer supported in favor of simpler packet counts. As a
   result, the `include_small_packets` flag for machines has been removed.
 - Removed the `limit_includes_nonpadding` flag for states.
-- Added events for queued packets (NormalQueued and PaddingQueued), which are
-  now used for accounting rather than sent packets.
-- Added two counters per machine which are updated upon transition to a state
-  if its `counter` field is set. A CounterZero event is triggered when either
-  of a machine's counters is decremented to zero.
-- Added a per-machine "internal" timer which can be set using an UpdateTimer
+- Added events for packets just as they enter (`TunnelRecv`) and exit
+  (`TunnelSent`) the tunnel, distinguished from Normal/Padding Sent/Recv events
+  that relate to the packets' contents. These are useful for more complex
+  machines and effectively dealing with blocking actions.
+- Added two counters per machine which are updated upon transition to a state if
+  its `counter` field is set. A `CounterZero` event is triggered when either of
+  a machine's counters is decremented to zero.
+- Added a per-machine "internal" timer which can be set using an `UpdateTimer`
   action. These are handled by the integrator, who triggers the corresponding
-  TimerBegin and TimerEnd events as needed.
-- Extended the Cancel action that can be used to cancel a pending action
-  timer (timeout), the machine's internal timer, or both. The STATE_CANCEL
-  transition will now cancel both timers.
-- Added support for the SkewNormal distribution.
+  `TimerBegin` and `TimerEnd` events as the timer starts and fire.
+- Extended the `Cancel` action that can be used to cancel a pending action timer
+  (timeout), the machine's internal timer, or both. The internal pseudo-state
+  `STATE_CANCEL` transition is removed.
+- Added support for the `SkewNormal` distribution.
 - Added an optional `parsing` feature to reconstruct v1 machines, though they
   may behave differently than expected. v1 machines are now deprecated.
 - Machines are now serialized exclusively with Serde, and the custom format
   used in v1 has been removed.
 - Make it possible to run framework with different time sources. Exposes
-  `Instant` and `Duration` traits that can be implemented for any type.
-  Still uses `std::time` types by default.
+  `Instant` and `Duration` traits that can be implemented for any type. Still
+  uses `std::time` types by default.
 
 ## 1.1.0 - 2024-04-06
+
 - Limits sampled on framework init to allow self-transition to first state.
 - Padding is now allowed before any bytes have yet been sent (edge case).
 - Fixed possibility for divide-by-zero when calculating padding limits.
@@ -39,7 +43,9 @@ Manually generated changelog, for now. We follow semantic versioning.
 - Updates to documentation to fix typos and improve clarity.
 
 ## 1.0.1 - 2023-11-24
+
 - README update to render better on crates.io and fixed a typo.
 
 ## 1.0.0 - 2023-11-24
+
 - Initial public release of Maybenot.
