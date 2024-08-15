@@ -35,6 +35,9 @@ Manually generated changelog, for now. We follow semantic versioning.
 - Make it possible to run framework with different time sources. Exposes
   `Instant` and `Duration` traits that can be implemented for any type. Still
   uses `std::time` types by default.
+- Random number generation is now handled by the integrator, who must provide
+  the framework with a random number generator that implements the `RngCore`
+  trait. Allows for testing with a deterministic RNG and for using custom RNGs.
 
 ## 1.1.0 - 2024-04-06
 
