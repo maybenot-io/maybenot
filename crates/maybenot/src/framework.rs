@@ -6,9 +6,7 @@ use rand_core::RngCore;
 use crate::*;
 
 use self::action::Action;
-use self::constants::STATE_END;
-use self::constants::STATE_LIMIT_MAX;
-use self::counter::Counter;
+use self::constants::{STATE_END, STATE_LIMIT_MAX, STATE_SIGNAL};
 use self::counter::Operation;
 use self::event::Event;
 use crate::time::Duration as _;
@@ -87,6 +85,10 @@ where
     blocking_duration: T::Duration,
     blocking_started: T,
     blocking_active: bool,
+    // internal signaling: if None then we don't signal, Some(None) means all
+    // machines receive the signal, Some(Some(...)) means one machine doesn't
+    // (the one that sent the signal)
+    signal_pending: Option<Option<usize>>,
     framework_start: T,
 }
 
@@ -156,6 +158,7 @@ where
             blocking_duration: T::Duration::zero(),
             padding_sent_packets: 0,
             normal_sent_packets: 0,
+            signal_pending: None,
         };
 
         for (runtime, machine) in s.runtime.iter_mut().zip(s.machines.as_ref().iter()) {
@@ -205,6 +208,30 @@ where
         self.current_time = current_time;
         for e in events {
             self.process_event(e);
+
+            // handle internal signaling
+            // Special case: if a machine sends a signal which results in another
+            // signal in response, that response may or may not be received; this
+            // depends on the order in which machines are given to the framework.
+            // Check for this explicitly (keep track of excluded machines).
+            if let Some(signal) = self.signal_pending {
+                let mut excluded = None;
+
+                for mi in 0..self.runtime.len() {
+                    if signal.is_some() && signal.unwrap() == mi {
+                        excluded = Some(mi);
+                        continue;
+                    }
+                    self.transition(mi, Event::Signal);
+                }
+
+                if let Some(excluded) = excluded {
+                    if self.signal_pending.unwrap().is_none() {
+                        self.transition(excluded, Event::Signal);
+                    }
+                }
+                self.signal_pending = None;
+            }
         }
 
         // only return actions, no None
@@ -349,6 +376,18 @@ where
                 self.runtime[mi].current_state = STATE_END;
                 StateChange::Changed
             }
+            STATE_SIGNAL => {
+                // this is not a state change, just signal *other* machines
+                self.signal_pending = match self.signal_pending {
+                    // no signal pending, so signal all *other* machines
+                    None => Some(Some(mi)),
+                    // signal pending from another machine, so signal all
+                    // machines (including this one) by removing any machine
+                    // index set
+                    _ => Some(None),
+                };
+                StateChange::Unchanged
+            }
             _ => {
                 // transition to same or different state?
                 let state_changed = if self.runtime[mi].current_state == next_state {
@@ -385,36 +424,69 @@ where
     }
 
     fn update_counter(&mut self, mi: usize) -> (StateChange, bool) {
-        let current = &self.machines.as_ref()[mi].states[self.runtime[mi].current_state];
+        let state = &self.machines.as_ref()[mi].states[self.runtime[mi].current_state];
 
-        if let Some(update) = &current.counter {
-            let value = update.sample_value(&mut self.rng);
-            let counter = if update.counter == Counter::A {
-                &mut self.runtime[mi].counter_a
+        let old_value_a = self.runtime[mi].counter_a;
+        let old_value_b = self.runtime[mi].counter_b;
+        let mut any_counter_zeroed = false;
+
+        // counter A and B are independent, so we update them separately
+        if let Some(counter_a) = state.counter.0 {
+            let change = if counter_a.copy {
+                old_value_b
             } else {
-                &mut self.runtime[mi].counter_b
+                counter_a.sample_value(&mut self.rng)
             };
-            let already_zero = *counter == 0;
 
-            match update.operation {
+            let updated_value_a = &mut self.runtime[mi].counter_a;
+            match counter_a.operation {
                 Operation::Increment => {
-                    *counter = counter.saturating_add(value);
+                    *updated_value_a = updated_value_a.saturating_add(change);
                 }
                 Operation::Decrement => {
-                    *counter = counter.saturating_sub(value);
+                    *updated_value_a = updated_value_a.saturating_sub(change);
                 }
                 Operation::Set => {
-                    *counter = value;
+                    *updated_value_a = change;
                 }
             }
 
-            if *counter == 0 && !already_zero {
-                self.actions[mi] = None;
-                let result = self.transition(mi, Event::CounterZero);
-                return (result, true);
+            if old_value_a != 0 && *updated_value_a == 0 {
+                any_counter_zeroed = true;
             }
         }
-        // Do nothing if counter value is unchanged or not zero
+
+        if let Some(counter_b) = state.counter.1 {
+            let change = if counter_b.copy {
+                old_value_a
+            } else {
+                counter_b.sample_value(&mut self.rng)
+            };
+
+            let updated_value_b = &mut self.runtime[mi].counter_b;
+            match counter_b.operation {
+                Operation::Increment => {
+                    *updated_value_b = updated_value_b.saturating_add(change);
+                }
+                Operation::Decrement => {
+                    *updated_value_b = updated_value_b.saturating_sub(change);
+                }
+                Operation::Set => {
+                    *updated_value_b = change;
+                }
+            }
+
+            if old_value_b != 0 && *updated_value_b == 0 {
+                any_counter_zeroed = true;
+            }
+        }
+
+        if any_counter_zeroed {
+            self.actions[mi] = None;
+            return (self.transition(mi, Event::CounterZero), true);
+        }
+
+        // do nothing if counter value is unchanged or not zero
         (StateChange::Unchanged, false)
     }
 
@@ -583,7 +655,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::counter::CounterUpdate;
+    use crate::counter::Counter;
     use crate::dist::*;
     use crate::framework::*;
     use crate::state::*;
@@ -614,7 +686,7 @@ mod tests {
         _ => vec![],
         });
         let m = Machine::new(0, 0.0, 0, 0.0, vec![s0]).unwrap();
-        assert_eq!(m.serialize(), "02eNpjYEAHjKhcAAAwAAI=");
+        assert_eq!(m.serialize(), "02eNpjYEAHjOgCAAA0AAI=");
     }
 
     #[test]
@@ -957,8 +1029,8 @@ mod tests {
 
     #[test]
     fn counter_machine() {
-        // a machine that counts PaddingSent - NormalSent
-        // use counter A for that, pad and increment counter B on CounterZero
+        // count PaddingSent - NormalSent with counter A
+        // pad and increment counter B by 4 on CounterZero
 
         // state 0
         let mut s0 = State::new(enum_map! {
@@ -966,36 +1038,14 @@ mod tests {
             Event::CounterZero => vec![Trans(2, 1.0)],
         _ => vec![],
         });
-        s0.counter = Some(CounterUpdate {
-            counter: Counter::A,
-            operation: Operation::Decrement,
-            value: Some(Dist {
-                dist: DistType::Uniform {
-                    low: 1.0,
-                    high: 1.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            }),
-        });
+        s0.counter = (Some(Counter::new(Operation::Decrement)), None);
 
         // state 1
         let mut s1 = State::new(enum_map! {
             Event::NormalSent => vec![Trans(0, 1.0)],
         _ => vec![],
         });
-        s1.counter = Some(CounterUpdate {
-            counter: Counter::A,
-            operation: Operation::Increment,
-            value: Some(Dist {
-                dist: DistType::Uniform {
-                    low: 1.0,
-                    high: 1.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            }),
-        });
+        s1.counter = (Some(Counter::new(Operation::Increment)), None);
 
         // state 2
         let mut s2 = State::new(enum_map! {
@@ -1016,18 +1066,20 @@ mod tests {
             },
             limit: None,
         });
-        s2.counter = Some(CounterUpdate {
-            counter: Counter::B,
-            operation: Operation::Increment,
-            value: Some(Dist {
-                dist: DistType::Uniform {
-                    low: 4.0,
-                    high: 4.0,
+        s2.counter = (
+            None,
+            Some(Counter::new_dist(
+                Operation::Increment,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 4.0,
+                        high: 4.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
                 },
-                start: 0.0,
-                max: 0.0,
-            }),
-        });
+            )),
+        );
 
         // machine
         let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
@@ -1072,18 +1124,21 @@ mod tests {
             Event::CounterZero => vec![Trans(2, 1.0)],
         _ => vec![],
         });
-        s0.counter = Some(CounterUpdate {
-            counter: Counter::B,
-            operation: Operation::Decrement, // NOTE
-            value: Some(Dist {
-                dist: DistType::Uniform {
-                    low: 10.0,
-                    high: 10.0,
+        s0.counter = (
+            None,
+            // NOTE decrement
+            Some(Counter::new_dist(
+                Operation::Decrement,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 10.0,
+                        high: 10.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
                 },
-                start: 0.0,
-                max: 0.0,
-            }),
-        });
+            )),
+        );
 
         // state 1, set counter
         let mut s1 = State::new(enum_map! {
@@ -1092,18 +1147,20 @@ mod tests {
             Event::CounterZero => vec![Trans(2, 1.0)],
         _ => vec![],
         });
-        s1.counter = Some(CounterUpdate {
-            counter: Counter::B,
-            operation: Operation::Set,
-            value: Some(Dist {
-                dist: DistType::Uniform {
-                    low: 0.0, // NOTE
-                    high: 0.0,
+        s1.counter = (
+            None,
+            Some(Counter::new_dist(
+                Operation::Set,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 0.0, // NOTE
+                        high: 0.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
                 },
-                start: 0.0,
-                max: 0.0,
-            }),
-        });
+            )),
+        );
 
         // state 2, pad
         let mut s2 = State::new(enum_map! {
@@ -1154,18 +1211,21 @@ mod tests {
            Event::NormalRecv => vec![Trans(1, 1.0)],
            _ => vec![],
         });
-        s0.counter = Some(CounterUpdate {
-            counter: Counter::A,
-            operation: Operation::Increment, // NOTE
-            value: Some(Dist {
-                dist: DistType::Uniform {
-                    low: 1000.0,
-                    high: 1000.0,
+        s0.counter = (
+            // NOTE increment
+            Some(Counter::new_dist(
+                Operation::Increment,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 1000.0,
+                        high: 1000.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
                 },
-                start: 0.0,
-                max: 0.0,
-            }),
-        });
+            )),
+            None,
+        );
 
         // state 1, set counter
         let mut s1 = State::new(enum_map! {
@@ -1173,18 +1233,20 @@ mod tests {
             Event::NormalRecv => vec![Trans(1, 1.0)],
         _ => vec![],
         });
-        s1.counter = Some(CounterUpdate {
-            counter: Counter::A,
-            operation: Operation::Set,
-            value: Some(Dist {
-                dist: DistType::Uniform {
-                    low: u64::MAX as f64, // NOTE
-                    high: u64::MAX as f64,
+        s1.counter = (
+            Some(Counter::new_dist(
+                Operation::Set,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: u64::MAX as f64, // NOTE
+                        high: u64::MAX as f64,
+                    },
+                    start: 0.0,
+                    max: 0.0,
                 },
-                start: 0.0,
-                max: 0.0,
-            }),
-        });
+            )),
+            None,
+        );
 
         // machine
         let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]).unwrap();
@@ -1200,6 +1262,468 @@ mod tests {
         // try to increment counter by 1000
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(f.runtime[0].counter_a, u64::MAX);
+    }
+
+    #[test]
+    fn counter_convergence_machine() {
+        // set and decrement both counters at once, check correctness
+        // then decrement both to zero and ensure only one transition
+
+        // state 0
+        let mut s0 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(0, 1.0)],
+           Event::PaddingSent => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+        s0.counter = (
+            Some(Counter::new_dist(
+                Operation::Set,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 44.0,
+                        high: 44.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+            Some(Counter::new_dist(
+                Operation::Set,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 28.0,
+                        high: 28.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+        );
+
+        // state 1
+        let mut s1 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(1, 1.0)],
+           Event::CounterZero => vec![Trans(2, 1.0)],
+           _ => vec![],
+        });
+        s1.counter = (
+            Some(Counter::new_dist(
+                Operation::Decrement,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 32.0,
+                        high: 32.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+            Some(Counter::new_dist(
+                Operation::Decrement,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 15.0,
+                        high: 15.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+        );
+
+        // state 2
+        let s2 = State::new(enum_map! {
+           Event::CounterZero => vec![Trans(0, 1.0)],
+           _ => vec![],
+        });
+
+        // machine
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+
+        let mut current_time = Instant::now();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_a, 44);
+        assert_eq!(f.runtime[0].counter_b, 28);
+
+        current_time = current_time.add(Duration::from_micros(20));
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_a, 12);
+        assert_eq!(f.runtime[0].counter_b, 13);
+
+        current_time = current_time.add(Duration::from_micros(20));
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_a, 0);
+        assert_eq!(f.runtime[0].counter_b, 0);
+    }
+
+    #[test]
+    fn counter_divergence_machine() {
+        // set both counters at once, check correctness
+        // decrement only one to zero and ensure CounterZero
+
+        // state 0
+        let mut s0 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(0, 1.0)],
+           Event::PaddingSent => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+        s0.counter = (
+            Some(Counter::new_dist(
+                Operation::Set,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 50.0,
+                        high: 50.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+            Some(Counter::new_dist(
+                Operation::Set,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 50.0,
+                        high: 50.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+        );
+
+        // state 1
+        let mut s1 = State::new(enum_map! {
+           Event::CounterZero => vec![Trans(2, 1.0)],
+           _ => vec![],
+        });
+        s1.counter = (
+            None,
+            Some(Counter::new_dist(
+                Operation::Decrement,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 50.0,
+                        high: 50.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+        );
+
+        // state 2
+        let mut s2 = State::new(enum_map! {
+           _ => vec![],
+        });
+        s2.counter = (
+            Some(Counter::new_dist(
+                Operation::Increment,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 25.0,
+                        high: 25.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+            None,
+        );
+
+        // machine
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+
+        let mut current_time = Instant::now();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_a, 50);
+        assert_eq!(f.runtime[0].counter_b, 50);
+
+        current_time = current_time.add(Duration::from_micros(20));
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_a, 75);
+        assert_eq!(f.runtime[0].counter_b, 0);
+    }
+
+    #[test]
+    fn counter_copy_machine() {
+        // set both counters at once, then copy their values
+
+        // state 0
+        let mut s0 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(0, 1.0)],
+           Event::PaddingSent => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+        s0.counter = (
+            Some(Counter::new_dist(
+                Operation::Set,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 4.0,
+                        high: 4.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+            Some(Counter::new_dist(
+                Operation::Set,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 13.0,
+                        high: 13.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+        );
+
+        // state 1
+        let mut s1 = State::new(enum_map! {
+           Event::PaddingSent => vec![Trans(2, 1.0)],
+           _ => vec![],
+        });
+        s1.counter = (
+            // should be 13.0
+            Some(Counter::new_copy(Operation::Set)),
+            // should be 9.0
+            Some(Counter::new_copy(Operation::Decrement)),
+        );
+
+        // state 2
+        let mut s2 = State::new(enum_map! {
+           _ => vec![],
+        });
+        s2.counter = (
+            // should be 22.0
+            Some(Counter::new_copy(Operation::Increment)),
+            // should still be 9.0
+            None,
+        );
+
+        // machine
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+
+        let mut current_time = Instant::now();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_a, 4);
+        assert_eq!(f.runtime[0].counter_b, 13);
+
+        current_time = current_time.add(Duration::from_micros(20));
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_a, 13);
+        assert_eq!(f.runtime[0].counter_b, 9);
+
+        current_time = current_time.add(Duration::from_micros(20));
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_a, 22);
+        assert_eq!(f.runtime[0].counter_b, 9);
+    }
+
+    #[test]
+    fn signal_one_machine() {
+        // send a signal from one machine, ensure that the signal is received
+        // by another machine but not the originating machine
+
+        // state 0
+        let s0_m0 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(STATE_SIGNAL, 1.0)],
+           Event::Signal => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+        let s0_m1 = State::new(enum_map! {
+           Event::Signal => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+
+        // state 1
+        let mut s1 = State::new(enum_map! {
+           _ => vec![],
+        });
+        s1.action = Some(Action::SendPadding {
+            bypass: false,
+            replace: false,
+            timeout: Dist {
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            limit: None,
+        });
+
+        // machines
+        let m0 = Machine::new(1000, 1.0, 0, 0.0, vec![s0_m0, s1.clone()]).unwrap();
+        let m1 = Machine::new(1000, 1.0, 0, 0.0, vec![s0_m1, s1.clone()]).unwrap();
+
+        let current_time = Instant::now();
+        let machines = vec![m0, m1];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(
+            f.actions[1],
+            Some(TriggerAction::SendPadding {
+                timeout: Duration::from_micros(2),
+                bypass: false,
+                replace: false,
+                machine: MachineId(1),
+            })
+        );
+    }
+
+    #[test]
+    fn signal_two_machine() {
+        // send a signal from two machines, ensure that both get a signal
+
+        // state 0
+        let s0 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(STATE_SIGNAL, 1.0)],
+           Event::Signal => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+
+        // state 1
+        let mut s1 = State::new(enum_map! {
+           _ => vec![],
+        });
+        s1.action = Some(Action::SendPadding {
+            bypass: false,
+            replace: false,
+            timeout: Dist {
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            limit: None,
+        });
+
+        // machines
+        let m0 = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone(), s1.clone()]).unwrap();
+        let m1 = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone(), s1.clone()]).unwrap();
+
+        let current_time = Instant::now();
+        let machines = vec![m0, m1];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        assert_eq!(
+            f.actions[0],
+            Some(TriggerAction::SendPadding {
+                timeout: Duration::from_micros(2),
+                bypass: false,
+                replace: false,
+                machine: MachineId(0),
+            })
+        );
+        assert_eq!(
+            f.actions[1],
+            Some(TriggerAction::SendPadding {
+                timeout: Duration::from_micros(2),
+                bypass: false,
+                replace: false,
+                machine: MachineId(1),
+            })
+        );
+    }
+
+    #[test]
+    fn signal_response() {
+        // send a signal and respond to it, ensure that both machines get a signal
+
+        // state 0
+        let s0_m0 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(STATE_SIGNAL, 1.0)],
+           Event::Signal => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+        let s0_m1 = State::new(enum_map! {
+           Event::Signal => vec![Trans(STATE_SIGNAL, 1.0)],
+           _ => vec![],
+        });
+
+        // state 1
+        let mut s1 = State::new(enum_map! {
+           _ => vec![],
+        });
+        s1.action = Some(Action::SendPadding {
+            bypass: false,
+            replace: false,
+            timeout: Dist {
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            limit: None,
+        });
+
+        // machines
+        let m0 = Machine::new(1000, 1.0, 0, 0.0, vec![s0_m0, s1.clone()]).unwrap();
+        let m1 = Machine::new(1000, 1.0, 0, 0.0, vec![s0_m1, s1.clone()]).unwrap();
+
+        let current_time = Instant::now();
+        let machines = vec![m0, m1];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        assert_eq!(
+            f.actions[0],
+            Some(TriggerAction::SendPadding {
+                timeout: Duration::from_micros(2),
+                bypass: false,
+                replace: false,
+                machine: MachineId(0),
+            })
+        );
+        assert_eq!(f.actions[1], None);
     }
 
     #[test]

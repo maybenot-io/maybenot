@@ -9,7 +9,7 @@ pub const VERSION: u8 = 2;
 pub const MAX_DECOMPRESSED_SIZE: usize = 1 << 20;
 
 /// The number of [`Event`](crate::event)s in the framework.
-pub const EVENT_NUM: usize = 12;
+pub const EVENT_NUM: usize = 13;
 
 /// The maximum sampled timeout in a [`State`](crate::state), set to a day in
 /// microseconds.
@@ -38,6 +38,9 @@ pub const STATE_NOP: usize = u32::MAX as usize;
 /// A pseudo-state that means the [`Machine`](crate::Machine) should completely
 /// stop.
 pub const STATE_END: usize = STATE_NOP - 1;
+/// A pseudo-state that triggers a Signal [`Event`](crate::event) in all other
+/// running machines.
+pub const STATE_SIGNAL: usize = STATE_END - 1;
 /// The maximum number of [`State`](crate::state)s a [`Machine`](crate::Machine)
 /// can have.
-pub const STATE_MAX: usize = STATE_END - 1;
+pub const STATE_MAX: usize = STATE_SIGNAL - 1;

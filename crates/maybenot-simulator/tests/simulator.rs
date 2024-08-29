@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use maybenot::{
     action::Action,
-    counter::{Counter, CounterUpdate, Operation},
+    counter::{Counter, Operation},
     dist::{Dist, DistType},
     event::Event,
     state::{State, Trans},
@@ -1086,44 +1086,44 @@ fn test_counter_machine() {
         Event::NormalRecv => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.counter = Some(CounterUpdate {
-        counter: Counter::A,
-        operation: Operation::Increment,
-        value: Some(Dist {
-            dist: DistType::Uniform {
-                low: 5.0,
-                high: 5.0,
+    s1.counter = (
+        Some(Counter::new_dist(
+            Operation::Increment,
+            Dist {
+                dist: DistType::Uniform {
+                    low: 5.0,
+                    high: 5.0,
+                },
+                start: 0.0,
+                max: 0.0,
             },
-            start: 0.0,
-            max: 0.0,
-        }),
-    });
+        )),
+        None,
+    );
     let mut s2 = State::new(enum_map! {
         Event::NormalRecv => vec![Trans(3, 1.0)],
         _ => vec![],
     });
-    s2.counter = Some(CounterUpdate {
-        counter: Counter::A,
-        operation: Operation::Decrement,
-        value: Some(Dist {
-            dist: DistType::Uniform {
-                low: 2.0,
-                high: 2.0,
+    s2.counter = (
+        Some(Counter::new_dist(
+            Operation::Decrement,
+            Dist {
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
+                start: 0.0,
+                max: 0.0,
             },
-            start: 0.0,
-            max: 0.0,
-        }),
-    });
+        )),
+        None,
+    );
     let mut s3 = State::new(enum_map! {
         Event::NormalSent => vec![Trans(3, 1.0)],
         Event::CounterZero => vec![Trans(4, 1.0)],
         _ => vec![],
     });
-    s3.counter = Some(CounterUpdate {
-        counter: Counter::A,
-        operation: Operation::Decrement,
-        value: None, // same as 1
-    });
+    s3.counter = (Some(Counter::new(Operation::Decrement)), None);
     let mut s4 = State::new(enum_map! {
         _ => vec![],
     });
@@ -1153,13 +1153,9 @@ fn test_counter_machine() {
         false,
     );
 
-    // set counter in state 3 to Counter::B, to prevent the CounterZero event
+    // set counter in state 3 to Counter B, to prevent the CounterZero event
     // from firing
-    m.states[3].counter = Some(CounterUpdate {
-        counter: Counter::B,
-        operation: Operation::Decrement,
-        value: None,
-    });
+    m.states[3].counter = (None, Some(Counter::new(Operation::Decrement)));
     run_test_sim(
         "0,sn 6,rn 6,rn 7,sn 7,sn 7,sn",
         "0,sn 0,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 7,sn 7,st 7,sn 7,st",
@@ -1171,31 +1167,35 @@ fn test_counter_machine() {
         false,
     );
 
-    // update state 1 and 2 to also use Counter::B
-    m.states[1].counter = Some(CounterUpdate {
-        counter: Counter::B,
-        operation: Operation::Increment,
-        value: Some(Dist {
-            dist: DistType::Uniform {
-                low: 5.0,
-                high: 5.0,
+    // update state 1 and 2 to also use Counter B
+    m.states[1].counter = (
+        None,
+        Some(Counter::new_dist(
+            Operation::Increment,
+            Dist {
+                dist: DistType::Uniform {
+                    low: 5.0,
+                    high: 5.0,
+                },
+                start: 0.0,
+                max: 0.0,
             },
-            start: 0.0,
-            max: 0.0,
-        }),
-    });
-    m.states[2].counter = Some(CounterUpdate {
-        counter: Counter::B,
-        operation: Operation::Decrement,
-        value: Some(Dist {
-            dist: DistType::Uniform {
-                low: 2.0,
-                high: 2.0,
+        )),
+    );
+    m.states[2].counter = (
+        None,
+        Some(Counter::new_dist(
+            Operation::Decrement,
+            Dist {
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
+                start: 0.0,
+                max: 0.0,
             },
-            start: 0.0,
-            max: 0.0,
-        }),
-    });
+        )),
+    );
     run_test_sim(
         "0,sn 6,rn 6,rn 7,sn 7,sn 7,sn",
         "0,sn 0,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 7,sn 7,st 7,sn 7,st 10,sp 10,st",
@@ -1208,18 +1208,20 @@ fn test_counter_machine() {
     );
 
     // replace increment in state 1 with set operation, should make no difference
-    m.states[1].counter = Some(CounterUpdate {
-        counter: Counter::B,
-        operation: Operation::Set,
-        value: Some(Dist {
-            dist: DistType::Uniform {
-                low: 5.0,
-                high: 5.0,
+    m.states[1].counter = (
+        None,
+        Some(Counter::new_dist(
+            Operation::Set,
+            Dist {
+                dist: DistType::Uniform {
+                    low: 5.0,
+                    high: 5.0,
+                },
+                start: 0.0,
+                max: 0.0,
             },
-            start: 0.0,
-            max: 0.0,
-        }),
-    });
+        )),
+    );
     run_test_sim(
         "0,sn 6,rn 6,rn 7,sn 7,sn 7,sn",
         "0,sn 0,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 7,sn 7,st 7,sn 7,st 10,sp 10,st",
