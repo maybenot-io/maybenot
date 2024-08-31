@@ -2,6 +2,10 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 1.1.3 - 2024-08-31
+- Slight tweak to `rust_2018_idioms` lint priority to ease integration (thanks
+  Markus Pettersson).
+
 ## 1.1.2 - 2024-06-02
 - Bump `ring` to 0.17 for Windows ARM64 support (thanks Daniel Paoliello).
 
