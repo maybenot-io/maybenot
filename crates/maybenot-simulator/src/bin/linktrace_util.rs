@@ -86,16 +86,19 @@ fn main() {
             slot_bytes,
             preset,
         } => {
+            let params = TraceParams {
+                total_lines: *total_lines,
+                burst_interval: *burst_interval,
+                burst_length: *burst_length,
+                sub_burst_interval: *sub_burst_interval,
+                sub_burst_length: *sub_burst_length,
+                frame_burst_interval: *frame_burst_interval,
+                frame_burst_length: *frame_burst_length,
+                slot_bytes: *slot_bytes,
+            };
             create_synthlinktrace(
                 filename,
-                *total_lines,
-                *burst_interval,
-                *burst_length,
-                *sub_burst_interval,
-                *sub_burst_length,
-                *frame_burst_interval,
-                *frame_burst_length,
-                *slot_bytes,
+                params,
                 preset.clone(),
             );
         }
@@ -136,8 +139,8 @@ fn create_tracebin(tracefile: &str, sizebins: &str, binpktsizes: &str) {
         .expect("Failed to save LinkTrace to ltbin file");
 }
 
-fn create_synthlinktrace(
-    filename: &str,
+
+struct TraceParams {
     total_lines: usize,
     burst_interval: usize,
     burst_length: usize,
@@ -146,12 +149,19 @@ fn create_synthlinktrace(
     frame_burst_interval: usize,
     frame_burst_length: usize,
     slot_bytes: usize,
+}
+
+
+fn create_synthlinktrace(
+    filename: &str,
+    traceparams: TraceParams,
     preset: Option<String>,
 ) {
+    const DEFAULT_TOTAL_LINES: usize = 10_000_000;
     if !filename.ends_with(".tr") && !filename.ends_with(".tr.gz") {
         panic!("The tracefile must end with .tr or .tr.gz");
     }
-    let (
+    let TraceParams {
         total_lines,
         burst_interval,
         burst_length,
@@ -160,24 +170,68 @@ fn create_synthlinktrace(
         frame_burst_interval,
         frame_burst_length,
         slot_bytes,
-    ) = match preset.as_deref() {
-        Some("starlink") => (total_lines, 13333, 5000, 1333, 700, 12, 1, slot_bytes),
-        Some("test1T") => (total_lines, 20, 1, 1, 1, 1, 1, 25),
-        Some("ether1G") => (total_lines, 1, 1, 1, 1, 1, 1, 125),
-        Some("ether10M") => (total_lines, 20, 1, 1, 1, 1, 1, 25),
-        Some("ether100M_5K") => (5000, 2, 1, 1, 1, 1, 1, 25),
-        Some("ether100M_5M") => (5_000_000, 2, 1, 1, 1, 1, 1, 25),
-        Some("test1M") => (total_lines, 200, 1, 1, 1, 1, 1, 25),
-        _ => (
-            total_lines,
-            burst_interval,
-            burst_length,
-            sub_burst_interval,
-            sub_burst_length,
-            frame_burst_interval,
-            frame_burst_length,
-            slot_bytes,
-        ),
+    } = match preset.as_deref() {
+        Some("starlink") => TraceParams {
+            total_lines: DEFAULT_TOTAL_LINES,
+            burst_interval: 13333,
+            burst_length: 5000,
+            sub_burst_interval: 1333,
+            sub_burst_length: 700,
+            frame_burst_interval: 12,
+            frame_burst_length: 1,
+            slot_bytes: 1500,
+        },
+        Some("ether1G") => TraceParams {
+            total_lines: DEFAULT_TOTAL_LINES,
+            burst_interval: 1,
+            burst_length: 1,
+            sub_burst_interval: 1,
+            sub_burst_length: 1,
+            frame_burst_interval: 1,
+            frame_burst_length: 1,
+            slot_bytes: 125,
+        },
+        Some("ether10M") => TraceParams {
+            total_lines: DEFAULT_TOTAL_LINES,
+            burst_interval: 20,
+            burst_length: 1,
+            sub_burst_interval: 1,
+            sub_burst_length: 1,
+            frame_burst_interval: 1,
+            frame_burst_length: 1,
+            slot_bytes: 25,
+        },
+        Some("ether100M_5K") => TraceParams {
+            total_lines: 5000,
+            burst_interval: 2,
+            burst_length: 1,
+            sub_burst_interval: 1,
+            sub_burst_length: 1,
+            frame_burst_interval: 1,
+            frame_burst_length: 1,
+            slot_bytes: 25,
+        },
+        Some("ether100M_5M") => TraceParams {
+            total_lines: 5_000_000,
+            burst_interval: 2,
+            burst_length: 1,
+            sub_burst_interval: 1,
+            sub_burst_length: 1,
+            frame_burst_interval: 1,
+            frame_burst_length: 1,
+            slot_bytes: 25,
+        },
+        Some("test1M") => TraceParams {
+            total_lines: DEFAULT_TOTAL_LINES,
+            burst_interval: 200,
+            burst_length: 1,
+            sub_burst_interval: 1,
+            sub_burst_length: 1,
+            frame_burst_interval: 1,
+            frame_burst_length: 1,
+            slot_bytes: 25,
+        },
+        _ => traceparams,
     };
 
     //let mut file = File::create(filename).expect("Failed to create file");
