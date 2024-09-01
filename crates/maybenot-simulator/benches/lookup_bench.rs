@@ -96,7 +96,10 @@ pub fn benchmark_ndarray(c: &mut Criterion) {
 // actual use would be sequentially increasing within a limited range.
 pub fn benchmark_busy_to(c: &mut Criterion) {
     // List of linktrace files to benchmark
-    let linktrace_files = vec!["tests/ether100M_synth5K.ltbin.gz", "tests/ether100M_synth5M_g_2bins.ltbin.gz"];
+    let linktrace_files = vec![
+        "tests/ether100M_synth5K.ltbin.gz",
+        "tests/ether100M_synth5M_g_2bins.ltbin.gz",
+    ];
 
     let nr_samples = 10_000;
     let mut rng = rand::thread_rng();

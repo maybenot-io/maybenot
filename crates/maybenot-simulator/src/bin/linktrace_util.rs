@@ -1,9 +1,8 @@
 use clap::{Parser, Subcommand};
-use std::fs::File;
-use std::io::Write;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-
+use std::fs::File;
+use std::io::Write;
 
 use maybenot_simulator::linktrace::{save_linktrace_to_file, LinkTrace, SizebinLookupTable};
 
@@ -96,11 +95,7 @@ fn main() {
                 frame_burst_length: *frame_burst_length,
                 slot_bytes: *slot_bytes,
             };
-            create_synthlinktrace(
-                filename,
-                params,
-                preset.clone(),
-            );
+            create_synthlinktrace(filename, params, preset.clone());
         }
     }
 }
@@ -139,7 +134,6 @@ fn create_tracebin(tracefile: &str, sizebins: &str, binpktsizes: &str) {
         .expect("Failed to save LinkTrace to ltbin file");
 }
 
-
 struct TraceParams {
     total_lines: usize,
     burst_interval: usize,
@@ -151,12 +145,7 @@ struct TraceParams {
     slot_bytes: usize,
 }
 
-
-fn create_synthlinktrace(
-    filename: &str,
-    traceparams: TraceParams,
-    preset: Option<String>,
-) {
+fn create_synthlinktrace(filename: &str, traceparams: TraceParams, preset: Option<String>) {
     const DEFAULT_TOTAL_LINES: usize = 10_000_000;
     if !filename.ends_with(".tr") && !filename.ends_with(".tr.gz") {
         panic!("The tracefile must end with .tr or .tr.gz");
