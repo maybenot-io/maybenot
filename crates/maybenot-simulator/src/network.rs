@@ -54,6 +54,62 @@ impl fmt::Display for Network {
     }
 }
 
+enum ExtendedNetwork<'a> {
+    Bottleneck(NetworkBottleneck),
+    Linktrace(NetworkLinktrace<'a>),
+}
+
+impl<'a> ExtendedNetwork<'a> {
+    pub fn new_bottleneck(network: Network, window: Duration, queue_pps: Option<usize>) -> Self {
+        ExtendedNetwork::Bottleneck(NetworkBottleneck::new(network, window, queue_pps))
+    }
+
+    pub fn new_linktrace(network: Network, linktrace: &'a LinkTrace) -> Self {
+        ExtendedNetwork::Linktrace(NetworkLinktrace::new(network, linktrace))
+    }
+
+    pub fn sample(
+        &mut self,
+        current_time: &Instant,
+        is_client: bool,
+    ) -> (Duration, Option<Duration>) {
+        match self {
+            ExtendedNetwork::Bottleneck(bn) => bn.sample(current_time, is_client),
+            ExtendedNetwork::Linktrace(lt) => lt.sample(current_time, is_client),
+        }
+    }
+
+    pub fn peek_aggregate_delay(&self, current_time: Instant) -> Duration {
+        match self {
+            ExtendedNetwork::Bottleneck(bn) => bn.peek_aggregate_delay(current_time),
+            ExtendedNetwork::Linktrace(lt) => lt.peek_aggregate_delay(current_time),
+        }
+    }
+
+    pub fn push_aggregate_delay(
+        &mut self,
+        delay: Duration,
+        current_time: &Instant,
+        reached_client: bool,
+    ) {
+        match self {
+            ExtendedNetwork::Bottleneck(bn) => {
+                bn.push_aggregate_delay(delay, current_time, reached_client)
+            }
+            ExtendedNetwork::Linktrace(lt) => {
+                lt.push_aggregate_delay(delay, current_time, reached_client)
+            }
+        }
+    }
+
+    pub fn pop_aggregate_delay(&mut self) {
+        match self {
+            ExtendedNetwork::Bottleneck(bn) => bn.pop_aggregate_delay(),
+            ExtendedNetwork::Linktrace(lt) => lt.pop_aggregate_delay(),
+        }
+    }
+}
+
 /// a network bottleneck that adds delay to packets above a certain packets per
 /// window limit (default 1s window, so pps), and keeps track of the aggregate
 /// delay to add to packets due to the bottleneck or accumulated blocking by
