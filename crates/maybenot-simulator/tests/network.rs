@@ -95,6 +95,59 @@ fn test_network_bottleneck() {
     );
 }
 
+/// This test is designed to be run when netowrk has been edited to the
+/// Linktrace version of NetworkBottleneck, using the  ether100M_synth5M.ltbin file.
+/// TODO: Find out why first packet sometimes do not get txdelay added
+#[test_log::test]
+fn test_network_linktrace() {
+    // for added_delay() due to 3 pps in the bottleneck, send 6 events right
+    // away and verify increasing delay at the server when receiving the 4th to
+    // 6th event
+    let input = "0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n";
+    let network = Network::new(Duration::from_millis(3), Some(3));
+    let mut sq = parse_trace(input, &network);
+    let args = SimulatorArgs::new(&network, 20, true);
+    let trace = sim_advanced(&[], &[], &mut sq, &args);
+
+    let client_trace = trace
+        .clone()
+        .into_iter()
+        .filter(|t| t.client)
+        .collect::<Vec<_>>();
+    assert_eq!(client_trace.len(), 6);
+    assert_eq!(client_trace[0].time, client_trace[5].time);
+
+    let server_trace = trace
+        .clone()
+        .into_iter()
+        .filter(|t| !t.client)
+        .collect::<Vec<_>>();
+    assert_eq!(server_trace.len(), 6);
+
+    // Second packet does not get txdealy, unclear why
+    /*
+    assert_eq!(
+        server_trace[1].time - server_trace[0].time,
+        Duration::from_millis(120)
+    );
+    */
+    assert_eq!(
+        server_trace[2].time - server_trace[1].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        server_trace[3].time - server_trace[2].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        server_trace[4].time - server_trace[3].time,
+        Duration::from_micros(120)
+    );
+
+    println!("{:?}{:?}", server_trace, client_trace);
+    assert_eq!(1, 0, "Forced stop");
+}
+
 #[test_log::test]
 fn test_network_aggregate_base_delay_on_bypass_replace() {
     // this test combined the bypass and replace flags for blocking and padding,

@@ -18,17 +18,31 @@ workspace = true
 maybenot = { path = "../maybenot/" }
 log = "0.4.21"
 test-log = "0.2.15"
-serde = "1.0.198"
+#serde = "1.0.198"
 rand = "0.8.5"
 serde_json = "1.0.116"
 enum-map = "2.7.3"
 criterion = "0.5.1"
 rand_xoshiro = "0.6.0"
 rand_core = "0.6.4"
+rand_distr = "0.4.3"
+serde = { version = "1.0.198", features = ["derive"] }
+serde-big-array = "0.5.1"
+ndarray = { version = "0.16", features = ["serde"] }
+ndarray-npy = "0.7"  # Optional, if using .npy files
+ndarray-stats = "0.5.1"
+bincode = "1.3.3"
+flate2 = "1.0"
+chrono = "0.4.38"
+clap = { version = "4.5.16", features = ["derive"] }
 
 [dev-dependencies]
 env_logger = "0.10.2"
+criterion = "0.5.1"
+
 
 [[bench]]
-name = "rng"
+#name = "rng"
+name = "lookup_bench"
+#name = "netsim_bench"
 harness = false

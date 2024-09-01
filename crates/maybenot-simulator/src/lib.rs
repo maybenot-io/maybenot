@@ -18,6 +18,7 @@
 //! use maybenot_simulator::{network::Network, parse_trace, sim};
 //! use std::{str::FromStr, time::Duration};
 //!
+//!
 //! // The first ten packets of a network trace from the client's perspective
 //! // when visiting google.com. The format is: "time,direction\n". The
 //! // direction is either "s" (sent) or "r" (received). The time is in
@@ -107,12 +108,17 @@ pub mod network;
 pub mod peek;
 pub mod queue;
 
+//for temp testing....
+pub mod linktrace;
+//pub mod network_linktr;
+
 use std::{
     cmp::Ordering,
     time::{Duration, Instant},
 };
 
 use integration::Integration;
+use linktrace::mk_start_instant;
 use log::debug;
 use network::{Network, NetworkBottleneck, WindowCount};
 use queue::SimQueue;
@@ -1006,7 +1012,12 @@ pub fn parse_trace_advanced(
 
     // we just need a random starting time to make sure that we don't start from
     // absolute 0
-    let starting_time = Instant::now();
+    //let starting_time = Instant::now();
+
+    // Use a common starting time for simqueue and linktrace indexing.
+    // Adjust it to the subtraction of network delay made below to ensure
+    // no negative indexes
+    let starting_time = mk_start_instant() + network.delay;
 
     for l in trace.lines() {
         let parts: Vec<&str> = l.split(',').collect();
