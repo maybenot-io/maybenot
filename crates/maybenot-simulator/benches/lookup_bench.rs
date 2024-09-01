@@ -96,7 +96,7 @@ pub fn benchmark_ndarray(c: &mut Criterion) {
 // actual use would be sequentially increasing within a limited range.
 pub fn benchmark_busy_to(c: &mut Criterion) {
     // List of linktrace files to benchmark
-    let linktrace_files = vec!["ether100M_synth5K.ltbin", "ether100M_synth5M.ltbin"];
+    let linktrace_files = vec!["tests/ether100M_synth5K.ltbin.gz", "tests/ether100M_synth5M_g_2bins.ltbin.gz"];
 
     let nr_samples = 10_000;
     let mut rng = rand::thread_rng();
@@ -168,7 +168,7 @@ fn simulator_execution(c: &mut Criterion) {
     println!("{:?}", instants[nr_iter - 1]);
     // Initalize network, start with a reasonable 10ms delay
     let network = Network::new(Duration::from_millis(10), None);
-    let linktrace = load_linktrace_from_file("ether100M_synth5M.ltbin")
+    let linktrace = load_linktrace_from_file("tests/ether100M_synth5M_g_2bins.ltbin.gz")
         .expect("Failed to load LinkTrace ltbin from file");
     let mut network_lt = NetworkLinktrace::new(network, &linktrace);
 
@@ -214,7 +214,7 @@ fn simulator_execution(c: &mut Criterion) {
 }
 
 fn simulator_exec_new_network(c: &mut Criterion) {
-    const EARLY_TRACE: &str = include_str!("EARLY_TEST_TRACE.log");
+    const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
 
     // start with a reasonable 10ms delay: we should get events at the client
     let network = Network::new(Duration::from_millis(10), None);

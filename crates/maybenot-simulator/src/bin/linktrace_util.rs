@@ -1,6 +1,9 @@
 use clap::{Parser, Subcommand};
 use std::fs::File;
 use std::io::Write;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+
 
 use maybenot_simulator::linktrace::{save_linktrace_to_file, LinkTrace, SizebinLookupTable};
 
@@ -145,6 +148,9 @@ fn create_synthlinktrace(
     slot_bytes: usize,
     preset: Option<String>,
 ) {
+    if !filename.ends_with(".tr") && !filename.ends_with(".tr.gz") {
+        panic!("The tracefile must end with .tr or .tr.gz");
+    }
     let (
         total_lines,
         burst_interval,
@@ -174,7 +180,14 @@ fn create_synthlinktrace(
         ),
     };
 
-    let mut file = File::create(filename).expect("Failed to create file");
+    //let mut file = File::create(filename).expect("Failed to create file");
+
+    let mut file: Box<dyn Write> = if filename.ends_with(".tr.gz") {
+        let f = File::create(filename).expect("Failed to create file");
+        Box::new(GzEncoder::new(f, Compression::default()))
+    } else {
+        Box::new(File::create(filename).expect("Failed to create file"))
+    };
 
     for line in 0..total_lines {
         let within_burst = line % burst_interval < burst_length;
@@ -189,4 +202,5 @@ fn create_synthlinktrace(
         };
         writeln!(file, "{}", value).expect("Failed to write to file");
     }
+    file.flush().expect("Failed to flush file");
 }

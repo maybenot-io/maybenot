@@ -93,11 +93,11 @@ mod tests {
         let link_trace = LinkTrace::new(dl_traceinput, ul_traceinput, sizebin_lookuptable);
 
         // Save the instance to a file
-        let _ = save_linktrace_to_file("ether100M_synth5K.ltbin", &link_trace)
+        let _ = save_linktrace_to_file("tests/ether100M_synth5K.ltbin.gz", &link_trace)
             .expect("Failed to save LinkTrace ltbin to file");
 
         // Load the instance back from the file
-        let loaded_link_trace = load_linktrace_from_file("ether100M_synth5K.ltbin")
+        let loaded_link_trace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
         assert_eq!(link_trace, loaded_link_trace);
     }
@@ -105,7 +105,7 @@ mod tests {
     #[test]
     fn linksimtrace_lookup() {
         // Load the instance back from the test above
-        let linksim_trace = load_linktrace_from_file("ether100M_synth5K.ltbin")
+        let linksim_trace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
         // Confirm that different packet sizes give different busy_to times
         assert_eq!(linksim_trace.get_dl_busy_to(1000, 1500), 1119);
@@ -160,7 +160,7 @@ mod tests {
         println!("{:?}", instants[nr_iter - 1]);
         // start with a reasonable 10ms delay: we should get events at the client
         let network = Network::new(Duration::from_millis(10), None);
-        let linktrace = load_linktrace_from_file("ether100M_synth5M.ltbin")
+        let linktrace = load_linktrace_from_file("tests/ether100M_synth5M_g_2bins.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
         let mut network_lt = NetworkLinktrace::new(network, &linktrace);
 
