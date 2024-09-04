@@ -27,7 +27,7 @@ impl fmt::Display for Trans {
         if self.1 == 1.0 {
             write!(f, "{}", self.0)
         } else {
-        write!(f, "{} ({})", self.0, self.1)
+            write!(f, "{} ({})", self.0, self.1)
         }
     }
 }
@@ -200,7 +200,6 @@ impl fmt::Display for State {
                     if trans != vector.last().unwrap() {
                         write!(f, ",")?;
                     }
-
                 }
                 writeln!(f)?;
             }
