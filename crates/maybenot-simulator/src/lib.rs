@@ -118,9 +118,13 @@ use std::{
 };
 
 use integration::Integration;
+use linktrace::load_linktrace_from_file;
 use linktrace::mk_start_instant;
 use log::debug;
-use network::{Network, NetworkBottleneck, WindowCount};
+use network::{
+    ExtendedNetwork, ExtendedNetworkLabels, Network, NetworkBottleneck, NetworkLinktrace,
+    WindowCount,
+};
 use queue::SimQueue;
 
 use maybenot::{Framework, Machine, MachineId, Timer, TriggerAction, TriggerEvent};
@@ -386,6 +390,8 @@ pub struct SimulatorArgs<'a> {
     pub client_integration: Option<&'a Integration>,
     /// Optional server integration delays.
     pub server_integration: Option<&'a Integration>,
+    /// Optional simulated network type specification.
+    pub simulated_network_type: Option<ExtendedNetworkLabels>,
 }
 
 impl<'a> SimulatorArgs<'a> {
@@ -403,6 +409,7 @@ impl<'a> SimulatorArgs<'a> {
             insecure_rng_seed: None,
             client_integration: None,
             server_integration: None,
+            simulated_network_type: None,
         }
     }
 }
@@ -447,8 +454,22 @@ pub fn sim_advanced(
     debug!("sim(): client machines {}", machines_client.len());
     debug!("sim(): server machines {}", machines_server.len());
 
-    let mut network =
-        NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
+    let mut network;
+    match &args.simulated_network_type {
+        // Grouping None and NetworkBottleneck to the same action
+        None | Some(ExtendedNetworkLabels::Bottleneck) => {
+            network =
+                NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
+        }
+        Some(ExtendedNetworkLabels::Linktrace) => {
+            // TODO: change network to extended_network, but need getter and setters for that....
+            //let _linktrace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
+            //    .expect("Failed to load LinkTrace ltbin from file");
+            //network = NetworkLinktrace::new(args.network.clone(), &linktrace);
+            network =
+                NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
+        }
+    }
 
     let mut sim_iterations = 0;
     let start_time = current_time;

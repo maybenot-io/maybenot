@@ -11,7 +11,11 @@ use maybenot::{
     state::{State, Trans},
     Machine,
 };
-use maybenot_simulator::{network::Network, parse_trace, sim, sim_advanced, SimulatorArgs};
+use maybenot_simulator::{
+    linktrace::{load_linktrace_from_file, LinkTrace},
+    network::{ExtendedNetwork, Network},
+    parse_trace, sim, sim_advanced, SimulatorArgs,
+};
 
 use enum_map::enum_map;
 
@@ -93,6 +97,62 @@ fn test_network_bottleneck() {
         server_trace[5].time - server_trace[4].time,
         Duration::from_secs(1) / 3
     );
+}
+
+/// This test is designed to be run when extended enum is fully implemented
+/// TODO: Find out why first packet sometimes do not get txdelay added
+#[test_log::test]
+fn test_network_extendednetwork() {
+    // for added_delay() due to 3 pps in the bottleneck, send 6 events right
+    // away and verify increasing delay at the server when receiving the 4th to
+    // 6th event
+    let input = "0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n";
+    let network = Network::new(Duration::from_millis(3), Some(3));
+    let linktrace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
+        .expect("Failed to load LinkTrace ltbin from file");
+    let network_lt = ExtendedNetwork::new_linktrace(network.clone(), &linktrace);
+
+    let mut sq = parse_trace(input, &network);
+    let args = SimulatorArgs::new(&network, 20, true);
+    let trace = sim_advanced(&[], &[], &mut sq, &args);
+
+    let client_trace = trace
+        .clone()
+        .into_iter()
+        .filter(|t| t.client)
+        .collect::<Vec<_>>();
+    assert_eq!(client_trace.len(), 6);
+    assert_eq!(client_trace[0].time, client_trace[5].time);
+
+    let server_trace = trace
+        .clone()
+        .into_iter()
+        .filter(|t| !t.client)
+        .collect::<Vec<_>>();
+    assert_eq!(server_trace.len(), 6);
+
+    // Second packet does not get txdealy, unclear why
+    /*
+    assert_eq!(
+        server_trace[1].time - server_trace[0].time,
+        Duration::from_millis(120)
+    );
+    */
+    assert_eq!(
+        server_trace[2].time - server_trace[1].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        server_trace[3].time - server_trace[2].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        server_trace[4].time - server_trace[3].time,
+        Duration::from_micros(120)
+    );
+
+    println!("{:?}{:?}", server_trace, client_trace);
+    assert_eq!(1, 0, "Forced stop");
 }
 
 /// This test is designed to be run when netowrk has been edited to the

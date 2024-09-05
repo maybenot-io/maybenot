@@ -54,7 +54,14 @@ impl fmt::Display for Network {
     }
 }
 
-enum ExtendedNetwork<'a> {
+#[derive(Debug, Clone)]
+pub enum ExtendedNetworkLabels {
+    Bottleneck,
+    Linktrace,
+}
+
+#[derive(Debug, Clone)]
+pub enum ExtendedNetwork<'a> {
     Bottleneck(NetworkBottleneck),
     Linktrace(NetworkLinktrace<'a>),
 }
@@ -134,7 +141,7 @@ pub struct NetworkBottleneck {
     pps_limit: usize,
 }
 
-//impl NetworkBottleneckInactive
+//impl NetworkBottleneckInactive{
 impl NetworkBottleneck {
     pub fn new(network: Network, window: Duration, queue_pps: Option<usize>) -> Self {
         let pps = network.pps.unwrap_or(queue_pps.unwrap_or(usize::MAX));
@@ -441,7 +448,7 @@ impl NetworkLinktraceBneck {
     //impl NetworkBottleneck {
     pub fn new(network: Network, _window: Duration, _queue_pps: Option<usize>) -> Self {
         let pps = usize::MAX;
-        let linktrace = load_linktrace_from_file("ether100M_synth5M.ltbin")
+        let linktrace = load_linktrace_from_file("tests/ether100M_synth5M_g_2bins.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
 
         Self {
