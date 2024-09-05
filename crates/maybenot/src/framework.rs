@@ -53,6 +53,15 @@ enum StateChange {
     Unchanged,
 }
 
+/// An internal signal target for signaling other machines. A machine will not
+/// signal itself, but, if multiple machines send signals at the same time, then
+/// a signal will be sent to all machines.
+#[derive(Clone, Debug)]
+enum SignalTarget {
+    All,
+    AllExcept(usize),
+}
+
 /// An instance of the Maybenot framework.
 ///
 /// An instance of the [`Framework`] repeatedly takes as *input* one or more
@@ -85,10 +94,8 @@ where
     blocking_duration: T::Duration,
     blocking_started: T,
     blocking_active: bool,
-    // internal signaling: if None then we don't signal, Some(None) means all
-    // machines receive the signal, Some(Some(...)) means one machine doesn't
-    // (the one that sent the signal)
-    signal_pending: Option<Option<usize>>,
+    // for internal signaling: if set, specifies the target machines to signal
+    signal_pending: Option<SignalTarget>,
     framework_start: T,
 }
 
@@ -202,35 +209,42 @@ where
         self.actions.fill(None);
 
         // Process all events: note that each event may lead to up to one action
-        // per machine, but that future events may replace those actions.
-        // Under load, this is preferable (because something already happened
-        // before we could cause an action, so better to catch up).
+        // per machine, but that future events may replace those actions. Under
+        // load, this is preferable (because something already happened before
+        // we could cause an action, so better to catch up).
         self.current_time = current_time;
         for e in events {
             self.process_event(e);
 
-            // handle internal signaling
-            // Special case: if a machine sends a signal which results in another
-            // signal in response, that response may or may not be received; this
-            // depends on the order in which machines are given to the framework.
-            // Check for this explicitly (keep track of excluded machines).
-            if let Some(signal) = self.signal_pending {
-                let mut excluded = None;
+            // handle internal signaling: at most one signal per call to
+            // process_event (NOTE how self.signal_pending is consumed here with
+            // take())
+            if let Some(signal) = self.signal_pending.take() {
+                // keep track of if we should exclude a machine
+                let excluded = match signal {
+                    SignalTarget::All => None,
+                    SignalTarget::AllExcept(excluded) => Some(excluded),
+                };
 
+                // signal all machines, except the excluded one
                 for mi in 0..self.runtime.len() {
-                    if signal.is_some() && signal.unwrap() == mi {
-                        excluded = Some(mi);
-                        continue;
+                    if let Some(excluded) = excluded {
+                        if excluded == mi {
+                            continue;
+                        }
                     }
                     self.transition(mi, Event::Signal);
                 }
 
-                if let Some(excluded) = excluded {
-                    if self.signal_pending.unwrap().is_none() {
+                // edge case: if the signalling above resulted in another signal
+                // AND we excluded a machine, then we need to signal the
+                // excluded machine as well (per definition, the signal must
+                // have come from another machine)
+                if self.signal_pending.take().is_some() {
+                    if let Some(excluded) = excluded {
                         self.transition(excluded, Event::Signal);
                     }
                 }
-                self.signal_pending = None;
             }
         }
 
@@ -380,11 +394,10 @@ where
                 // this is not a state change, just signal *other* machines
                 self.signal_pending = match self.signal_pending {
                     // no signal pending, so signal all *other* machines
-                    None => Some(Some(mi)),
-                    // signal pending from another machine, so signal all
-                    // machines (including this one) by removing any machine
-                    // index set
-                    _ => Some(None),
+                    None => Some(SignalTarget::AllExcept(mi)),
+                    // signal already pending from another machine, so signal
+                    // all machines (including this one)
+                    _ => Some(SignalTarget::All),
                 };
                 StateChange::Unchanged
             }
