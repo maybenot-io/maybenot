@@ -96,6 +96,8 @@ where
     blocking_active: bool,
     // for internal signaling: if set, specifies the target machines to signal
     signal_pending: Option<SignalTarget>,
+    // only allow each counter to be zeroed once per process_event call
+    counter_zeroed_once: (bool, bool),
     framework_start: T,
 }
 
@@ -166,6 +168,7 @@ where
             padding_sent_packets: 0,
             normal_sent_packets: 0,
             signal_pending: None,
+            counter_zeroed_once: (false, false),
         };
 
         for (runtime, machine) in s.runtime.iter_mut().zip(s.machines.as_ref().iter()) {
@@ -207,6 +210,9 @@ where
     ) -> impl Iterator<Item = &TriggerAction<T>> {
         // reset all actions
         self.actions.fill(None);
+
+        // reset flags for zeroed counters (allowed to zero once per call)
+        self.counter_zeroed_once = (false, false);
 
         // Process all events: note that each event may lead to up to one action
         // per machine, but that future events may replace those actions. Under
@@ -464,8 +470,9 @@ where
                 }
             }
 
-            if old_value_a != 0 && *updated_value_a == 0 {
+            if old_value_a != 0 && *updated_value_a == 0 && !self.counter_zeroed_once.0 {
                 any_counter_zeroed = true;
+                self.counter_zeroed_once.0 = true;
             }
         }
 
@@ -489,8 +496,9 @@ where
                 }
             }
 
-            if old_value_b != 0 && *updated_value_b == 0 {
+            if old_value_b != 0 && *updated_value_b == 0 && !self.counter_zeroed_once.1 {
                 any_counter_zeroed = true;
+                self.counter_zeroed_once.1 = true;
             }
         }
 
@@ -1570,6 +1578,89 @@ mod tests {
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_a, 22);
         assert_eq!(f.runtime[0].counter_b, 9);
+    }
+
+    #[test]
+    fn test_infinite_loop_counter() {
+        // just to get started
+        let s0 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+
+        // set counter A to 1, B is 0
+        let mut init = State::new(enum_map! {
+        Event::NormalSent => vec![Trans(2, 1.0)],
+        _ => vec![],
+        });
+        init.counter = (Some(Counter::new(Operation::Set)), None);
+
+        // decrement counter A, triggering CounterZero, and set B to 1
+        let mut state_a = State::new(enum_map! {
+        // to state_b
+        Event::CounterZero => vec![Trans(3, 1.0)],
+        // to state_pad
+        Event::NormalRecv => vec![Trans(4, 1.0)],
+        _ => vec![],
+        });
+        state_a.counter = (
+            Some(Counter::new(Operation::Decrement)),
+            Some(Counter::new(Operation::Set)),
+        );
+
+        // decrement counter B, triggering CounterZero, and set A to 1
+        let mut state_b = State::new(enum_map! {
+        // back to state_a
+        Event::CounterZero => vec![Trans(2, 1.0)],
+        _ => vec![],
+        });
+        state_b.counter = (
+            Some(Counter::new(Operation::Set)),
+            Some(Counter::new(Operation::Decrement)),
+        );
+
+        let mut state_pad = State::new(enum_map! {
+            _ => vec![],
+        });
+        state_pad.action = Some(Action::SendPadding {
+            bypass: false,
+            replace: false,
+            timeout: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            limit: None,
+        });
+
+        let m = Machine::new(
+            1000,
+            1.0,
+            0,
+            0.0,
+            vec![s0, init, state_a, state_b, state_pad],
+        )
+        .unwrap();
+        let machines = vec![m];
+        let current_time = Instant::now();
+        let mut f = Framework::new(machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        // get into init state
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        // transition to state_a: this should not loop forever, but be limited
+        // to one zeroing of each counter, get stuck in state_a (after having
+        // zeroed counter b in state_b), then transition to state_pad, returning
+        // one action
+        assert_eq!(
+            f.trigger_events(
+                &[TriggerEvent::NormalSent, TriggerEvent::NormalRecv],
+                current_time
+            )
+            .count(),
+            1
+        );
     }
 
     #[test]
