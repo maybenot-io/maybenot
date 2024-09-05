@@ -23,13 +23,9 @@ pub const MAX_SAMPLED_TIMER_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0
 /// day in microseconds.
 pub const MAX_SAMPLED_BLOCK_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 
-/// The maximum sampled counter value in a [`State`](crate::state), which is
-/// currently effectively unlimited in practice.
-pub const MAX_SAMPLED_COUNTER_VALUE: u64 = u64::MAX;
-
 /// The maximum possible sampled limit of a [`State`](crate::state). This is the
 /// default if no limit dist is specified (in practice, the same as no limit).
-pub const STATE_LIMIT_MAX: u64 = u64::MAX;
+pub(crate) const STATE_LIMIT_MAX: u64 = u64::MAX;
 
 /// A pseudo-state that means the [`Machine`](crate::Machine) should completely
 /// stop.

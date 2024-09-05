@@ -113,8 +113,7 @@ impl Action {
                 if limit.is_none() {
                     return STATE_LIMIT_MAX;
                 }
-                let s = limit.unwrap().sample(rng).round() as u64;
-                s.min(STATE_LIMIT_MAX)
+                limit.unwrap().sample(rng).round() as u64
             }
             _ => STATE_LIMIT_MAX,
         }

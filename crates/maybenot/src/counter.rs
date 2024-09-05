@@ -3,7 +3,6 @@
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 
-use crate::constants::MAX_SAMPLED_COUNTER_VALUE;
 use crate::*;
 use std::fmt;
 
@@ -84,10 +83,7 @@ impl Counter {
     pub fn sample_value<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self.dist {
             None => 1,
-            Some(dist) => {
-                let s = dist.sample(rng) as u64;
-                s.min(MAX_SAMPLED_COUNTER_VALUE)
-            }
+            Some(dist) => dist.sample(rng) as u64,
         }
     }
 
