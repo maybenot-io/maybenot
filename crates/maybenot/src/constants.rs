@@ -31,13 +31,9 @@ pub const MAX_SAMPLED_COUNTER_VALUE: u64 = u64::MAX;
 /// default if no limit dist is specified (in practice, the same as no limit).
 pub const STATE_LIMIT_MAX: u64 = u64::MAX;
 
-/// An internal pseudo-state that means that no [`State`](crate::state) defined
-/// in a transition: it is used for state transitions as a "no-op" transition
-/// for any remaining probability up until 1.0.
-pub const STATE_NOP: usize = u32::MAX as usize;
 /// A pseudo-state that means the [`Machine`](crate::Machine) should completely
 /// stop.
-pub const STATE_END: usize = STATE_NOP - 1;
+pub const STATE_END: usize = u32::MAX as usize;
 /// A pseudo-state that triggers a Signal [`Event`](crate::event) in all other
 /// running machines.
 pub const STATE_SIGNAL: usize = STATE_END - 1;
