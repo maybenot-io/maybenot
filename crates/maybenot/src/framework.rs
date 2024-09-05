@@ -96,7 +96,7 @@ where
     blocking_active: bool,
     // for internal signaling: if set, specifies the target machines to signal
     signal_pending: Option<SignalTarget>,
-    // only allow each counter to be zeroed once per process_event call
+    // only allow each counter to be zeroed once per trigger_events call
     counter_zeroed_once: (bool, bool),
     framework_start: T,
 }
