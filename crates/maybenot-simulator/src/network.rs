@@ -115,6 +115,18 @@ impl<'a> ExtendedNetwork<'a> {
             ExtendedNetwork::Linktrace(lt) => lt.pop_aggregate_delay(),
         }
     }
+    pub fn get_aggregate_base_delay(&mut self) -> Duration {
+        match self {
+            ExtendedNetwork::Bottleneck(bn) => bn.aggregate_base_delay,
+            ExtendedNetwork::Linktrace(lt) => lt.aggregate_base_delay,
+        }
+    }
+    pub fn get_pps_limit(&mut self) -> usize {
+        match self {
+            ExtendedNetwork::Bottleneck(bn) => bn.pps_limit,
+            ExtendedNetwork::Linktrace(lt) => lt.pps_limit,
+        }
+    }
 }
 
 /// a network bottleneck that adds delay to packets above a certain packets per
@@ -297,6 +309,8 @@ pub struct NetworkLinktrace<'a> {
     pub aggregate_base_delay: Duration,
     // the pending aggregate delays to add to packets due to the bottleneck
     aggregate_delay_queue: BinaryHeap<PendingAggregateDelay>,
+    // packets per second limit
+    pps_limit: usize,
     // the network model
     network: Network,
     //linktrace: Arc<LinkTrace>,
@@ -312,6 +326,7 @@ impl<'a> NetworkLinktrace<'a> {
             network,
             aggregate_base_delay: Duration::default(),
             aggregate_delay_queue: BinaryHeap::new(),
+            pps_limit: usize::MAX,
             linktrace,
             sim_trace_startinstant: mk_start_instant(),
             next_busy_to: 0,
@@ -593,7 +608,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
     sq: &mut SimQueue,
     state: &SimState<M, RngSource>,
     recipient: &mut SimState<M, RngSource>,
-    network: &mut NetworkBottleneck,
+    network: &mut ExtendedNetwork<'_>,
     current_time: &Instant,
 ) -> bool {
     let side = if next.client { "client" } else { "server" };
@@ -647,7 +662,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                                 qid,
                                 state.blocking_bypassable,
                                 next.client,
-                                network.aggregate_base_delay,
+                                network.get_aggregate_base_delay(),
                             )
                             .unwrap();
                         entry.bypass = true;
@@ -699,7 +714,8 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
             if let Some(pps_delay) = baseline_delay {
                 debug!(
                     "\tadding {:?} delay to packet due to {:?}pps limit",
-                    pps_delay, network.pps_limit
+                    pps_delay,
+                    network.get_pps_limit()
                 );
             }
 

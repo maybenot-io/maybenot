@@ -108,9 +108,7 @@ pub mod network;
 pub mod peek;
 pub mod queue;
 
-//for temp testing....
 pub mod linktrace;
-//pub mod network_linktr;
 
 use std::{
     cmp::Ordering,
@@ -118,13 +116,9 @@ use std::{
 };
 
 use integration::Integration;
-use linktrace::load_linktrace_from_file;
-use linktrace::mk_start_instant;
+use linktrace::{load_linktrace_from_file, mk_start_instant, LinkTrace};
 use log::debug;
-use network::{
-    ExtendedNetwork, ExtendedNetworkLabels, Network, NetworkBottleneck, NetworkLinktrace,
-    WindowCount,
-};
+use network::{ExtendedNetwork, ExtendedNetworkLabels, Network, WindowCount};
 use queue::SimQueue;
 
 use maybenot::{Framework, Machine, MachineId, Timer, TriggerAction, TriggerEvent};
@@ -351,7 +345,13 @@ pub fn sim(
     only_network_activity: bool,
 ) -> Vec<SimEvent> {
     let network = Network::new(delay, None);
-    let args = SimulatorArgs::new(&network, max_trace_length, only_network_activity);
+    let args = SimulatorArgs::new(
+        &network,
+        max_trace_length,
+        only_network_activity,
+        None,
+        None,
+    );
     sim_advanced(machines_client, machines_server, sq, &args)
 }
 
@@ -392,10 +392,18 @@ pub struct SimulatorArgs<'a> {
     pub server_integration: Option<&'a Integration>,
     /// Optional simulated network type specification.
     pub simulated_network_type: Option<ExtendedNetworkLabels>,
+    /// Optional simulated network linktrace.
+    pub linktrace: Option<LinkTrace>,
 }
 
 impl<'a> SimulatorArgs<'a> {
-    pub fn new(network: &'a Network, max_trace_length: usize, only_network_activity: bool) -> Self {
+    pub fn new(
+        network: &'a Network,
+        max_trace_length: usize,
+        only_network_activity: bool,
+        simulated_network_type: Option<ExtendedNetworkLabels>, // Optional argument
+        linktrace: Option<LinkTrace>,                          // Optional argument
+    ) -> Self {
         Self {
             network,
             max_trace_length,
@@ -409,7 +417,8 @@ impl<'a> SimulatorArgs<'a> {
             insecure_rng_seed: None,
             client_integration: None,
             server_integration: None,
-            simulated_network_type: None,
+            simulated_network_type,
+            linktrace,
         }
     }
 }
@@ -455,19 +464,22 @@ pub fn sim_advanced(
     debug!("sim(): server machines {}", machines_server.len());
 
     let mut network;
+    let linktrace;
     match &args.simulated_network_type {
         // Grouping None and NetworkBottleneck to the same action
         None | Some(ExtendedNetworkLabels::Bottleneck) => {
             network =
-                NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
+                //NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
+                ExtendedNetwork::new_bottleneck(args.network.clone(), Duration::from_secs(1), sq.max_pps);
         }
         Some(ExtendedNetworkLabels::Linktrace) => {
             // TODO: change network to extended_network, but need getter and setters for that....
-            //let _linktrace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
-            //    .expect("Failed to load LinkTrace ltbin from file");
+            linktrace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
+                .expect("Failed to load LinkTrace ltbin from file");
             //network = NetworkLinktrace::new(args.network.clone(), &linktrace);
             network =
-                NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
+                //NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
+                ExtendedNetwork::new_linktrace(args.network.clone(), &linktrace);
         }
     }
 
@@ -495,7 +507,7 @@ pub fn sim_advanced(
         debug!(
             "sim(): at time {:#?}, aggregate network base delay {:#?}",
             current_time.duration_since(start_time),
-            network.aggregate_base_delay
+            network.get_aggregate_base_delay()
         );
         if next.client {
             debug!("sim(): @client next\n{:#?}", next);
@@ -602,7 +614,7 @@ fn pick_next<M: AsRef<[Machine]>>(
     sq: &mut SimQueue,
     client: &mut SimState<M, RngSource>,
     server: &mut SimState<M, RngSource>,
-    network: &mut NetworkBottleneck,
+    network: &mut ExtendedNetwork<'_>,
     current_time: Instant,
 ) -> Option<SimEvent> {
     // find the earliest scheduled action, internal timer, block expiry,
@@ -632,7 +644,7 @@ fn pick_next<M: AsRef<[Machine]>>(
         sq,
         client,
         server,
-        network.aggregate_base_delay,
+        network.get_aggregate_base_delay(),
         s.min(i).min(b).min(n),
         current_time,
     );
@@ -665,7 +677,7 @@ fn pick_next<M: AsRef<[Machine]>>(
             q_is_client, qid
         );
         let mut tmp = sq
-            .pop(qid, q_is_client, network.aggregate_base_delay)
+            .pop(qid, q_is_client, network.get_aggregate_base_delay())
             .unwrap();
         debug!("\tpick_next(): popped from queue {:?}", tmp);
         // check if blocking moves the event forward in time
