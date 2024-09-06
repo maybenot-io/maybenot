@@ -134,7 +134,6 @@ impl<'a> ExtendedNetwork<'a> {
 /// delay to add to packets due to the bottleneck or accumulated blocking by
 /// machines: used to shift the baseline trace time at both client and relay
 #[derive(Debug, Clone)]
-//pub struct NetworkBottleneckInactive {
 pub struct NetworkBottleneck {
     // the current aggregate of delays to add to base packets due to the
     // bottleneck or accumulated blocking by machines: used to shift the
@@ -153,7 +152,6 @@ pub struct NetworkBottleneck {
     pps_limit: usize,
 }
 
-//impl NetworkBottleneckInactive{
 impl NetworkBottleneck {
     pub fn new(network: Network, window: Duration, queue_pps: Option<usize>) -> Self {
         let pps = network.pps.unwrap_or(queue_pps.unwrap_or(usize::MAX));
@@ -434,156 +432,6 @@ impl<'a> NetworkLinktrace<'a> {
     }
 }
 
-/// a network that adds delay to packets according to the transmission delay
-/// provided by a link trace.  Keeps track of the aggregate
-/// delay to add to packets due to the bottleneck or accumulated blocking by
-/// machines: used to shift the baseline trace time at both client and relay
-#[derive(Debug, Clone)]
-pub struct NetworkLinktraceBneck {
-    //pub struct NetworkBottleneck {
-    // the current aggregate of delays to add to base packets due to the
-    // bottleneck or accumulated blocking by machines: used to shift the
-    // baseline trace time at both client and relay
-    pub aggregate_base_delay: Duration,
-    // the pending aggregate delays to add to packets due to the bottleneck
-    aggregate_delay_queue: BinaryHeap<PendingAggregateDelay>,
-    // the network model
-    network: Network,
-    // packets per second limit
-    #[allow(dead_code)]
-    pps_limit: usize,
-    //linktrace: Arc<LinkTrace>,
-    linktrace: LinkTrace,
-    // The start instant used by parse_trace for the first event at the server side
-    sim_trace_startinstant: Instant,
-    next_busy_to: usize,
-}
-
-impl NetworkLinktraceBneck {
-    //impl NetworkBottleneck {
-    pub fn new(network: Network, _window: Duration, _queue_pps: Option<usize>) -> Self {
-        let pps = usize::MAX;
-        let linktrace = load_linktrace_from_file("tests/ether100M_synth5M_g_2bins.ltbin.gz")
-            .expect("Failed to load LinkTrace ltbin from file");
-
-        Self {
-            network,
-            aggregate_base_delay: Duration::default(),
-            aggregate_delay_queue: BinaryHeap::new(),
-            pps_limit: pps,
-            linktrace,
-            sim_trace_startinstant: mk_start_instant(),
-            next_busy_to: 0,
-        }
-    }
-
-    pub fn sample(
-        &mut self,
-        current_time: &Instant,
-        _is_client: bool,
-    ) -> (Duration, Option<Duration>) {
-        // Compute the relative duration since the start
-        let current_time_slot = current_time
-            .duration_since(self.sim_trace_startinstant)
-            .as_micros() as usize;
-
-        // Initialize busy_to and queueing_delay_duration
-        let (busy_to, queueing_delay_duration) = if self.next_busy_to <= current_time_slot {
-            // Packet arrives after the previous packet has finished
-            (
-                self.linktrace.get_dl_busy_to(current_time_slot, 1500),
-                Duration::ZERO,
-            )
-        } else {
-            // Packet arrives before the previous packet has finished
-            let busy_to = self.linktrace.get_dl_busy_to(self.next_busy_to, 1500);
-            let queueing_delay = (self.next_busy_to - current_time_slot) as u64;
-            (busy_to, Duration::from_micros(queueing_delay))
-        };
-
-        // Ensure the packet is within the valid range of the link trace
-        assert_ne!(
-            busy_to, 0,
-            "Packet to be scheduled outside of link trace end"
-        );
-
-        // Update next_busy_to for the next packet
-        self.next_busy_to = busy_to;
-
-        // Compute packet transmission delay
-        let pkt_txdelay_duration = Duration::from_micros((busy_to - current_time_slot) as u64);
-
-        // Optimize the return logic by calling sample only once
-        let network_delay = self.network.sample();
-
-        if !queueing_delay_duration.is_zero() {
-            (
-                network_delay + queueing_delay_duration,
-                Some(queueing_delay_duration),
-            )
-        } else {
-            (network_delay + pkt_txdelay_duration, None)
-        }
-    }
-
-    pub fn reset_linktrace(&mut self) {
-        self.aggregate_base_delay = Duration::default();
-        self.aggregate_delay_queue = BinaryHeap::new();
-        self.sim_trace_startinstant = mk_start_instant();
-        self.next_busy_to = 0
-    }
-
-    pub fn peek_aggregate_delay(&self, current_time: Instant) -> Duration {
-        // for the peeked one, the duration since the current time is the
-        // duration until the delay is in effect: if none is peeked, return
-        // Duration::MAX
-        self.aggregate_delay_queue
-            .peek()
-            .map(|d| d.time.duration_since(current_time))
-            .unwrap_or(Duration::MAX)
-    }
-
-    pub fn push_aggregate_delay(
-        &mut self,
-        delay: Duration,
-        current_time: &Instant,
-        reached_client: bool,
-    ) {
-        let active_delay = match reached_client {
-            // the delay originates from a packet sent by the server that
-            // reached the client: from here, the client would send the packet
-            // to the application layer (because a client) nearly instant, so
-            // the aggregated delay should be in effect right away
-            true => Duration::default(),
-            // The delay originates from a packet sent by the client that
-            // reached the server. We make the ASSUMPTION that the server is in
-            // the middle between client and destination, and that the RTT is
-            // the same in both directions. From here, the server would send the
-            // packet to the destination (taking network.sample() time). During
-            // that transmission time, the destination may send further packets
-            // to the server, up to the point in time when the packet arrives.
-            // Therefore, the aggregated delay should be in effect after 2x
-            // network.sample() time.
-            false => self.network.sample() + self.network.sample(),
-        };
-        debug!(
-            "\tpushing aggregate delay {:?} in {:?}",
-            delay, active_delay
-        );
-        self.aggregate_delay_queue.push(PendingAggregateDelay {
-            time: *current_time + active_delay,
-            delay,
-        });
-    }
-
-    pub fn pop_aggregate_delay(&mut self) {
-        let a = self.aggregate_delay_queue.pop();
-        if let Some(aggregate) = a {
-            debug!("\tpopping aggregate delay {:?}", aggregate.delay);
-            self.aggregate_base_delay += aggregate.delay;
-        }
-    }
-}
 
 // This is the only place where the simulator simulates the entire network
 // between the client and the server.
