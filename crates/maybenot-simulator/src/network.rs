@@ -14,7 +14,7 @@ use std::{
 use log::debug;
 use maybenot::{Machine, TriggerEvent};
 
-use crate::linktrace::{load_linktrace_from_file, mk_start_instant, LinkTrace};
+use crate::linktrace::{mk_start_instant, LinkTrace};
 use crate::{queue::SimQueue, RngSource, SimEvent, SimState};
 
 /// A model of the network between the client and server.
