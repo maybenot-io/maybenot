@@ -112,11 +112,12 @@ pub mod linktrace;
 
 use std::{
     cmp::Ordering,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use integration::Integration;
-use linktrace::{load_linktrace_from_file, mk_start_instant, LinkTrace};
+use linktrace::{mk_start_instant, LinkTrace};
 use log::debug;
 use network::{ExtendedNetwork, ExtendedNetworkLabels, Network, WindowCount};
 use queue::SimQueue;
@@ -393,7 +394,7 @@ pub struct SimulatorArgs<'a> {
     /// Optional simulated network type specification.
     pub simulated_network_type: Option<ExtendedNetworkLabels>,
     /// Optional simulated network linktrace.
-    pub linktrace: Option<LinkTrace>,
+    pub linktrace: Option<Arc<LinkTrace>>,
 }
 
 impl<'a> SimulatorArgs<'a> {
@@ -402,7 +403,7 @@ impl<'a> SimulatorArgs<'a> {
         max_trace_length: usize,
         only_network_activity: bool,
         simulated_network_type: Option<ExtendedNetworkLabels>, // Optional argument
-        linktrace: Option<LinkTrace>,                          // Optional argument
+        linktrace: Option<Arc<LinkTrace>>,                     // Optional argument
     ) -> Self {
         Self {
             network,
@@ -464,7 +465,6 @@ pub fn sim_advanced(
     debug!("sim(): server machines {}", machines_server.len());
 
     let mut network;
-    let linktrace;
     match &args.simulated_network_type {
         // Grouping None and NetworkBottleneck to the same action
         None | Some(ExtendedNetworkLabels::Bottleneck) => {
@@ -473,13 +473,13 @@ pub fn sim_advanced(
                 ExtendedNetwork::new_bottleneck(args.network.clone(), Duration::from_secs(1), sq.max_pps);
         }
         Some(ExtendedNetworkLabels::Linktrace) => {
-            // TODO: change network to extended_network, but need getter and setters for that....
-            linktrace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
-                .expect("Failed to load LinkTrace ltbin from file");
-            //network = NetworkLinktrace::new(args.network.clone(), &linktrace);
-            network =
-                //NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
-                ExtendedNetwork::new_linktrace(args.network.clone(), &linktrace);
+            // Ensure that linktrace is provided in args, otherwise handle the error
+            if let Some(linktrace) = &args.linktrace {
+                // Use the existing linktrace, note that cloning an Arc only increases reference count, no extra memory consumed
+                network = ExtendedNetwork::new_linktrace(args.network.clone(), linktrace.clone());
+            } else {
+                panic!("No linktrace specified for SimulatorArgs.");
+            }
         }
     }
 
@@ -614,7 +614,7 @@ fn pick_next<M: AsRef<[Machine]>>(
     sq: &mut SimQueue,
     client: &mut SimState<M, RngSource>,
     server: &mut SimState<M, RngSource>,
-    network: &mut ExtendedNetwork<'_>,
+    network: &mut ExtendedNetwork,
     current_time: Instant,
 ) -> Option<SimEvent> {
     // find the earliest scheduled action, internal timer, block expiry,

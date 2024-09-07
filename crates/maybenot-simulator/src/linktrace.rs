@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Write};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 /// Link trace
@@ -200,6 +201,11 @@ impl LinkTrace {
 impl fmt::Display for LinkTrace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         //TODO: Print len, bw
+        writeln!(
+            f,
+            "Shape of downlink lookup matrix: {:?}",
+            self.dl_busy_to_mtx.shape()
+        )?;
         if !self.dl_traceinput.is_empty() && !self.ul_traceinput.is_empty() {
             write!(
                 f,
@@ -243,8 +249,8 @@ pub fn mk_start_instant() -> Instant {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SizebinLookupTable {
     boundaries: Vec<i32>,
-    sizebin_lookuptable: Vec<i32>,
     bin_pktsize_values: Vec<i32>,
+    sizebin_lookuptable: Vec<i32>,
     max_value: i32,
 }
 
@@ -358,7 +364,7 @@ pub fn save_linktrace_to_file(file_path: &str, link_trace: &LinkTrace) -> io::Re
 }
 
 // Load the entire LinkTrace instance from a file, optionally gzipped
-pub fn load_linktrace_from_file(file_path: &str) -> io::Result<LinkTrace> {
+pub fn load_linktrace_from_file(file_path: &str) -> io::Result<Arc<LinkTrace>> {
     let mut encoded = Vec::new();
 
     if file_path.ends_with(".gz") {
@@ -373,5 +379,5 @@ pub fn load_linktrace_from_file(file_path: &str) -> io::Result<LinkTrace> {
     }
 
     let link_trace: LinkTrace = bincode::deserialize(&encoded).unwrap();
-    Ok(link_trace)
+    Ok(Arc::new(link_trace))
 }

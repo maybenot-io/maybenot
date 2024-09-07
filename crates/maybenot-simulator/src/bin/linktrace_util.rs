@@ -210,6 +210,16 @@ fn create_synthlinktrace(filename: &str, traceparams: TraceParams, preset: Optio
             frame_burst_length: 1,
             slot_bytes: 25,
         },
+        Some("ether100M_40M") => TraceParams {
+            total_lines: 40_000_000,
+            burst_interval: 2,
+            burst_length: 1,
+            sub_burst_interval: 1,
+            sub_burst_length: 1,
+            frame_burst_interval: 1,
+            frame_burst_length: 1,
+            slot_bytes: 25,
+        },
         Some("test1M") => TraceParams {
             total_lines: DEFAULT_TOTAL_LINES,
             burst_interval: 200,

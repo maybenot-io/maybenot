@@ -2,8 +2,8 @@ use std::time::Duration;
 
 use maybenot_simulator::{
     linktrace::{load_linktrace_from_file, mk_start_instant},
-    network::{Network, NetworkBottleneck, NetworkLinktrace},
-    parse_trace, sim,
+    network::{ExtendedNetworkLabels, Network, NetworkBottleneck, NetworkLinktrace},
+    parse_trace, sim, sim_advanced, SimulatorArgs,
 };
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
@@ -136,7 +136,7 @@ fn simulator_execution(c: &mut Criterion) {
     //How many packets to process
     let nr_iter = 10_000;
 
-    // Initialize the vector with the first Instan
+    // Initialize the vector with the first Instant
     let mut instants = Vec::with_capacity(nr_iter);
     let mut rng = rand::thread_rng();
 
@@ -173,7 +173,7 @@ fn simulator_execution(c: &mut Criterion) {
     let network = Network::new(Duration::from_millis(10), None);
     let linktrace = load_linktrace_from_file("tests/ether100M_synth5M_g_2bins.ltbin.gz")
         .expect("Failed to load LinkTrace ltbin from file");
-    let mut network_lt = NetworkLinktrace::new(network, &linktrace);
+    let mut network_lt = NetworkLinktrace::new(network, linktrace);
 
     c.bench_function("Linktrace network.sample", |b| {
         b.iter(|| {
@@ -216,22 +216,62 @@ fn simulator_execution(c: &mut Criterion) {
     //sim(&[], &[], &mut pq.clone(), network.delay, 1000, true);
 }
 
-fn simulator_exec_new_network(c: &mut Criterion) {
+fn simple_simulator_run(c: &mut Criterion) {
     const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
 
-    // start with a reasonable 10ms delay: we should get events at the client
-    let network = Network::new(Duration::from_millis(10), None);
-    let pq = parse_trace(EARLY_TRACE, &network);
-
-    c.bench_function("Sim running", |b| {
-        let mut pq_clone = pq.clone();
-        b.iter(|| sim(&[], &[], &mut pq_clone, network.delay, 1000, true))
+    c.bench_function("Simple network simulation run", |b| {
+        b.iter(|| {
+            let network = Network::new(Duration::from_millis(10), None);
+            let pq = parse_trace(EARLY_TRACE, &network);
+            black_box(sim(&[], &[], &mut pq.clone(), network.delay, 10000, true));
+        });
     });
+}
 
-    //sim(&[], &[], &mut pq.clone(), network.delay, 1000, true);
+fn bottleneck_simulator_run(c: &mut Criterion) {
+    const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
+
+    c.bench_function("Bottleneck network simulation run", |b| {
+        b.iter(|| {
+            let network = Network::new(Duration::from_millis(10), None);
+            let sq = parse_trace(EARLY_TRACE, &network);
+            let args = SimulatorArgs::new(&network, 10000, true, None, None);
+            black_box(sim_advanced(&[], &[], &mut sq.clone(), &args));
+        });
+    });
+}
+
+fn linktrace_simulator_run(c: &mut Criterion) {
+    const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
+
+    let linktrace = load_linktrace_from_file("tests/ether100M_synth40M_2bins.ltbin.gz")
+        .expect("Failed to load LinkTrace ltbin from file");
+
+    c.bench_function("Linktrace network simulation run", |b| {
+        b.iter(|| {
+            let network = Network::new(Duration::from_millis(10), None);
+            let sq = parse_trace(EARLY_TRACE, &network);
+            let args = SimulatorArgs::new(
+                &network,
+                10000,
+                true,
+                Some(ExtendedNetworkLabels::Linktrace),
+                Some(linktrace.clone()),
+            );
+            black_box(sim_advanced(&[], &[], &mut sq.clone(), &args));
+        });
+    });
 }
 
 //criterion_group!(benches, benchmark_flat_vector, benchmark_ndarray, benchmark_busy_to);
-criterion_group!(benches, benchmark_busy_to, simulator_execution);
-//criterion_group!(benches, simulator_execution);
+//criterion_group!(benches, benchmark_busy_to, simulator_execution);
+//criterion_group!(benches, benchmark_busy_to, simulator_execution, simulator_exec_new_network);
+criterion_group!(
+    benches,
+    simulator_execution,
+    simple_simulator_run,
+    bottleneck_simulator_run,
+    linktrace_simulator_run
+);
+//criterion_group!(benches, linktrace_simulator_run);
 criterion_main!(benches);

@@ -1,13 +1,18 @@
 //use std::fs::File;
 //use std::io::{self, Write, Read};
 //use std::panic::resume_unwind;
-use maybenot_simulator::linktrace::{
-    load_linktrace_from_file, mk_sizebin_lookuptable, mk_start_instant, save_linktrace_to_file,
-    LinkTrace, SizebinLookupTable,
+
+use maybenot_simulator::{
+    linktrace::{
+        load_linktrace_from_file, mk_sizebin_lookuptable, mk_start_instant, save_linktrace_to_file,
+        LinkTrace, SizebinLookupTable,
+    },
+    network::{ExtendedNetworkLabels, Network, NetworkLinktrace},
+    parse_trace, sim_advanced, SimulatorArgs,
 };
-use maybenot_simulator::network::{Network, NetworkLinktrace};
 
 use rand::Rng;
+use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(test)]
@@ -90,7 +95,11 @@ mod tests {
         let dl_traceinput = "tests/ether100M_synth5K_g.tr.gz";
         let ul_traceinput = "tests/ether100M_synth5K_g.tr.gz";
         let sizebin_lookuptable = mk_sizebin_lookuptable();
-        let link_trace = LinkTrace::new(dl_traceinput, ul_traceinput, sizebin_lookuptable);
+        let link_trace = Arc::new(LinkTrace::new(
+            dl_traceinput,
+            ul_traceinput,
+            sizebin_lookuptable,
+        ));
 
         // Save the instance to a file
         let _ = save_linktrace_to_file("tests/ether100M_synth5K.ltbin.gz", &link_trace)
@@ -162,7 +171,7 @@ mod tests {
         let network = Network::new(Duration::from_millis(10), None);
         let linktrace = load_linktrace_from_file("tests/ether100M_synth5M_g_2bins.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
-        let mut network_lt = NetworkLinktrace::new(network, &linktrace);
+        let mut network_lt = NetworkLinktrace::new(network, linktrace);
 
         let tinstant = mk_start_instant() + Duration::from_micros(1);
         network_lt.sample(&tinstant, true);
@@ -178,5 +187,26 @@ mod tests {
         }
 
         //sim(&[], &[], &mut pq.clone(), network.delay, 1000, true);
+    }
+
+    #[test]
+    fn linktrace_simulator_run() {
+        const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
+
+        let linktrace = load_linktrace_from_file("tests/ether100M_synth40M_2bins.ltbin.gz")
+            .expect("Failed to load LinkTrace ltbin from file");
+
+        println!("{}", linktrace);
+
+        let network = Network::new(Duration::from_millis(10), None);
+        let sq = parse_trace(EARLY_TRACE, &network);
+        let args = SimulatorArgs::new(
+            &network,
+            20,
+            true,
+            Some(ExtendedNetworkLabels::Linktrace),
+            Some(linktrace.clone()),
+        );
+        let _trace = sim_advanced(&[], &[], &mut sq.clone(), &args);
     }
 }

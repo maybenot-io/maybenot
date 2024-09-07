@@ -7,7 +7,7 @@ use std::{
     cmp::{max, Ordering},
     collections::{BinaryHeap, VecDeque},
     fmt,
-    //sync::Arc,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -54,24 +54,39 @@ impl fmt::Display for Network {
     }
 }
 
+// Labels for the Network configurartion which describes where Server, Client, Relay,
+// Machines, Delay, and Bottlenecks are located in relation to each other. For future impl.
+// At some later stage this could potentially be generalized to allow arbitrary
+// composition of those elements.
+#[allow(non_camel_case_types)]
+pub enum NetworkConfiguration {
+    SM_DB_MC,
+    S_DB_RM_D_MC,
+    S_D_RM_DB_MC,
+}
+
+// Labels for the different types of simulated networks there are,
+// in terms of how the bottleneck is modeled
 #[derive(Debug, Clone)]
 pub enum ExtendedNetworkLabels {
     Bottleneck,
     Linktrace,
+    //  LinkTraceHiRes,  // For future
+    //  LinkTraceLoRes,  // For future
 }
 
 #[derive(Debug, Clone)]
-pub enum ExtendedNetwork<'a> {
+pub enum ExtendedNetwork {
     Bottleneck(NetworkBottleneck),
-    Linktrace(NetworkLinktrace<'a>),
+    Linktrace(NetworkLinktrace),
 }
 
-impl<'a> ExtendedNetwork<'a> {
+impl ExtendedNetwork {
     pub fn new_bottleneck(network: Network, window: Duration, queue_pps: Option<usize>) -> Self {
         ExtendedNetwork::Bottleneck(NetworkBottleneck::new(network, window, queue_pps))
     }
 
-    pub fn new_linktrace(network: Network, linktrace: &'a LinkTrace) -> Self {
+    pub fn new_linktrace(network: Network, linktrace: Arc<LinkTrace>) -> Self {
         ExtendedNetwork::Linktrace(NetworkLinktrace::new(network, linktrace))
     }
 
@@ -300,7 +315,7 @@ impl WindowCount {
 /// delay to add to packets due to the bottleneck or accumulated blocking by
 /// machines: used to shift the baseline trace time at both client and relay
 #[derive(Debug, Clone)]
-pub struct NetworkLinktrace<'a> {
+pub struct NetworkLinktrace {
     // the current aggregate of delays to add to base packets due to the
     // bottleneck or accumulated blocking by machines: used to shift the
     // baseline trace time at both client and relay
@@ -311,15 +326,15 @@ pub struct NetworkLinktrace<'a> {
     pps_limit: usize,
     // the network model
     network: Network,
-    //linktrace: Arc<LinkTrace>,
-    linktrace: &'a LinkTrace,
+    linktrace: Arc<LinkTrace>,
+    //linktrace: &'a LinkTrace,
     // The start instant used by parse_trace for the first event at the server side
     sim_trace_startinstant: Instant,
     next_busy_to: usize,
 }
 
-impl<'a> NetworkLinktrace<'a> {
-    pub fn new(network: Network, linktrace: &'a LinkTrace) -> Self {
+impl NetworkLinktrace {
+    pub fn new(network: Network, linktrace: Arc<LinkTrace>) -> Self {
         Self {
             network,
             aggregate_base_delay: Duration::default(),
@@ -432,7 +447,6 @@ impl<'a> NetworkLinktrace<'a> {
     }
 }
 
-
 // This is the only place where the simulator simulates the entire network
 // between the client and the server.
 //
@@ -456,7 +470,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
     sq: &mut SimQueue,
     state: &SimState<M, RngSource>,
     recipient: &mut SimState<M, RngSource>,
-    network: &mut ExtendedNetwork<'_>,
+    network: &mut ExtendedNetwork,
     current_time: &Instant,
 ) -> bool {
     let side = if next.client { "client" } else { "server" };
