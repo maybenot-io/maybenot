@@ -197,7 +197,6 @@ impl LinkTrace {
     }
 }
 
-
 impl fmt::Display for LinkTrace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Calculate the duration of the link trace in seconds
