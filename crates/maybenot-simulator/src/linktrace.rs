@@ -197,24 +197,62 @@ impl LinkTrace {
     }
 }
 
-//TODO: make more informative
+
 impl fmt::Display for LinkTrace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        //TODO: Print len, bw
+        // Calculate the duration of the link trace in seconds
+        let duration_sec = self.dl_bw_trace.len() as f64 / 1e6;
+
+        // Calculate average throughputs in Mbps for downlink and uplink
+        let dl_avg_throughput_mbps =
+            self.dl_bw_trace.iter().sum::<i32>() as f64 * 8.0 / duration_sec / 1e6;
+        let ul_avg_throughput_mbps =
+            self.ul_bw_trace.iter().sum::<i32>() as f64 * 8.0 / duration_sec / 1e6;
+
+        // Print out the duration and average throughput
+        writeln!(f, "\nLink trace details:")?;
+        writeln!(f, "  Duration (seconds): {:.3}", duration_sec)?;
+        writeln!(
+            f,
+            "  Average downlink throughput (Mbps): {:.3}",
+            dl_avg_throughput_mbps
+        )?;
+        writeln!(
+            f,
+            "  Average uplink throughput (Mbps): {:.3}",
+            ul_avg_throughput_mbps
+        )?;
+
+        // Print the trace input files (or lack thereof)
+        if !self.dl_traceinput.is_empty() && !self.ul_traceinput.is_empty() {
+            writeln!(
+                f,
+                "\nTracefiles:  \ndl: {:?}, \nul: {:?} ",
+                self.dl_traceinput, self.ul_traceinput
+            )?;
+        } else {
+            writeln!(f, "No trace-file found")?;
+        }
+
+        // Print out the bin boundaries and packet sizes from SizebinLookupTable
+        writeln!(f, "\nSizebin Lookup Table:")?;
+        writeln!(
+            f,
+            "  Bin boundaries: {:?}",
+            self.sizebin_lookuptable.boundaries
+        )?;
+        writeln!(
+            f,
+            "  Bin packet sizes: {:?}",
+            self.sizebin_lookuptable.bin_pktsize_values
+        )?;
+
+        // Print the shape of the downlink lookup matrix
         writeln!(
             f,
             "Shape of downlink lookup matrix: {:?}",
             self.dl_busy_to_mtx.shape()
-        )?;
-        if !self.dl_traceinput.is_empty() && !self.ul_traceinput.is_empty() {
-            write!(
-                f,
-                "Tracefiles {{ \ndl: {:?}, \nul: {:?} }}",
-                self.dl_traceinput, self.ul_traceinput
-            )
-        } else {
-            write!(f, "No trace-file found")
-        }
+        )
     }
 }
 
@@ -249,8 +287,8 @@ pub fn mk_start_instant() -> Instant {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SizebinLookupTable {
     boundaries: Vec<i32>,
-    bin_pktsize_values: Vec<i32>,
     sizebin_lookuptable: Vec<i32>,
+    bin_pktsize_values: Vec<i32>,
     max_value: i32,
 }
 

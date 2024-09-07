@@ -4,7 +4,9 @@ use flate2::Compression;
 use std::fs::File;
 use std::io::Write;
 
-use maybenot_simulator::linktrace::{save_linktrace_to_file, LinkTrace, SizebinLookupTable};
+use maybenot_simulator::linktrace::{
+    load_linktrace_from_file, save_linktrace_to_file, LinkTrace, SizebinLookupTable,
+};
 
 //use maybenot_simulator::network::{Network, NetworkLinktrace};
 
@@ -60,6 +62,13 @@ enum Commands {
         #[arg(long)]
         preset: Option<String>,
     },
+    /// Print out binary trace information
+    TraceInfo {
+        #[arg(long)]
+        filename: String,
+    },
+    /// List available presets
+    ListPresets,
 }
 
 fn main() {
@@ -95,9 +104,31 @@ fn main() {
                 frame_burst_length: *frame_burst_length,
                 slot_bytes: *slot_bytes,
             };
-            create_synthlinktrace(filename, params, preset.clone());
+            match create_synthlinktrace(filename, params, preset.clone()) {
+                Ok(_) => {
+                    println!("Synthetic link trace created successfully");
+                }
+                Err(err) => {
+                    eprintln!("{}", err);
+                    list_presets();
+                }
+            }
+        }
+        Commands::ListPresets => {
+            list_presets();
+        }
+        Commands::TraceInfo { filename } => {
+            trace_info(filename);
         }
     }
+}
+
+fn trace_info(filename: &str) {
+    if !filename.ends_with(".ltbin.gz") {
+        panic!("The binary tracefile must end with .ltbin.gz");
+    }
+    let linktrace = load_linktrace_from_file(filename).unwrap();
+    println!("{}", linktrace);
 }
 
 fn create_tracebin(tracefile: &str, sizebins: &str, binpktsizes: &str) {
@@ -145,7 +176,21 @@ struct TraceParams {
     slot_bytes: usize,
 }
 
-fn create_synthlinktrace(filename: &str, traceparams: TraceParams, preset: Option<String>) {
+fn list_presets() {
+    println!("Available presets:");
+    println!("  starlink");
+    println!("  ether1G");
+    println!("  ether10M");
+    println!("  ether100M_5K");
+    println!("  ether100M_5M");
+    println!("  ether100M_40M");
+}
+
+fn create_synthlinktrace(
+    filename: &str,
+    traceparams: TraceParams,
+    preset: Option<String>,
+) -> Result<(), String> {
     const DEFAULT_TOTAL_LINES: usize = 10_000_000;
     if !filename.ends_with(".tr") && !filename.ends_with(".tr.gz") {
         panic!("The tracefile must end with .tr or .tr.gz");
@@ -230,10 +275,9 @@ fn create_synthlinktrace(filename: &str, traceparams: TraceParams, preset: Optio
             frame_burst_length: 1,
             slot_bytes: 25,
         },
-        _ => traceparams,
+        None => traceparams,
+        _ => return Err("Invalid preset provided!".to_string()),
     };
-
-    //let mut file = File::create(filename).expect("Failed to create file");
 
     let mut file: Box<dyn Write> = if filename.ends_with(".tr.gz") {
         let f = File::create(filename).expect("Failed to create file");
@@ -256,4 +300,5 @@ fn create_synthlinktrace(filename: &str, traceparams: TraceParams, preset: Optio
         writeln!(file, "{}", value).expect("Failed to write to file");
     }
     file.flush().expect("Failed to flush file");
+    Ok(())
 }

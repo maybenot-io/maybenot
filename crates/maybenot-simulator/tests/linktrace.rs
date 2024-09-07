@@ -92,8 +92,8 @@ mod tests {
 
     #[test]
     fn save_load_linksimtrace() {
-        let dl_traceinput = "tests/ether100M_synth5K_g.tr.gz";
-        let ul_traceinput = "tests/ether100M_synth5K_g.tr.gz";
+        let dl_traceinput = "tests/ether100M_synth5K.tr";
+        let ul_traceinput = "tests/ether100M_synth5K.tr";
         let sizebin_lookuptable = mk_sizebin_lookuptable();
         let link_trace = Arc::new(LinkTrace::new(
             dl_traceinput,
@@ -102,11 +102,11 @@ mod tests {
         ));
 
         // Save the instance to a file
-        let _ = save_linktrace_to_file("tests/ether100M_synth5K.ltbin.gz", &link_trace)
+        let _ = save_linktrace_to_file("tests/ether100M_synth5K_tst.ltbin.gz", &link_trace)
             .expect("Failed to save LinkTrace ltbin to file");
 
         // Load the instance back from the file
-        let loaded_link_trace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
+        let loaded_link_trace = load_linktrace_from_file("tests/ether100M_synth5K_tst.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
         assert_eq!(link_trace, loaded_link_trace);
     }
@@ -169,7 +169,7 @@ mod tests {
         println!("{:?}", instants[nr_iter - 1]);
         // start with a reasonable 10ms delay: we should get events at the client
         let network = Network::new(Duration::from_millis(10), None);
-        let linktrace = load_linktrace_from_file("tests/ether100M_synth5M_g_2bins.ltbin.gz")
+        let linktrace = load_linktrace_from_file("tests/ether100M_synth5M.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
         let mut network_lt = NetworkLinktrace::new(network, linktrace);
 
@@ -193,7 +193,7 @@ mod tests {
     fn linktrace_simulator_run() {
         const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
 
-        let linktrace = load_linktrace_from_file("tests/ether100M_synth40M_2bins.ltbin.gz")
+        let linktrace = load_linktrace_from_file("tests/ether100M_synth40M.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
 
         println!("{}", linktrace);
