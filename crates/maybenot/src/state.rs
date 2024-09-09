@@ -1,6 +1,6 @@
-//! A state as part of a [`Machine`]. Contains an optional
-//! [`Action`] and [`CounterUpdate`] to be executed upon transition to this
-//! state, and a vector of state transitions for each possible [`Event`].
+//! A state as part of a [`Machine`]. Contains an optional [`Action`] and
+//! [`Counter`] to be executed upon transition to this state, and a vector of
+//! state transitions for each possible [`Event`].
 
 use crate::constants::*;
 use crate::*;
@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use std::fmt;
 
 use self::action::Action;
-use self::counter::CounterUpdate;
+use self::counter::Counter;
 use self::event::Event;
 
 use enum_map::enum_map;
@@ -37,8 +37,8 @@ impl fmt::Display for Trans {
 pub struct State {
     /// Take an action upon transitioning to this state.
     pub action: Option<Action>,
-    /// On transition to this state, update a machine counter.
-    pub counter: Option<CounterUpdate>,
+    /// On transition to this state, update the machine's two counters (A,B).
+    pub counter: (Option<Counter>, Option<Counter>),
     /// For each possible [`Event`], a vector of state transitions.
     transitions: [Option<Vec<Trans>>; EVENT_NUM],
 }
@@ -74,7 +74,7 @@ impl State {
         State {
             transitions,
             action: None,
-            counter: None,
+            counter: (None, None),
         }
     }
 
@@ -99,7 +99,7 @@ impl State {
             let mut seen: HashSet<usize> = HashSet::new();
 
             for t in transitions.iter() {
-                if t.0 >= num_states && t.0 != STATE_END {
+                if t.0 >= num_states && t.0 != STATE_END && t.0 != STATE_SIGNAL {
                     Err(Error::Machine(format!(
                         "found out-of-bounds state index {}",
                         t.0
@@ -135,7 +135,10 @@ impl State {
         if let Some(action) = &self.action {
             action.validate()?;
         }
-        if let Some(counter) = &self.counter {
+        if let Some(counter) = &self.counter.0 {
+            counter.validate()?;
+        }
+        if let Some(counter) = &self.counter.1 {
             counter.validate()?;
         }
 
@@ -182,11 +185,21 @@ impl fmt::Display for State {
         } else {
             writeln!(f, "action: None")?;
         }
-        if let Some(counter) = self.counter {
-            writeln!(f, "counter: {}", counter)?;
-        } else {
-            writeln!(f, "counter: None")?;
-        }
+        match self.counter {
+            (Some(counter_a), Some(counter_b)) => {
+                writeln!(f, "counter A: {}", counter_a)?;
+                writeln!(f, "counter B: {}", counter_b)?;
+            }
+            (Some(counter), None) => {
+                writeln!(f, "counter A: {}", counter)?;
+            }
+            (None, Some(counter)) => {
+                writeln!(f, "counter B: {}", counter)?;
+            }
+            _ => {
+                writeln!(f, "counter: None")?;
+            }
+        };
 
         writeln!(f, "transitions: ")?;
         for event in Event::iter() {
@@ -211,7 +224,7 @@ impl fmt::Display for State {
 
 #[cfg(test)]
 mod tests {
-    use crate::counter::{Counter, CounterUpdate, Operation};
+    use crate::counter::{Counter, Operation};
     use crate::dist::{Dist, DistType};
     use crate::event::Event;
     use crate::state::*;
@@ -285,20 +298,6 @@ mod tests {
     }
 
     #[test]
-    fn validate_state_nop_transition() {
-        // Ensure that STATE_NOP can be sampled. This is an invalid state but
-        // doesn't matter for the behavior we want to invoke in sample_state()
-        // and make_alias_index(). The other option would be a probabilistic
-        // test since the thread rng can't be seeded...
-        let mut s = State::new(enum_map! { _ => vec![] });
-        s.transitions[Event::PaddingSent.to_usize()] = Some(vec![]);
-        assert_eq!(
-            s.sample_state(Event::PaddingSent, &mut rand::thread_rng()),
-            None
-        );
-    }
-
-    #[test]
     fn validate_state_action() {
         // assume a machine with one state
         let num_states = 1;
@@ -356,29 +355,27 @@ mod tests {
                  Event::PaddingSent => vec![Trans(0, 1.0)],
              _ => vec![],
         });
-        s.counter = Some(CounterUpdate {
-            counter: Counter::A,
-            operation: Operation::Increment,
-            value: None,
-        });
+        s.counter = (Some(Counter::new(Operation::Increment)), None);
 
         let r = s.validate(num_states);
         println!("{:?}", r.as_ref().err());
         assert!(r.is_ok());
 
         // invalid counter update in state
-        s.counter = Some(CounterUpdate {
-            counter: Counter::B,
-            operation: Operation::Set,
-            value: Some(Dist {
-                dist: DistType::Uniform {
-                    low: 2.0, // NOTE low > high
-                    high: 1.0,
+        s.counter = (
+            None,
+            Some(Counter::new_dist(
+                Operation::Increment,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 2.0, // NOTE low > high
+                        high: 1.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
                 },
-                start: 0.0,
-                max: 0.0,
-            }),
-        });
+            )),
+        );
 
         let r = s.validate(num_states);
         println!("{:?}", r.as_ref().err());

@@ -9,7 +9,7 @@ pub const VERSION: u8 = 2;
 pub const MAX_DECOMPRESSED_SIZE: usize = 1 << 20;
 
 /// The number of [`Event`](crate::event)s in the framework.
-pub const EVENT_NUM: usize = 12;
+pub const EVENT_NUM: usize = 13;
 
 /// The maximum sampled timeout in a [`State`](crate::state), set to a day in
 /// microseconds.
@@ -23,21 +23,16 @@ pub const MAX_SAMPLED_TIMER_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0
 /// day in microseconds.
 pub const MAX_SAMPLED_BLOCK_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 
-/// The maximum sampled counter value in a [`State`](crate::state), which is
-/// currently effectively unlimited in practice.
-pub const MAX_SAMPLED_COUNTER_VALUE: u64 = u64::MAX;
-
 /// The maximum possible sampled limit of a [`State`](crate::state). This is the
 /// default if no limit dist is specified (in practice, the same as no limit).
-pub const STATE_LIMIT_MAX: u64 = u64::MAX;
+pub(crate) const STATE_LIMIT_MAX: u64 = u64::MAX;
 
-/// An internal pseudo-state that means that no [`State`](crate::state) defined
-/// in a transition: it is used for state transitions as a "no-op" transition
-/// for any remaining probability up until 1.0.
-pub const STATE_NOP: usize = u32::MAX as usize;
 /// A pseudo-state that means the [`Machine`](crate::Machine) should completely
 /// stop.
-pub const STATE_END: usize = STATE_NOP - 1;
+pub const STATE_END: usize = u32::MAX as usize;
+/// A pseudo-state that triggers a Signal [`Event`](crate::event) in all other
+/// running machines.
+pub const STATE_SIGNAL: usize = STATE_END - 1;
 /// The maximum number of [`State`](crate::state)s a [`Machine`](crate::Machine)
 /// can have.
-pub const STATE_MAX: usize = STATE_END - 1;
+pub const STATE_MAX: usize = STATE_SIGNAL - 1;

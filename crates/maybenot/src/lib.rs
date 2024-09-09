@@ -34,7 +34,7 @@
 //! // of the framework for the same machines, then share the same vector
 //! // across framework instances. All runtime information is allocated
 //! // internally in the framework without modifying the machines.
-//! let s = "02eNpjYEAHjKhcAAAwAAI=";
+//! let s = "02eNpjYEAHjOgCAAA0AAI=";
 //! // machines will error if invalid
 //! let m = vec![Machine::from_str(s).unwrap()];
 //!
@@ -247,7 +247,7 @@ mod tests {
         // of the framework for the same machines, then share the same vector
         // across framework instances. All runtime information is allocated
         // internally in the framework without modifying the machines.
-        let s = "02eNpjYEAHjKhcAAAwAAI=";
+        let s = "02eNpjYEAHjOgCAAA0AAI=";
         // machines will error if invalid
         let m = vec![Machine::from_str(s).unwrap()];
 
