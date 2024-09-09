@@ -27,5 +27,5 @@ bincode = "1.3.3"
 base64 = "0.22.0"
 flate2 = "1.0.28"
 enum-map = "2.7.3"
-sha256 = "1.5.0"
+sha256 = {version = "1.5.0", default-features = false}
 rand_core = "0.6.4"

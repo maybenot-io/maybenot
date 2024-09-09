@@ -47,6 +47,7 @@ and executing scheduled actions. Maybenot does not specify the specific async
 runtime or how to keep time for ease of integration.
 
 ## Example usage
+
 ```rust,no_run
 use crate::{Framework, Machine, TriggerAction, TriggerEvent};
 use std::{str::FromStr, time::Instant};
