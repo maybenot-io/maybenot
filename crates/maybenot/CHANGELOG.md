@@ -2,7 +2,7 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
-## 2.0.0 - TBA
+## 2.0.0 - 2024-09-09
 
 - Substantial refactoring and interface simplification. As an integrator, the
   main integration focus should be triggering one or more `TriggerEvent` with
@@ -30,13 +30,14 @@ Manually generated changelog, for now. We follow semantic versioning.
   (timeout), the machine's internal timer, or both. The internal pseudo-state
   `STATE_CANCEL` transition is removed.
 - Added support for `Event::Signal`, allowing machines to signal between each
-  other. Useful for multiple machines that need to coordinate their states. This
-  is internal to the framework and is not exposed to the integrator.
+  other by transitioning to `STATE_SIGNAL`. Useful for multiple machines that
+  need to coordinate their states. This is internal to the framework and is not
+  exposed to the integrator.
 - Added support for the `SkewNormal` distribution.
 - Added an optional `parsing` feature to reconstruct v1 machines, though they
   may behave differently than expected. v1 machines are now deprecated.
-- Machines are now serialized exclusively with Serde, and the custom format
-  used in v1 has been removed.
+- Machines are now serialized exclusively with Serde, and the custom format used
+  in v1 has been removed.
 - Make it possible to run framework with different time sources. Exposes
   `Instant` and `Duration` traits that can be implemented for any type. Still
   uses `std::time` types by default.

@@ -23,11 +23,11 @@ WireGuard. While the connections are encrypted, *patterns* in the encrypted
 communication may still leak information about the communicated plaintext.
 Maybenot is a framework for creating defenses that hide such patterns.
 
-
 To simulate defenses based on Maybenot, see the [Maybenot
-simulator](https://github.com/maybenot-io/maybenot-simulator/).
+simulator](https://github.com/maybenot-io/maybenot/tree/main/crates/maybenot-simulator/).
 
 ## Design
+
 An instance of Maybenot repeatedly takes as *input* one or more *events*
 describing the encrypted traffic going over an encrypted channel. It produces as
 *output* zero or more *scheduled actions*, such as to send *padding* traffic or
@@ -52,7 +52,7 @@ use crate::{Framework, Machine, TriggerAction, TriggerEvent};
 use std::{str::FromStr, time::Instant};
 
 // deserialize a machine, this is a "no-op" machine that does nothing
-let s = "02eNpjYEAHjKhcAAAwAAI=";
+let s = "02eNpjYEAHjOgCAAA0AAI=";
 let m = vec![Machine::from_str(s).unwrap()];
 
 // create framework instance
@@ -102,24 +102,28 @@ loop {
  ```
 
 ## More details
-See the [paper](https://doi.org/10.1145/3603216.3624953) and
+
+See the [WPES 2023 paper](https://doi.org/10.1145/3603216.3624953) and
 [documentation](https://docs.rs/maybenot/latest/maybenot) for further details on
 the framework.
 
-The current version of the framework includes a number of improvements over v1, some of which
-are discussed in the paper. Refer to the [design document](https://arxiv.org/abs/2304.09510)
-for an in-depth explanation of the new capabilities.
+The current version of the framework includes a number of improvements over v1,
+some of which are discussed in the paper. Refer to the [arXiv design
+document](https://arxiv.org/abs/2304.09510) for an in-depth explanation of the
+new capabilities (soon updated to v2).
 
 Development of defenses using Maybenot is under active development. For some
 early results, see
 [https://github.com/ewitwer/maybenot-defenses](https://github.com/ewitwer/maybenot-defenses).
 
 ## Contributing
+
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as MIT or Apache-2.0, without any additional terms or conditions.
 
 ## Origin
+
 Maybenot is based on the [Circuit Padding Framework of
 Tor](https://gitweb.torproject.org/tor.git/plain/doc/HACKING/CircuitPaddingDevelopment.md)
 by Perry and Kadianakis from 2019, which is a generalization of the [WTF-PAD
@@ -129,6 +133,7 @@ Padding](https://www.cs.utexas.edu/~shmat/shmat_esorics06.pdf) by Shmatikov and
 Wang from 2006.
 
 ## Sponsorship
+
 Made possible with support from [Mullvad VPN](https://mullvad.net/), the
 [Swedish Internet Foundation](https://internetstiftelsen.se/en/), and the
 [Knowledge Foundation of Sweden](https://www.kks.se/en/start-en/).

@@ -1,4 +1,5 @@
 # Maybenot
+
 Maybenot is a framework for traffic analysis defenses that hide patterns in
 encrypted communication. Its goal is to increase the uncertainty of network
 attackers, hence its logo 🤔 - the thinking face emoji (U+1F914).
@@ -9,35 +10,41 @@ may still leak information about the communicated plaintext. Maybenot is a
 framework for creating defenses that hide such patterns.
 
 ## Workspace structure
+
 The Maybenot workspace consists of the following crates:
+
 - [maybenot](crates/maybenot): The core framework for creating defenses.
 - [maybenot-simulator](crates/maybenot-simulator): A simulator for testing
   defenses.
 
-More crates are in the process of being added to the workspace. This happens in
-parallel with the development of v2 of the framework, so sorry if it's a bit
-messy for now. We aim for a clean slate once v2 is done.
+More crates are being added to the workspace. First up should be an FFI crate
+for the framework.
 
 ## More details
-See the [paper](https://doi.org/10.1145/3603216.3624953) and
-[documentation](https://docs.rs/maybenot/latest/maybenot) for further details on
-the framework.
+
+This is v2 of the framework and associated crates. The goal is to keep the
+framework as simple as possible, while still being expressive enough to
+implement a wide range of defenses and useful to integrators.
+
+See the [WPES 2023 paper](https://doi.org/10.1145/3603216.3624953) for
+background on v1 of the framework. The
+[documentation](https://docs.rs/maybenot/latest/maybenot) is updated for v2. The
+[arXiv design document](https://arxiv.org/abs/2304.09510) is in the process of
+being updated for version 2.
 
 Development of defenses using Maybenot is under active development. For some
-early results, see
+early results targeting v1 of the framework, see
 [https://github.com/ewitwer/maybenot-defenses](https://github.com/ewitwer/maybenot-defenses).
-
-While v1 of the framework and simulator are stable, v2 is slowly shaping up as
-we expand the capabilities of the framework. The goal is to keep the framework
-as simple as possible, while still being expressive enough to implement a wide
-range of defenses.
+Defenses and tooling targeting v2 of the framework will soon be available.
 
 ## Contributing
+
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
 dual licensed as MIT or Apache-2.0, without any additional terms or conditions.
 
 ## Origin
+
 Maybenot is based on the [Circuit Padding Framework of
 Tor](https://gitweb.torproject.org/tor.git/plain/doc/HACKING/CircuitPaddingDevelopment.md)
 by Perry and Kadianakis from 2019, which is a generalization of the [WTF-PAD
@@ -47,6 +54,7 @@ Padding](https://www.cs.utexas.edu/~shmat/shmat_esorics06.pdf) by Shmatikov and
 Wang from 2006.
 
 ## Sponsorship
+
 Made possible with support from [Mullvad VPN](https://mullvad.net/), the
 [Swedish Internet Foundation](https://internetstiftelsen.se/en/), and the
 [Knowledge Foundation of Sweden](https://www.kks.se/en/start-en/).
