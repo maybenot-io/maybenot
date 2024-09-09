@@ -221,35 +221,36 @@ where
         self.current_time = current_time;
         for e in events {
             self.process_event(e);
+        }
 
-            // handle internal signaling: at most one signal per call to
-            // process_event (NOTE how self.signal_pending is consumed here with
-            // take())
-            if let Some(signal) = self.signal_pending.take() {
-                // keep track of if we should exclude a machine
-                let excluded = match signal {
-                    SignalTarget::All => None,
-                    SignalTarget::AllExcept(excluded) => Some(excluded),
-                };
+        // handle internal signaling: at most one signal per call to
+        // trigger_events for sake of batching remaining a safety mechanism for
+        // integrators (NOTE how self.signal_pending is consumed here with
+        // take())
+        if let Some(signal) = self.signal_pending.take() {
+            // keep track of if we should exclude a machine
+            let excluded = match signal {
+                SignalTarget::All => None,
+                SignalTarget::AllExcept(excluded) => Some(excluded),
+            };
 
-                // signal all machines, except the excluded one
-                for mi in 0..self.runtime.len() {
-                    if let Some(excluded) = excluded {
-                        if excluded == mi {
-                            continue;
-                        }
+            // signal all machines, except the excluded one
+            for mi in 0..self.runtime.len() {
+                if let Some(excluded) = excluded {
+                    if excluded == mi {
+                        continue;
                     }
-                    self.transition(mi, Event::Signal);
                 }
+                self.transition(mi, Event::Signal);
+            }
 
-                // edge case: if the signalling above resulted in another signal
-                // AND we excluded a machine, then we need to signal the
-                // excluded machine as well (per definition, the signal must
-                // have come from another machine)
-                if self.signal_pending.take().is_some() {
-                    if let Some(excluded) = excluded {
-                        self.transition(excluded, Event::Signal);
-                    }
+            // edge case: if the signalling above resulted in another signal AND
+            // we excluded a machine, then we need to signal the excluded
+            // machine as well (per definition, the signal must have come from
+            // another machine)
+            if self.signal_pending.take().is_some() {
+                if let Some(excluded) = excluded {
+                    self.transition(excluded, Event::Signal);
                 }
             }
         }
