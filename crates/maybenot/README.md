@@ -13,7 +13,7 @@ attackers, hence its logo 🤔 - the thinking face emoji (U+1F914).
 [crates-url]: https://crates.io/crates/maybenot
 [docs-badge]: https://docs.rs/maybenot/badge.svg
 [docs-url]: https://docs.rs/maybenot
-[tests-badge]: https://github.com/maybenot-io/maybenot/actions/workflows/tests.yml/badge.svg
+[tests-badge]: https://github.com/maybenot-io/maybenot/actions/workflows/build-and-test.yml/badge.svg
 [tests-url]: https://github.com/maybenot-io/maybenot/actions
 [license-badge]: https://img.shields.io/crates/l/maybenot
 [license-url]: https://github.com/maybenot-io/maybenot/

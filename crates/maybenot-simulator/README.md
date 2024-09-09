@@ -12,7 +12,7 @@ framework](https://github.com/maybenot-io/maybenot/).
 [crates-url]: https://crates.io/crates/maybenot-simulator
 [docs-badge]: https://docs.rs/maybenot-simulator/badge.svg
 [docs-url]: https://docs.rs/maybenot-simulator
-[tests-badge]: https://github.com/maybenot-io/maybenot-simulator/actions/workflows/tests.yml/badge.svg
+[tests-badge]: https://github.com/maybenot-io/maybenot/actions/workflows/build-and-test.yml/badge.svg
 [tests-url]: https://github.com/maybenot-io/maybenot-simulator/actions
 [license-badge]: https://img.shields.io/crates/l/maybenot-simulator
 [license-url]: https://github.com/maybenot-io/maybenot-simulator/
