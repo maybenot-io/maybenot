@@ -2,7 +2,7 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
-## 2.0.0 - TBA
+## 2.0.0 - 2024-09-09
 
 - Substantial refactoring and interface simplification. As an integrator, the
   main integration focus should be triggering one or more `TriggerEvent` with
@@ -20,18 +20,24 @@ Manually generated changelog, for now. We follow semantic versioning.
   machines and effectively dealing with blocking actions.
 - Added two counters per machine which are updated upon transition to a state if
   its `counter` field is set. A `CounterZero` event is triggered when either of
-  a machine's counters is decremented to zero.
+  a machine's counters is decremented to zero. Counters are internal to the
+  framework and are not exposed to the integrator.
 - Added a per-machine "internal" timer which can be set using an `UpdateTimer`
-  action. These are handled by the integrator, who triggers the corresponding
-  `TimerBegin` and `TimerEnd` events as the timer starts and fire.
+  action. These are handled by the integrator (to not impose any particular
+  runtime for timers), who triggers the corresponding `TimerBegin` and
+  `TimerEnd` events as the timer starts and fire.
 - Extended the `Cancel` action that can be used to cancel a pending action timer
   (timeout), the machine's internal timer, or both. The internal pseudo-state
   `STATE_CANCEL` transition is removed.
+- Added support for `Event::Signal`, allowing machines to signal between each
+  other by transitioning to `STATE_SIGNAL`. Useful for multiple machines that
+  need to coordinate their states. This is internal to the framework and is not
+  exposed to the integrator.
 - Added support for the `SkewNormal` distribution.
 - Added an optional `parsing` feature to reconstruct v1 machines, though they
   may behave differently than expected. v1 machines are now deprecated.
-- Machines are now serialized exclusively with Serde, and the custom format
-  used in v1 has been removed.
+- Machines are now serialized exclusively with Serde, and the custom format used
+  in v1 has been removed.
 - Make it possible to run framework with different time sources. Exposes
   `Instant` and `Duration` traits that can be implemented for any type. Still
   uses `std::time` types by default.

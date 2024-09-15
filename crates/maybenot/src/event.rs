@@ -38,6 +38,8 @@ pub enum Event {
     TimerBegin,
     /// TimerEnd is when a machine's timer expired.
     TimerEnd,
+    /// Signal is when a machine transitioned to [`STATE_SIGNAL`](crate::constants).
+    Signal,
 }
 
 impl fmt::Display for Event {
@@ -61,6 +63,7 @@ impl Event {
             CounterZero,
             TimerBegin,
             TimerEnd,
+            Signal,
         ];
         EVENTS.iter()
     }
@@ -153,5 +156,6 @@ mod tests {
         assert_eq!(Event::TimerEnd.to_string(), "TimerEnd");
         assert_eq!(Event::TunnelRecv.to_string(), "TunnelRecv");
         assert_eq!(Event::TunnelSent.to_string(), "TunnelSent");
+        assert_eq!(Event::Signal.to_string(), "Signal");
     }
 }

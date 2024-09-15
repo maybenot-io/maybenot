@@ -46,7 +46,7 @@
 //!
 //! // A simple machine that sends one padding packet 20 milliseconds after the
 //! // first normal packet is sent.
-//! let m = "02eNptibEJAAAIw1of09Mc/c+HRMFFzFBoAlxkliTgurLfT6T9oQBWJgJi";
+//! let m = "02eNp1ibEJAEAIA5Nf7B3N0v1cSESwEL0m5A6YvBqSgP7WeXfM5UoBW7ICYg==";
 //! let m = Machine::from_str(m).unwrap();
 //!
 //! // Run the simulator with the machine at the client. Run the simulation up
