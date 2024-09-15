@@ -9,6 +9,7 @@ use maybenot_simulator::{
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ndarray::Array2;
 use rand::Rng;
+use rayon::prelude::*;
 
 // Evaluate lookup perfpormance of different data structures
 fn initialize_flat_vector(rows: usize, cols: usize) -> (Vec<u32>, Vec<(usize, usize)>) {
@@ -133,7 +134,7 @@ pub fn benchmark_busy_to(c: &mut Criterion) {
     }
 }
 
-fn simulator_execution(c: &mut Criterion) {
+fn simulator_network_sample(c: &mut Criterion) {
     //How many packets to process
     let nr_iter = 10_000;
 
@@ -264,16 +265,47 @@ fn linktrace_simulator_run(c: &mut Criterion) {
     });
 }
 
-//criterion_group!(benches, benchmark_flat_vector, benchmark_ndarray, benchmark_busy_to);
-//criterion_group!(benches, benchmark_busy_to, simulator_execution);
-//criterion_group!(benches, benchmark_busy_to, simulator_execution, simulator_exec_new_network);
+//To verify that parallellization works fine on linktraces which are huge.
+fn linktrace_parallel_run(c: &mut Criterion) {
+    const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
+
+    let linktrace = load_linktrace_from_file("tests/ether100M_synth40M.ltbin.gz")
+        .expect("Failed to load LinkTrace ltbin from file");
+
+    c.bench_function("Linktrace parallel simulation run", |b| {
+        b.iter(|| {
+            (0..100).into_par_iter().for_each(|_| {
+                let network = Network::new(Duration::from_millis(10), None);
+                let sq = parse_trace(EARLY_TRACE, &network);
+                let args = SimulatorArgs::new(
+                    &network,
+                    10000,
+                    true,
+                    Some(ExtendedNetworkLabels::Linktrace),
+                    Some(linktrace.clone()),
+                );
+                black_box(sim_advanced(&[], &[], &mut sq.clone(), &args));
+            });
+        });
+    });
+}
+
+//criterion_group!(benches, benchmark_flat_vector, benchmark_ndarray);
+//criterion_group!(benches, benchmark_busy_to, simulator_network_sample);
+//criterion_group!(benches, simple_simulator_run, bottleneck_simulator_run, linktrace_simulator_run);
+//criterion_group!(benches, simple_simulator_run);
+//criterion_group!(benches, linktrace_simulator_run);
+//criterion_group!(benches, linktrace_parallel_run);
 criterion_group!(
     benches,
+    benchmark_flat_vector,
+    benchmark_ndarray,
     benchmark_busy_to,
-    simulator_execution,
+    simulator_network_sample,
     simple_simulator_run,
     bottleneck_simulator_run,
-    linktrace_simulator_run
+    linktrace_simulator_run,
+    linktrace_parallel_run
 );
-//criterion_group!(benches, linktrace_simulator_run);
+
 criterion_main!(benches);
