@@ -423,20 +423,23 @@ where
                     };
                 }
 
-                // update the counter, possible recursion
-                // we need to update the counter before scheduling an action; otherwise,
-                // counters will be updated in reverse order. but we also don't want to
-                // overwrite actions from later transitions, so check here
+                // update the counter, possible recursion: we need to update the
+                // counter before scheduling an action; otherwise, counters will
+                // be updated in reverse order. but we also don't want to
+                // overwrite actions from later transitions, so check here.
+                // finally, two chained transitions in and out of a state should
+                // count as a changed state, so we need to keep track of it to
+                // not prematurely decrement any limit.
                 let below_limits =
                     self.below_action_limits(&self.runtime[mi], &self.machines.as_ref()[mi]);
-                let allow_schedule = self.update_counter(mi);
+                let (allow_schedule, state_changed) = self.update_counter(mi);
 
                 // schedule an action if allowed by counter update and below all limits
                 if allow_schedule && below_limits {
                     self.schedule_action(mi, next_state);
                 }
 
-                if curr_state == self.runtime[mi].current_state {
+                if curr_state == self.runtime[mi].current_state && !state_changed {
                     StateChange::Unchanged
                 } else {
                     StateChange::Changed
@@ -445,7 +448,7 @@ where
         }
     }
 
-    fn update_counter(&mut self, mi: usize) -> bool {
+    fn update_counter(&mut self, mi: usize) -> (bool, bool) {
         let state = &self.machines.as_ref()[mi].states[self.runtime[mi].current_state];
 
         let old_value_a = self.runtime[mi].counter_a;
@@ -506,11 +509,15 @@ where
         }
 
         if any_counter_zeroed {
-            self.transition(mi, Event::CounterZero);
-            return self.actions[mi].is_none();
+            let state_changed = self.transition(mi, Event::CounterZero);
+            return (
+                self.actions[mi].is_none(),
+                state_changed == StateChange::Changed,
+            );
         }
 
-        true // no action scheduled
+        // no action scheduled, and state unchanged
+        (true, false)
     }
 
     fn schedule_action(&mut self, mi: usize, state: usize) {
@@ -1694,6 +1701,103 @@ mod tests {
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_a, 22);
         assert_eq!(f.runtime[0].counter_b, 9);
+    }
+
+    #[test]
+    fn counter_triggered_no_early_limit_decrement() {
+        // a machine that uses two CounterZero events to trigger a transition
+        // away and back again to the same state, refreshing limits
+
+        // state 0, counters (2, 1)
+        let mut s0 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(0, 1.0)],
+           Event::PaddingSent => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+        s0.counter = (
+            Some(Counter::new_dist(
+                Operation::Set,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 2.0,
+                        high: 2.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+            Some(Counter::new(Operation::Set)),
+        );
+
+        // state 1, diff (-1, 0)
+        let mut s1 = State::new(enum_map! {
+           Event::CounterZero => vec![Trans(2, 1.0)],
+           Event::PaddingSent => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+        s1.counter = (Some(Counter::new(Operation::Decrement)), None);
+        s1.action = Some(Action::SendPadding {
+            bypass: false,
+            replace: false,
+            timeout: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            limit: Some(Dist {
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            }),
+        });
+
+        // state 2, diff (0, -1)
+        let mut s2 = State::new(enum_map! {
+           Event::CounterZero => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+        s2.counter = (None, Some(Counter::new(Operation::Decrement)));
+
+        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+
+        let current_time = Instant::now();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_a, 2);
+        assert_eq!(f.runtime[0].counter_b, 1);
+
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        assert!(f.actions[0].is_some());
+        assert_eq!(f.runtime[0].counter_a, 1);
+        assert_eq!(f.runtime[0].counter_b, 1);
+        assert_eq!(f.runtime[0].state_limit, 2);
+
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        assert!(f.actions[0].is_some());
+        assert_eq!(f.runtime[0].counter_a, 0);
+        assert_eq!(f.runtime[0].counter_b, 0);
+        // this should be 2, because both the counters hitting zero transition
+        // out of state 1 and back again, refreshing the limit
+        assert_eq!(f.runtime[0].state_limit, 2);
     }
 
     #[test]
