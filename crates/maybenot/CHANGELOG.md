@@ -2,6 +2,12 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 2.0.1 - 2024-09-16
+
+- Bug fix: actions are now scheduled correctly when a counter is zeroed.
+  Previously, a counter being decremented to zero on a state transition
+  would result in no action in the absence of further transitions.
+
 ## 2.0.0 - 2024-09-09
 
 - Substantial refactoring and interface simplification. As an integrator, the

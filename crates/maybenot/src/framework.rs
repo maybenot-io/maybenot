@@ -409,10 +409,10 @@ where
                 StateChange::Unchanged
             }
             _ => {
+                let curr_state = self.runtime[mi].current_state;
+
                 // transition to same or different state?
-                let state_changed = if self.runtime[mi].current_state == next_state {
-                    StateChange::Unchanged
-                } else {
+                if curr_state != next_state {
                     self.runtime[mi].current_state = next_state;
                     self.runtime[mi].state_limit = if let Some(action) =
                         self.machines.as_ref()[mi].states[next_state].action
@@ -421,29 +421,31 @@ where
                     } else {
                         STATE_LIMIT_MAX
                     };
+                }
+
+                // update the counter, possible recursion
+                // we need to update the counter before scheduling an action; otherwise,
+                // counters will be updated in reverse order. but we also don't want to
+                // overwrite actions from later transitions, so check here
+                let below_limits =
+                    self.below_action_limits(&self.runtime[mi], &self.machines.as_ref()[mi]);
+                let allow_schedule = self.update_counter(mi);
+
+                // schedule an action if allowed by counter update and below all limits
+                if allow_schedule && below_limits {
+                    self.schedule_action(mi, next_state);
+                }
+
+                if curr_state == self.runtime[mi].current_state {
+                    StateChange::Unchanged
+                } else {
                     StateChange::Changed
-                };
-
-                // update the counter and check if transitioned
-                let (trans, zeroed) = self.update_counter(mi);
-                if zeroed {
-                    if trans == StateChange::Changed {
-                        return trans;
-                    } else {
-                        return state_changed;
-                    }
                 }
-
-                if self.below_action_limits(&self.runtime[mi], &self.machines.as_ref()[mi]) {
-                    self.schedule_action(mi);
-                }
-
-                state_changed
             }
         }
     }
 
-    fn update_counter(&mut self, mi: usize) -> (StateChange, bool) {
+    fn update_counter(&mut self, mi: usize) -> bool {
         let state = &self.machines.as_ref()[mi].states[self.runtime[mi].current_state];
 
         let old_value_a = self.runtime[mi].counter_a;
@@ -504,17 +506,16 @@ where
         }
 
         if any_counter_zeroed {
-            self.actions[mi] = None;
-            return (self.transition(mi, Event::CounterZero), true);
+            self.transition(mi, Event::CounterZero);
+            return self.actions[mi].is_none();
         }
 
-        // do nothing if counter value is unchanged or not zero
-        (StateChange::Unchanged, false)
+        true // no action scheduled
     }
 
-    fn schedule_action(&mut self, mi: usize) {
+    fn schedule_action(&mut self, mi: usize, state: usize) {
         let index = MachineId(mi);
-        let action = self.machines.as_ref()[mi].states[self.runtime[mi].current_state].action;
+        let action = self.machines.as_ref()[mi].states[state].action;
 
         self.actions[mi] = match action {
             Some(action) => match action {
@@ -1485,6 +1486,120 @@ mod tests {
         );
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_a, 75);
+        assert_eq!(f.runtime[0].counter_b, 0);
+    }
+
+    #[test]
+    fn counter_chain_machine() {
+        // set both counters at once, then decrement one after the other
+        // ensure that the updates happen in the correct order (recursion)
+        // also, ensure that the *latest* specified action gets scheduled
+
+        // state 0
+        let mut s0 = State::new(enum_map! {
+           Event::NormalSent => vec![Trans(0, 1.0)],
+           Event::PaddingSent => vec![Trans(1, 1.0)],
+           _ => vec![],
+        });
+        s0.counter = (
+            Some(Counter::new(Operation::Set)), // (1, 1)
+            Some(Counter::new(Operation::Set)),
+        );
+
+        // state 1
+        let mut s1 = State::new(enum_map! {
+           Event::CounterZero => vec![Trans(2, 1.0)], // the "chain reaction"
+           _ => vec![],
+        });
+        s1.action = Some(Action::SendPadding {
+            bypass: false,
+            replace: false,
+            timeout: Dist {
+                dist: DistType::Uniform {
+                    low: 2.0,
+                    high: 2.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            limit: None,
+        });
+        s1.counter = (
+            Some(Counter::new(Operation::Decrement)),
+            None, // (0, 1)
+        );
+
+        // state 2
+        let mut s2 = State::new(enum_map! {
+           Event::CounterZero => vec![Trans(3, 1.0)],
+           _ => vec![],
+        });
+        s2.action = Some(Action::SendPadding {
+            bypass: true,
+            replace: false,
+            timeout: Dist {
+                dist: DistType::Uniform {
+                    low: 67.0,
+                    high: 67.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            limit: None,
+        });
+        s2.counter = (
+            None,
+            Some(Counter::new(Operation::Decrement)), // (0, 0)
+        );
+
+        // state 3
+        let mut s3 = State::new(enum_map! {
+           _ => vec![],
+        });
+        s3.counter = (
+            Some(Counter::new_dist(
+                Operation::Set,
+                Dist {
+                    dist: DistType::Uniform {
+                        low: 13.0,
+                        high: 13.0,
+                    },
+                    start: 0.0,
+                    max: 0.0,
+                },
+            )),
+            None,
+        );
+
+        // machine
+        let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3]).unwrap();
+
+        let mut current_time = Instant::now();
+        let machines = vec![m];
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+
+        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        assert_eq!(f.actions[0], None);
+        assert_eq!(f.runtime[0].counter_a, 1);
+        assert_eq!(f.runtime[0].counter_b, 1);
+
+        current_time = current_time.add(Duration::from_micros(20));
+        _ = f.trigger_events(
+            &[TriggerEvent::PaddingSent {
+                machine: MachineId(0),
+            }],
+            current_time,
+        );
+        assert_eq!(
+            f.actions[0],
+            Some(TriggerAction::SendPadding {
+                timeout: Duration::from_micros(67),
+                bypass: true,
+                replace: false,
+                machine: MachineId(0),
+            })
+        );
+        assert_eq!(f.runtime[0].counter_a, 13);
         assert_eq!(f.runtime[0].counter_b, 0);
     }
 
