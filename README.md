@@ -14,6 +14,7 @@ framework for creating defenses that hide such patterns.
 The Maybenot workspace consists of the following crates:
 
 - [maybenot](crates/maybenot): The core framework for creating defenses.
+- [maybenot-ffi](crates/maybenot-ffi): A wrapper library around maybenot with a C FFI.
 - [maybenot-simulator](crates/maybenot-simulator): A simulator for testing
   defenses.
 
