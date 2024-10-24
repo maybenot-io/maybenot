@@ -1,7 +1,7 @@
 [package]
 name = "maybenot-ffi"
 description = "An FFI wrapper around Maybenot"
-version = "2.0.0"
+version = "2.0.1"
 edition.workspace = true
 license.workspace = true
 homepage.workspace = true
@@ -13,6 +13,6 @@ repository.workspace = true
 crate-type = ["lib", "staticlib", "cdylib"]
 
 [dependencies]
-maybenot = { version = "2.0.0", path = "../maybenot" }
+maybenot = { version = "2.0.1", path = "../maybenot" }
 rand = "0.8.5"
 rand_chacha = "0.3.1"

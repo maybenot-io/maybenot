@@ -2,11 +2,11 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
-## 2.0.1 - 2024-09-16
+## 2.0.1 - 2024-10-24
 
 - Bug fix: actions are now scheduled correctly when a counter is zeroed.
-  Previously, a counter being decremented to zero on a state transition
-  would result in no action in the absence of further transitions.
+  Previously, a counter being decremented to zero on a state transition would
+  result in no action in the absence of further transitions.
 - Bug fix: account for two CounterZero transitions out and back into a state
   being state changes (that should not prematurely decrement any set limits).
 
