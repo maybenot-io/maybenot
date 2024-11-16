@@ -2,6 +2,17 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## XXX - XXX
+
+- The version of the simulator now longer tracks the framework and instead
+  follows SemVer compatible updates.
+- Fixed cascading propagated delays from multiple blocked packets being released
+  simultaneously, leading to unrealistically high aggregated delays. Instead,
+  there is now a rolling constant window (of 1ms) where at most one delayed
+  packet will increase the aggregated delay. Once we have better models for
+  bottlenecks in place, the window size should probably be dynamic, tweaked, or
+  turned into a parameter.
+
 ## 2.0.1 - 2024-10-24
 
 - Bumped together with framework to v2.0.1.

@@ -643,7 +643,10 @@ fn pick_next<M: AsRef<[Machine]>>(
         debug!("\tpick_next(): popped from queue {:?}", tmp);
         // check if blocking moves the event forward in time
         if current_time + q > tmp.time {
-            if q > Duration::default() && !tmp.contains_padding {
+            if q > Duration::default()
+                && !tmp.contains_padding
+                && !network.aggregate_delay_accounted_for(&current_time, q_is_client)
+            {
                 // NOTE: this blocking is also considered a delay, but only if
                 // it moves time forward (otherwise, it's a question of sending
                 // rate / pps) and it doesn't contain padding.

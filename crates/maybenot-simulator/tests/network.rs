@@ -152,11 +152,12 @@ fn test_network_aggregate_base_delay_on_bypass_replace() {
         limit: None,
     });
     let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
-    let delay = Duration::from_micros(3);
+    let delay = Duration::from_micros(5);
 
     // NOTE: trace from the perspective of the client
-    let base = "0,sn 1,sn 2,sn 8,sn 11,sn 12,rn 13,rn 14,sn 15,sn";
+    let base = "0,sn 1,sn 2,sn 8,sn 11,sn 12,rn 13,rn 16,sn 17,sn 18,sn 25,sn";
     let mut result = String::new();
+
     // the first normal event starts the results, causing the client machine to
     // transition to state 1
     result.push_str("0,sn ");
@@ -177,68 +178,84 @@ fn test_network_aggregate_base_delay_on_bypass_replace() {
     // padding with the normal packet
     result.push_str("2,sp ");
     // the normal packet from 1us is sent, now at 2us, propagating the base
-    // delay of 1us in it: arriving at the receiver at 5us, due to the 3us
-    // network delay,and queueing a base delay of 1us to come into effect in 2x
-    // delay = 2*3us + 5us = 11us
+    // delay of 1us in it: arriving at the receiver at 7us, due to the 5us
+    // network delay, and queueing a base delay of 1us to come into effect in 2x
+    // delay = 2*5us + 7us = 17us
     result.push_str("2,st ");
-    // at at 5us, the blocking ends, so the first thing that happens is that the
-    // blocked packet from 2us is sent, causing the base delay of 3us to be
-    // propagated, arriving at the server at 8us
+    // at 5us, the blocking ends, so the blocked packet from 2us is sent, but,
+    // because there was aggregate delay already propagated within the 1ms
+    // window, no additional delay is propagated
     result.push_str("5,st ");
     // the blocking end event at the client (has lower priority than the st so
     // it happens after, but still at time 5us)
     result.push_str("5,be ");
 
-    // NOTE: at 8us, the two normal packets have arrived at the server and
-    // queued a base delay of 3+1=4us in total, to come into effect in 2x delay
-    // = 2*3us + 8us = 14us
+    // at 7us:
+    // - one normal packet arrived at the server and queued a base delay of 1us,
+    // to come into effect at 17us
+    // - the 12,rn event in the client trace is sent from the server
+    // - this causes the server's machine to start blocking for 5us and
+    //   transitioning, scheduling padding to be sent in 2us, at 9us
 
     // from the base trace
     result.push_str("8,sn ");
     // the packet is sent
     result.push_str("8,st ");
+    // also, at 8us, the 13,rn event from the server is blocked
 
-    // NOTE: in between this and the next event in the client trace:
-    // - the 12,rn event at the server is sent at 12-3=9us
-    // - this causes the server's machine to start blocking for 5us and
-    //   transitioning, scheduling padding to be sent in 2us
-    // - at 10, the 13,rn event (in the base trace) at the server is blocked
+    // at 9us, padding is triggered at the server and replaced by the blocked
+    // normal from 8us, arriving at 14us ... this contains another base delay to
+    // be propagated by 1us, in effect immediately upon arrival (due to the
+    // delay originating from a packet from the server)
+
+    // at 10us, the server receives the packet sent at 5us
+
     // - at 11, the server receives the packet sent at 8us
     // - at 11, the padding is sent at the server and replaces the blocked
     //   packet at 10, with a base delay of 1us to be propagated to the client
     // - at 11, the delayed queueing of the base delay of 1us from the padding
     //   packet at 2us is in effect
 
-    // the 11,sn event in the base trace is delayed by 1us, so it's sent at 12us
-    result.push_str("12,sn ");
+    // the 11,sn event in the base trace is sent
+    result.push_str("11,sn ");
     // in a packet
-    result.push_str("12,st ");
+    result.push_str("11,st ");
+
     // the 12us rn event
     result.push_str("12,rt ");
     // and the event is received
     result.push_str("12,rn ");
 
-    // the padding packet the server sent @11us
+    // the padding packet replaced by a normal packet sent by the server at 9us,
+    // we now have an aggregate delay of 1us in effect
     result.push_str("14,rt ");
     // and its a normal packet
     result.push_str("14,rn ");
 
-    // now, at 14, the aggregate base delay of 3us is also in effect that was
-    // queued before from the client's blocking AND the propagated delay from
-    // the server's padding is directly in effect (because it's from the server
-    // to client), in total 5us
+    // at 17us the 1us delay from 2us is in effect, for a total of 2us aggregate
+    // delay
 
-    // the 14us sn event is sent at 19us
-    result.push_str("19,sn ");
+    // so the 16us sn is delayed until 18us
+    result.push_str("18,sn ");
     // the event is sent
+    result.push_str("18,st ");
+
+    // the 17us is delayed until 19us
+    result.push_str("19,sn ");
+    // the packet is sent
     result.push_str("19,st ");
 
-    // the 15us sn event is sent at 20us
+    // the 18us is delayed until 20us
     result.push_str("20,sn ");
     // the packet is sent
-    result.push_str("20,st");
+    result.push_str("20,st ");
 
-    run_test_sim(base, &result, delay, &[m.clone()], &[m], true, 40, false);
+    // the 25us normal is delayed by 2us in total
+    result.push_str("27,sn ");
+    // the packet is sent
+    result.push_str("27,st");
+
+    run_test_sim(base, &result, delay, &[m.clone()], &[m], true, 50, false);
 }
 
 #[test_log::test]

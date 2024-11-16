@@ -59,6 +59,10 @@ pub struct NetworkBottleneck {
     // bottleneck or accumulated blocking by machines: used to shift the
     // baseline trace time at both client and relay
     pub aggregate_base_delay: Duration,
+    // the time when delay was last propagated from the client
+    pub client_last_propagated_delay: Option<Instant>,
+    // the time when delay was last propagated from the server
+    pub server_last_propagated_delay: Option<Instant>,
     // the pending aggregate delays to add to packets due to the bottleneck
     aggregate_delay_queue: BinaryHeap<PendingAggregateDelay>,
     // the network model
@@ -84,6 +88,8 @@ impl NetworkBottleneck {
             server_window: WindowCount::new(window),
             pps_added_delay: added_delay,
             aggregate_base_delay: Duration::default(),
+            client_last_propagated_delay: None,
+            server_last_propagated_delay: None,
             aggregate_delay_queue: BinaryHeap::new(),
             pps_limit: pps,
         }
@@ -162,6 +168,41 @@ impl NetworkBottleneck {
             debug!("\tpopping aggregate delay {:?}", aggregate.delay);
             self.aggregate_base_delay += aggregate.delay;
         }
+    }
+
+    pub fn aggregate_delay_accounted_for(
+        &mut self,
+        current_time: &Instant,
+        is_client: bool,
+    ) -> bool {
+        const WINDOW: Duration = Duration::from_millis(1);
+
+        let delay = if is_client {
+            self.client_last_propagated_delay
+        } else {
+            self.server_last_propagated_delay
+        };
+
+        match delay {
+            Some(t) => {
+                let accounted = t + WINDOW >= *current_time;
+                if !accounted {
+                    self.set_aggregate_delay_accounted_for(current_time, is_client);
+                }
+                accounted
+            }
+            None => {
+                self.set_aggregate_delay_accounted_for(current_time, is_client);
+                false
+            }
+        }
+    }
+
+    fn set_aggregate_delay_accounted_for(&mut self, current_time: &Instant, is_client: bool) {
+        match is_client {
+            true => self.client_last_propagated_delay = Some(*current_time),
+            false => self.server_last_propagated_delay = Some(*current_time),
+        };
     }
 }
 
@@ -297,22 +338,26 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                             .unwrap();
                         entry.bypass = true;
                         entry.replace = false;
+                        debug!(
+                            "\treplaced bypassable padding sent with blocked queued normal TunnelSent @{}",
+                            side
+                        );
                         // per definition, we are going to replace padding with
                         // a blocked queued normal packet that was either queued
                         // at the same time as the padding (recall: padding has
                         // lower priority than normal base events in the
                         // simulator) or has been queued for some time
-                        entry.propagate_base_delay = if current_time > &entry.time {
-                            // it was delayed, propagate the delay to the
-                            // receiver
+                        entry.propagate_base_delay = if !network
+                            .aggregate_delay_accounted_for(current_time, next.client)
+                            && current_time > &entry.time
+                        {
+                            // it was delayed and we got no delay in transit,
+                            // propagate the delay to the receiver
                             Some(*current_time - entry.time)
                         } else {
                             None
                         };
-                        debug!(
-                            "\treplaced bypassable padding sent with blocked queued normal TunnelSent @{}",
-                            side
-                        );
+
                         if let Some(delay) = entry.propagate_base_delay {
                             debug!(
                                 "\tblocking delayed base TunnelSent by {:?}, propagating in event",
