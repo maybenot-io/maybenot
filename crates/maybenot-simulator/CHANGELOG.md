@@ -2,6 +2,10 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 2.0.1 - 2024-10-24
+
+- Bumped together with framework to v2.0.1.
+
 ## 2.0.0 - 2024-09-09
 
 - Update to Maybenot v2.0.0.
