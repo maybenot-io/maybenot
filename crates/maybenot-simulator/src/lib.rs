@@ -186,9 +186,14 @@ pub struct SimEvent {
     bypass: bool,
     /// internal flag to mark event as replace
     replace: bool,
-    /// internal duration to propagate base trace delay from one party to the
-    /// other due to bottleneck and blocking
-    propagate_base_delay: Option<Duration>,
+    /// Internal duration to propagate base trace delay from one party to
+    /// another due to network bottleneck and blocking. Note that propagated
+    /// delay from the server to the client goes into effect immediately in the
+    /// simulator (because the latency between the client and application layer
+    /// is small), while propagated delay from the client to the server needs 2x
+    /// network delay to go into effect (assumed RTT from server to
+    /// destination). Exposed as public for debugging defenses purposes.
+    pub propagate_base_delay: Option<Duration>,
 }
 
 /// Helper function to convert a TriggerEvent to a usize for sorting purposes.
