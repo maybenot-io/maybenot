@@ -28,6 +28,7 @@ fn test_no_machine() {
         true,
         0,
         true,
+        false,
     );
     // server
     run_test_sim(
@@ -39,6 +40,7 @@ fn test_no_machine() {
         false,
         0,
         true,
+        false,
     );
 }
 
@@ -78,6 +80,7 @@ fn test_simple_pad_machine() {
         true,
         40,
         false,
+        false,
     );
 
     // client machine and server output
@@ -89,6 +92,7 @@ fn test_simple_pad_machine() {
         &[],
         false,
         50,
+        false,
         false,
     );
 
@@ -102,6 +106,7 @@ fn test_simple_pad_machine() {
         true,
         50,
         false,
+        false,
     );
 
     // server machine and server output
@@ -113,6 +118,7 @@ fn test_simple_pad_machine() {
         &[m],
         false,
         100,
+        false,
         false,
     );
 }
@@ -156,24 +162,26 @@ fn test_simple_block_machine() {
     // note in the output how 18,sn should be delayed until 20,sn due to blocking
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "0,sn 0,st 5,bb 10,be 15,bb 18,sn 20,st 20,be 25,rt 25,rt 25,rn 25,rn 25,bb 30,sn 30,st 30,be 35,rt 35,rn 35,bb",
+        "0,sn 0,st 5,bb 10,be 15,bb 18,sn 20,be 20,st 25,rt 25,rt 25,rn 25,rn 25,bb 30,be 30,sn 30,st 35,rt 35,rn 35,bb",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
         true,
         100,
         false,
+        false,
     );
 
     // server
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "5,rt 5,rn 20,sn 20,st 20,sn 20,st 23,rt 23,rn 25,bb 30,sn 30,st 30,be 35,rt 35,rn 35,bb 40,be",
+        "5,rt 5,rn 20,sn 20,st 20,sn 20,st 23,rt 23,rn 25,bb 30,be 30,sn 30,st 35,rt 35,rn 35,bb 40,be",
         Duration::from_micros(5),
         &[],
         &[m.clone()],
         false,
         100,
+        false,
         false,
     );
 }
@@ -223,12 +231,13 @@ fn test_both_block_machine() {
         // at 12, blocking ends and the server sends queued from 9, adding 3 to delay
         // the blocking from the server goes into effect at 15, adding 3 to base delay
         // at 18,sn, we now have 3 base delay in total, so its turned into 21,sn
-        "0,sn 0,st 5,bb 7,rt 7,rn 8,sn 10,st 10,be 15,bb 17,rt 17,rn 20,be 21,sn 21,st",
+        "0,sn 0,st 5,bb 7,rt 7,rn 8,sn 10,be 10,st 15,bb 17,rt 17,rn 20,be 21,sn 21,st",
         Duration::from_micros(5),
         &[client],
         &[server],
         true,
         100,
+        false,
         false,
     );
 }
@@ -295,12 +304,13 @@ fn test_block_and_padding() {
     // client
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,st 15,st 15,st 15,st 15,be",
+        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,be 15,st 15,st 15,st 15,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
         true,
         20,
+        false,
         false,
     );
 
@@ -313,6 +323,7 @@ fn test_block_and_padding() {
         &[],
         false,
         40,
+        false,
         false,
     );
 }
@@ -379,12 +390,13 @@ fn test_bypass_machine() {
     // client
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 6,st 7,sp 7,st 8,sp 8,st 14,sn 15,st 15,be",
+        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 6,st 7,sp 7,st 8,sp 8,st 14,sn 15,be 15,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
         true,
         40,
+        false,
         false,
     );
 
@@ -398,6 +410,7 @@ fn test_bypass_machine() {
         false,
         40,
         false,
+        false,
     );
 
     // make the blocking not bypassable
@@ -406,12 +419,13 @@ fn test_bypass_machine() {
     // client
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,st 15,st 15,st 15,st 15,be",
+        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,be 15,st 15,st 15,st 15,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
         true,
         40,
+        false,
         false,
     );
 
@@ -424,6 +438,7 @@ fn test_bypass_machine() {
         &[],
         false,
         40,
+        false,
         false,
     );
 
@@ -434,12 +449,13 @@ fn test_bypass_machine() {
     // client
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,st 15,st 15,st 15,st 15,be",
+        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,be 15,st 15,st 15,st 15,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
         true,
         20,
+        false,
         false,
     );
 
@@ -453,6 +469,7 @@ fn test_bypass_machine() {
         false,
         40,
         false,
+        false,
     );
 
     // make the blocking not bypassable but the padding is
@@ -462,12 +479,13 @@ fn test_bypass_machine() {
     // client
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,st 15,st 15,st 15,st 15,be",
+        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,be 15,st 15,st 15,st 15,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
         true,
         40,
+        false,
         false,
     );
 
@@ -480,6 +498,7 @@ fn test_bypass_machine() {
         &[],
         false,
         40,
+        false,
         false,
     );
 }
@@ -549,12 +568,13 @@ fn test_bypass_replace_machine() {
     // client, without any bypass or replace
     run_test_sim(
         "0,sn 4,sn 6,rn 6,rn 7,sn",
-        "0,sn 0,st 1,bb 3,sp 4,sn 5,sp 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 1001,st 1001,st 1001,st 1001,st 1001,st 1001,be",
+        "0,sn 0,st 1,bb 3,sp 4,sn 5,sp 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 1001,be 1001,st 1001,st 1001,st 1001,st 1001,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
         true,
         40,
+        false,
         false,
     );
 
@@ -563,12 +583,13 @@ fn test_bypass_replace_machine() {
     set_bypass(&mut m.states[2], true);
     run_test_sim(
         "0,sn 4,sn 6,rn 6,rn 7,sn",
-        "0,sn 0,st 1,bb 3,sp 3,st 4,sn 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st 1001,st 1001,st 1001,be",
+        "0,sn 0,st 1,bb 3,sp 3,st 4,sn 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st 1001,be 1001,st 1001,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
         true,
         100,
+        false,
         false,
     );
     // client, with bypass and only packets on wire
@@ -581,6 +602,7 @@ fn test_bypass_replace_machine() {
         true,
         40,
         true, // NOTE only packets as-is on the wire
+        false,
     );
 
     // client, with bypass *and replace*, only packets on wire
@@ -595,6 +617,7 @@ fn test_bypass_replace_machine() {
         true,
         100,
         true, // NOTE only packets as-is on the wire
+        false,
     );
 
     // client, with bypass and replace, events as seen by framework
@@ -608,6 +631,7 @@ fn test_bypass_replace_machine() {
         true,
         40,
         false, // NOTE false, all events
+        false,
     );
 
     // another important detail: the window is 1us, what about normal packets
@@ -621,6 +645,7 @@ fn test_bypass_replace_machine() {
         true,
         40,
         true, // only packets
+        false,
     );
     run_test_sim(
         "0,sn 2,sn 2,sn 6,rn 6,rn 7,sn",
@@ -632,6 +657,7 @@ fn test_bypass_replace_machine() {
         true,
         40,
         false, // all events
+        false,
     );
 
     // same as above, we just queue up more packets: note that the machine above
@@ -645,6 +671,7 @@ fn test_bypass_replace_machine() {
         true,
         40,
         true, // only packets
+        false,
     );
     // bump the limit to 5
     if let Some(Action::SendPadding { ref mut limit, .. }) = m.states[2].action {
@@ -666,6 +693,7 @@ fn test_bypass_replace_machine() {
         true,
         40,
         true, // only packets
+        false,
     );
 
     // we've been lazy so far, not checking the server
@@ -678,6 +706,7 @@ fn test_bypass_replace_machine() {
         false, // server
         40,
         true, // only packets
+        false,
     );
     run_test_sim(
         "0,sn 2,sn 2,sn 2,sn 2,sn 6,rn 6,rn 7,sn",
@@ -688,6 +717,7 @@ fn test_bypass_replace_machine() {
         false, // server
         40,
         false, // all events
+        false,
     );
 }
 
@@ -745,6 +775,7 @@ fn test_timer_action_basic() {
         &[],
         true,
         100,
+        false,
         false,
     );
 }
@@ -816,6 +847,7 @@ fn test_timer_action_longest() {
         true,
         100,
         false,
+        false,
     );
 }
 
@@ -886,6 +918,7 @@ fn test_timer_action_replace() {
         true,
         100,
         false,
+        false,
     );
 }
 
@@ -947,6 +980,7 @@ fn test_action_cancel_timer_internal() {
         &[],
         true,
         100,
+        false,
         false,
     );
 }
@@ -1010,6 +1044,7 @@ fn test_action_cancel_timer_action() {
         true,
         100,
         false,
+        false,
     );
 }
 
@@ -1069,6 +1104,7 @@ fn test_action_cancel_timer_both() {
         &[],
         true,
         100,
+        false,
         false,
     );
 }
@@ -1151,6 +1187,7 @@ fn test_counter_machine() {
         true,
         100,
         false,
+        false,
     );
 
     // set counter in state 3 to Counter B, to prevent the CounterZero event
@@ -1164,6 +1201,7 @@ fn test_counter_machine() {
         &[],
         true,
         100,
+        false,
         false,
     );
 
@@ -1205,6 +1243,7 @@ fn test_counter_machine() {
         true,
         100,
         false,
+        false,
     );
 
     // replace increment in state 1 with set operation, should make no difference
@@ -1230,6 +1269,7 @@ fn test_counter_machine() {
         &[],
         true,
         100,
+        false,
         false,
     );
 }

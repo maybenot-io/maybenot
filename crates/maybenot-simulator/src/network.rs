@@ -52,17 +52,13 @@ impl fmt::Display for Network {
 /// a network bottleneck that adds delay to packets above a certain packets per
 /// window limit (default 1s window, so pps), and keeps track of the aggregate
 /// delay to add to packets due to the bottleneck or accumulated blocking by
-/// machines: used to shift the baseline trace time at both client and relay
+/// machines: used to shift the baseline trace time at both client and server
 #[derive(Debug, Clone)]
 pub struct NetworkBottleneck {
-    // the current aggregate of delays to add to base packets due to the
-    // bottleneck or accumulated blocking by machines: used to shift the
-    // baseline trace time at both client and relay
-    pub aggregate_base_delay: Duration,
-    // the time when delay was last propagated from the client
-    pub client_last_propagated_delay: Option<Instant>,
-    // the time when delay was last propagated from the server
-    pub server_last_propagated_delay: Option<Instant>,
+    // the aggregate delay for the client
+    pub client_aggregate_base_delay: Duration,
+    // the aggregate delay for the server
+    pub server_aggregate_base_delay: Duration,
     // the pending aggregate delays to add to packets due to the bottleneck
     aggregate_delay_queue: BinaryHeap<PendingAggregateDelay>,
     // the network model
@@ -87,9 +83,8 @@ impl NetworkBottleneck {
             client_window: WindowCount::new(window),
             server_window: WindowCount::new(window),
             pps_added_delay: added_delay,
-            aggregate_base_delay: Duration::default(),
-            client_last_propagated_delay: None,
-            server_last_propagated_delay: None,
+            client_aggregate_base_delay: Duration::default(),
+            server_aggregate_base_delay: Duration::default(),
             aggregate_delay_queue: BinaryHeap::new(),
             pps_limit: pps,
         }
@@ -131,78 +126,74 @@ impl NetworkBottleneck {
 
     pub fn push_aggregate_delay(
         &mut self,
-        delay: Duration,
+        block_duration: Duration,
         current_time: &Instant,
-        reached_client: bool,
+        client_expiry: bool,
     ) {
-        let active_delay = match reached_client {
-            // the delay originates from a packet sent by the server that
-            // reached the client: from here, the client would send the packet
-            // to the application layer (because a client) nearly instant, so
-            // the aggregated delay should be in effect right away
-            true => Duration::default(),
-            // The delay originates from a packet sent by the client that
-            // reached the server. We make the ASSUMPTION that the server is in
-            // the middle between client and destination, and that the RTT is
-            // the same in both directions. From here, the server would send the
-            // packet to the destination (taking network.sample() time). During
-            // that transmission time, the destination may send further packets
-            // to the server, up to the point in time when the packet arrives.
-            // Therefore, the aggregated delay should be in effect after 2x
-            // network.sample() time.
-            false => self.network.sample() + self.network.sample(),
+        // TODO: refine the network model, for now, we sample the delay once and
+        // assume it's the same delay in both directions as well as between
+        // client-server and server-destination.
+        let d = self.network.sample();
+
+        // did the blocking expire at the client?
+        let mut client = Duration::default();
+        let mut server = Duration::default();
+        match client_expiry {
+            true => {
+                // @client: max(4D-B, 0)
+                if 4 * d > block_duration {
+                    client = 4 * d - block_duration;
+                };
+                // @server: max(3D-B, 0)
+                if 3 * d > block_duration {
+                    server = 3 * d - block_duration;
+                };
+            }
+            false => {
+                // @client: max(D-B, 0)
+                if d > block_duration {
+                    client = d - block_duration;
+                };
+                // @server: max(4D-B, 0)
+                if 4 * d > block_duration {
+                    server = 4 * d - block_duration;
+                };
+            }
         };
+
         debug!(
-            "\tpushing aggregate delay {:?} in {:?}",
-            delay, active_delay
+            "\tpushing aggregate delay {:?} in {:?} at the client",
+            block_duration, client
         );
         self.aggregate_delay_queue.push(PendingAggregateDelay {
-            time: *current_time + active_delay,
-            delay,
+            time: *current_time + client,
+            delay: block_duration,
+            client: true,
+        });
+        debug!(
+            "\tpushing aggregate delay {:?} in {:?} at the server",
+            block_duration, server
+        );
+        self.aggregate_delay_queue.push(PendingAggregateDelay {
+            time: *current_time + server,
+            delay: block_duration,
+            client: false,
         });
     }
 
     pub fn pop_aggregate_delay(&mut self) {
-        let a = self.aggregate_delay_queue.pop();
-        if let Some(aggregate) = a {
-            debug!("\tpopping aggregate delay {:?}", aggregate.delay);
-            self.aggregate_base_delay += aggregate.delay;
-        }
-    }
-
-    pub fn aggregate_delay_accounted_for(
-        &mut self,
-        current_time: &Instant,
-        is_client: bool,
-    ) -> bool {
-        const WINDOW: Duration = Duration::from_millis(1);
-
-        let delay = if is_client {
-            self.client_last_propagated_delay
-        } else {
-            self.server_last_propagated_delay
-        };
-
-        match delay {
-            Some(t) => {
-                let accounted = t + WINDOW >= *current_time;
-                if !accounted {
-                    self.set_aggregate_delay_accounted_for(current_time, is_client);
+        if let Some(aggregate) = self.aggregate_delay_queue.pop() {
+            match aggregate.client {
+                true => {
+                    debug!("\tpopping aggregate delay at client {:?}", aggregate.delay);
+                    self.client_aggregate_base_delay += aggregate.delay;
                 }
-                accounted
-            }
-            None => {
-                self.set_aggregate_delay_accounted_for(current_time, is_client);
-                false
-            }
+                false => {
+                    debug!("\tpopping aggregate delay at server {:?}", aggregate.delay);
+                    self.server_aggregate_base_delay += aggregate.delay;
+                }
+            };
         }
-    }
-
-    fn set_aggregate_delay_accounted_for(&mut self, current_time: &Instant, is_client: bool) {
-        match is_client {
-            true => self.client_last_propagated_delay = Some(*current_time),
-            false => self.server_last_propagated_delay = Some(*current_time),
-        };
     }
 }
 
@@ -210,6 +201,7 @@ impl NetworkBottleneck {
 struct PendingAggregateDelay {
     pub(crate) time: Instant,
     pub(crate) delay: Duration,
+    pub(crate) client: bool,
 }
 
 impl Ord for PendingAggregateDelay {
@@ -296,7 +288,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 contains_padding: false,
                 bypass: false,
                 replace: false,
-                propagate_base_delay: None,
             });
             false
         }
@@ -333,7 +324,11 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                                 qid,
                                 state.blocking_bypassable,
                                 next.client,
-                                network.aggregate_base_delay,
+                                if next.client {
+                                    network.client_aggregate_base_delay
+                                } else {
+                                    network.server_aggregate_base_delay
+                                },
                             )
                             .unwrap();
                         entry.bypass = true;
@@ -342,28 +337,20 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                             "\treplaced bypassable padding sent with blocked queued normal TunnelSent @{}",
                             side
                         );
-                        // per definition, we are going to replace padding with
-                        // a blocked queued normal packet that was either queued
-                        // at the same time as the padding (recall: padding has
-                        // lower priority than normal base events in the
-                        // simulator) or has been queued for some time
-                        entry.propagate_base_delay = if !network
-                            .aggregate_delay_accounted_for(current_time, next.client)
-                            && current_time > &entry.time
-                        {
-                            // it was delayed and we got no delay in transit,
-                            // propagate the delay to the receiver
-                            Some(*current_time - entry.time)
-                        } else {
-                            None
-                        };
-
-                        if let Some(delay) = entry.propagate_base_delay {
-                            debug!(
-                                "\tblocking delayed base TunnelSent by {:?}, propagating in event",
-                                delay
-                            );
+                        // queue any aggregate delay caused by the blocking
+                        if let Some(block_duration) = sq.agg_delay_on_padding_bypass_replace(
+                            next.client,
+                            Duration::from_millis(1),
+                            *current_time,
+                            &entry,
+                            match next.client {
+                                true => network.client_aggregate_base_delay,
+                                false => network.server_aggregate_base_delay,
+                            },
+                        ) {
+                            network.push_aggregate_delay(block_duration, current_time, next.client);
                         }
+
                         sq.push_sim(entry);
                         return false;
                     }
@@ -379,29 +366,17 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 contains_padding: true,
                 bypass: next.bypass,
                 replace: next.replace,
-                propagate_base_delay: None,
             });
             false
         }
         TriggerEvent::TunnelSent => {
             let reporting_delay = recipient.reporting_delay();
-            let (network_delay, mut baseline_delay) = network.sample(current_time, next.client);
+            let (network_delay, baseline_delay) = network.sample(current_time, next.client);
             if let Some(pps_delay) = baseline_delay {
                 debug!(
                     "\tadding {:?} delay to packet due to {:?}pps limit",
                     pps_delay, network.pps_limit
                 );
-            }
-
-            // blocked TunnelSent may have a base delay to propagate
-            match (next.propagate_base_delay, baseline_delay) {
-                (Some(baseline), Some(delay)) => {
-                    baseline_delay = Some(baseline + delay);
-                }
-                (Some(baseline), None) => {
-                    baseline_delay = Some(baseline);
-                }
-                _ => {}
             }
 
             if !next.contains_padding {
@@ -428,7 +403,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     contains_padding: false,
                     bypass: false,
                     replace: false,
-                    propagate_base_delay: baseline_delay,
                 });
                 debug!(
                     "\tqueue {:#?}, arriving at recipient in {:?}",
@@ -449,9 +423,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 contains_padding: true,
                 bypass: false,
                 replace: false,
-                // NOTE: padding does not contribute to delaying the base trace
-                // (beyond filling the bottleneck window)
-                propagate_base_delay: baseline_delay,
             });
             debug!(
                 "\tqueue {:#?}, arriving at recipient in {:?}",
@@ -461,10 +432,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
             true
         }
         TriggerEvent::TunnelRecv => {
-            if let Some(bottleneck) = next.propagate_base_delay {
-                network.push_aggregate_delay(bottleneck, current_time, next.client);
-            }
-
             // spawn NormalRecv or PaddingRecv
             if next.contains_padding {
                 debug!("\tqueue {:#?}", TriggerEvent::PaddingRecv);

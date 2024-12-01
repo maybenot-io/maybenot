@@ -6,12 +6,13 @@ Manually generated changelog, for now. We follow semantic versioning.
 
 - The version of the simulator now longer tracks the framework and instead
   follows SemVer compatible updates.
-- Fixed cascading propagated delays from multiple blocked packets being released
-  simultaneously, leading to unrealistically high aggregated delays. Instead,
-  there is now a rolling constant window (of 1ms) where at most one delayed
-  packet will increase the aggregated delay. Once we have better models for
-  bottlenecks in place, the window size should probably be dynamic, tweaked, or
-  turned into a parameter.
+- Completely reworked aggregated delays due to blocking, now tracked separately
+  at client and server. *When* blocking should go into effect is a function of
+  network delay (when we might have packet interdependencies). *How much* delay
+  should be added is split into separate logic for blocking expiry and padding
+  with bypass and replace set. There is a a 1ms window (TODO:tune or parameter?)
+  within other packets part of the same burst (conceptually) will reduce the
+  amount of delay.
 
 ## 2.0.1 - 2024-10-24
 

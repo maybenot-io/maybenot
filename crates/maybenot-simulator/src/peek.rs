@@ -14,7 +14,8 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
     sq: &SimQueue,
     client: &SimState<M, RngSource>,
     server: &SimState<M, RngSource>,
-    network_delay_sum: Duration,
+    client_network_delay_sum: Duration,
+    server_network_delay_sum: Duration,
     earliest: Duration,
     current_time: Instant,
 ) -> (Duration, Queue, bool) {
@@ -25,7 +26,11 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
 
     // peek, taking any accumulated network delay into account, computing the
     // duration since the current time for the peeked event
-    let (peek, queue, duration_since) = sq.peek(network_delay_sum, current_time);
+    let (peek, queue, duration_since) = sq.peek(
+        client_network_delay_sum,
+        server_network_delay_sum,
+        current_time,
+    );
     let peek = peek.unwrap();
 
     // if the earliest peeked is *after* the earliest found by other peeks(),
@@ -77,7 +82,7 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
         client.blocking_until,
         client.blocking_bypassable,
         current_time,
-        network_delay_sum,
+        client_network_delay_sum,
         true,
     );
     let (s_d, s_q, s_b) = peek_queue_earliest_side(
@@ -85,7 +90,7 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
         server.blocking_until,
         server.blocking_bypassable,
         current_time,
-        network_delay_sum,
+        server_network_delay_sum,
         false,
     );
     debug!(

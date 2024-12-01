@@ -186,14 +186,6 @@ pub struct SimEvent {
     bypass: bool,
     /// internal flag to mark event as replace
     replace: bool,
-    /// Internal duration to propagate base trace delay from one party to
-    /// another due to network bottleneck and blocking. Note that propagated
-    /// delay from the server to the client goes into effect immediately in the
-    /// simulator (because the latency between the client and application layer
-    /// is small), while propagated delay from the client to the server needs 2x
-    /// network delay to go into effect (assumed RTT from server to
-    /// destination). Exposed as public for debugging defenses purposes.
-    pub propagate_base_delay: Option<Duration>,
 }
 
 /// Helper function to convert a TriggerEvent to a usize for sorting purposes.
@@ -471,9 +463,10 @@ pub fn sim_advanced(
 
         // status
         debug!(
-            "sim(): at time {:#?}, aggregate network base delay {:#?}",
+            "sim(): at time {:#?}, aggregate network base delay {:#?} @client and {:#?} @server",
             current_time.duration_since(start_time),
-            network.aggregate_base_delay
+            network.client_aggregate_base_delay,
+            network.server_aggregate_base_delay,
         );
         if next.client {
             debug!("sim(): @client next\n{:#?}", next);
@@ -610,7 +603,8 @@ fn pick_next<M: AsRef<[Machine]>>(
         sq,
         client,
         server,
-        network.aggregate_base_delay,
+        network.client_aggregate_base_delay,
+        network.server_aggregate_base_delay,
         s.min(i).min(b).min(n),
         current_time,
     );
@@ -634,48 +628,11 @@ fn pick_next<M: AsRef<[Machine]>>(
         return pick_next(sq, client, server, network, current_time);
     }
 
-    // We prioritize the queue next: in general, stuff happens faster outside
-    // the framework than inside it. On overload, the user of the framework will
-    // bulk trigger events in the framework.
-    if q <= s && q <= i && q <= b {
-        debug!(
-            "\tpick_next(): picked queue, is_client {}, queue {:?}",
-            q_is_client, qid
-        );
-        let mut tmp = sq
-            .pop(qid, q_is_client, network.aggregate_base_delay)
-            .unwrap();
-        debug!("\tpick_next(): popped from queue {:?}", tmp);
-        // check if blocking moves the event forward in time
-        if current_time + q > tmp.time {
-            if q > Duration::default()
-                && !tmp.contains_padding
-                && !network.aggregate_delay_accounted_for(&current_time, q_is_client)
-            {
-                // NOTE: this blocking is also considered a delay, but only if
-                // it moves time forward (otherwise, it's a question of sending
-                // rate / pps) and it doesn't contain padding.
-                tmp.propagate_base_delay = Some((current_time + q) - tmp.time);
-                debug!(
-                    "\tpick_next(): blocking delayed base TunnelSent by {:#?}, propagating in event",
-                    tmp.propagate_base_delay.unwrap()
-                );
-            }
-
-            // move the event forward in time
-            tmp.time = current_time + q;
-        }
-
-        return Some(tmp);
-    }
-
-    // next is blocking expiry, happens outside of framework, so probably faster
-    // than framework
-    if b <= s && b <= i {
+    // next is blocking expiry, fundamental due to how we aggregate delay
+    if b <= s && b <= i && b <= q {
         debug!("\tpick_next(): picked blocking");
-        // create SimEvent and move blocking into (what soon will be) the past
-        // to indicate that it has been processed
-        // ASSUMPTION: block outgoing is reported from integration
+        // create SimEvent and turn off blocking, ASSUMPTION: block outgoing is
+        // reported from integration
         let delay: Duration;
         if b_is_client {
             delay = client.reporting_delay();
@@ -685,7 +642,31 @@ fn pick_next<M: AsRef<[Machine]>>(
             server.blocking_until = None;
         }
 
-        return Some(SimEvent {
+        // determine if we have any aggregate delay to schedule (are we blocking
+        // anything?)
+        let (blocking, _) = sq.peek_blocking(false, b_is_client);
+        if let Some(event) = blocking {
+            // if the first blocking event is in the past, it was delayed by the
+            // blocking: note that the blocking ends at current_time + b
+            if event.time < current_time + b {
+                //let blocked_duration = current_time + b - event.time;
+                let time_of_expiry = current_time + b;
+                if let Some(blocked_duration) = sq.agg_delay_on_blocking_expire(
+                    b_is_client,
+                    Duration::from_millis(1),
+                    time_of_expiry,
+                    event,
+                    match b_is_client {
+                        true => network.client_aggregate_base_delay,
+                        false => network.server_aggregate_base_delay,
+                    },
+                ) {
+                    network.push_aggregate_delay(blocked_duration, &time_of_expiry, b_is_client);
+                }
+            }
+        }
+
+        let e = SimEvent {
             client: b_is_client,
             event: TriggerEvent::BlockingEnd,
             time: current_time + b + delay,
@@ -693,8 +674,43 @@ fn pick_next<M: AsRef<[Machine]>>(
             bypass: false,
             replace: false,
             contains_padding: false,
-            propagate_base_delay: None,
-        });
+        };
+        if delay > Duration::default() {
+            // if any delay, there might be events before the BlockingEnd event,
+            // so queue up and pick again
+            sq.push_sim(e);
+            return pick_next(sq, client, server, network, current_time);
+        }
+        return Some(e);
+    }
+
+    // We prioritize the queue next: in general, stuff happens faster outside
+    // the framework than inside it. On overload, the user of the framework will
+    // bulk trigger events in the framework.
+    if q <= s && q <= i {
+        debug!(
+            "\tpick_next(): picked queue, is_client {}, queue {:?}",
+            q_is_client, qid
+        );
+        let mut tmp = sq
+            .pop(
+                qid,
+                q_is_client,
+                if q_is_client {
+                    network.client_aggregate_base_delay
+                } else {
+                    network.server_aggregate_base_delay
+                },
+            )
+            .unwrap();
+        debug!("\tpick_next(): popped from queue {:?}", tmp);
+        // check if blocking moves the event forward in time
+        if current_time + q > tmp.time {
+            // move the event forward in time
+            tmp.time = current_time + q;
+        }
+
+        return Some(tmp);
     }
 
     // next we pick internal events, which should be faster than scheduled
@@ -765,7 +781,6 @@ fn do_internal_timer<M: AsRef<[Machine]>>(
         bypass: false,
         replace: false,
         contains_padding: false,
-        propagate_base_delay: None,
     })
 }
 
@@ -837,7 +852,6 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
                 bypass,
                 replace,
                 contains_padding: true,
-                propagate_base_delay: None,
             })
         }
         TriggerAction::BlockOutgoing {
@@ -881,7 +895,6 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
                 bypass: event_bypass,
                 replace: false,
                 contains_padding: false,
-                propagate_base_delay: None,
             })
         }
     }
@@ -979,7 +992,6 @@ fn trigger_update<M: AsRef<[Machine]>>(
                         bypass: false,
                         replace: false,
                         contains_padding: false,
-                        propagate_base_delay: None,
                     });
                 }
             }
