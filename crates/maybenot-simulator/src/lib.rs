@@ -660,7 +660,6 @@ fn pick_next<M: AsRef<[Machine]>>(
                 let time_of_expiry = current_time + b;
                 if let Some(blocked_duration) = sq.agg_delay_on_blocking_expire(
                     b_is_client,
-                    Duration::from_millis(1),
                     time_of_expiry,
                     event,
                     match b_is_client {

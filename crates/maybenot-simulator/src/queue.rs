@@ -185,11 +185,17 @@ impl SimQueue {
     pub fn agg_delay_on_blocking_expire(
         &self,
         is_client: bool,
-        window: Duration,
         expire_time: Instant,
         blocking_head: &SimEvent,
         aggregate_base_delay: Duration,
     ) -> Option<Duration> {
+        // how far into the future in the ingress queue (base events of
+        // NormalSent) to consider the blocking head event as part of a burst
+        const BASE_WINDOW: Duration = Duration::from_millis(1);
+        // the maximum duration of the hypothetical burst as part of the blocked
+        // (buffered) TunnelSent events
+        const BUFFER_WINDOW: Duration = Duration::from_millis(1);
+
         let (blocking, bypassable) = match is_client {
             true => (&self.client.blocking, &self.client.bypassable),
             false => (&self.server.blocking, &self.server.bypassable),
@@ -216,7 +222,7 @@ impl SimQueue {
             // blocked packets, determining the timestamp of the event with the
             // largest timestamp still within the window (the tail packet)
             blocking.iter().chain(bypassable.iter()).for_each(|e| {
-                if e.time - blocking_head.time <= window && e.time > tail {
+                if e.time - blocking_head.time <= BUFFER_WINDOW && e.time > tail {
                     tail = e.time;
                 }
             });
@@ -230,7 +236,7 @@ impl SimQueue {
         match base {
             Some(base) => {
                 let base_time = base.time + aggregate_base_delay;
-                if base_time - blocking_head.time <= window {
+                if base_time - blocking_head.time <= BASE_WINDOW {
                     debug!("base is within blocking head window");
                     // if the blocking head event (not the tail, or we get a
                     // sliding window) and the next base event are within the
@@ -259,11 +265,13 @@ impl SimQueue {
     pub fn agg_delay_on_padding_bypass_replace(
         &self,
         is_client: bool,
-        window: Duration,
         current_time: Instant,
         blocking_head: &SimEvent,
         aggregate_base_delay: Duration,
     ) -> Option<Duration> {
+        const ADJACENT_WINDOW: Duration = Duration::from_millis(100);
+        const BASE_WINDOW: Duration = Duration::from_millis(1);
+
         let (blocking, bypassable) = match is_client {
             true => (&self.client.blocking, &self.client.bypassable),
             false => (&self.server.blocking, &self.server.bypassable),
@@ -280,22 +288,18 @@ impl SimQueue {
         };
 
         // before calling agg_delay_on_padding_bypass_replace() in network.rs,
-        //the blocking packet has been temporarily popped,so we look for any
-        //adjacent packet either in the blocking or bypassable queues
-        let mut found_adjacent = false;
-        blocking.iter().chain(bypassable.iter()).for_each(|e| {
-            if !found_adjacent && e.time - blocking_head.time <= window {
-                found_adjacent = true;
+        // the blocking packet has been temporarily popped,so we look for any
+        // adjacent packet either in the blocking or bypassable queues
+        for e in blocking.iter().chain(bypassable.iter()) {
+            if e.time - blocking_head.time <= ADJACENT_WINDOW {
+                debug!("found adjacently blocked packet");
+                return None;
             }
-        });
-        if found_adjacent {
-            debug!("found adjacently blocked packet");
-            return None;
         }
 
         if let Some(base) = base {
             let base_time = base.time + aggregate_base_delay;
-            if base_time - blocking_head.time <= window {
+            if base_time - blocking_head.time <= BASE_WINDOW {
                 debug!("base is within blocking head window");
                 return None;
             }

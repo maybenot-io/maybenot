@@ -341,7 +341,6 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                         // queue any aggregate delay caused by the blocking
                         if let Some(block_duration) = sq.agg_delay_on_padding_bypass_replace(
                             next.client,
-                            Duration::from_millis(1),
                             *current_time,
                             &entry,
                             match next.client {
