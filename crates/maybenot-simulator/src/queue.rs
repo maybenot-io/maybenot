@@ -63,6 +63,7 @@ impl SimQueue {
             contains_padding,
             bypass: false,
             replace: false,
+            debug_note: None,
         });
     }
 
@@ -259,7 +260,7 @@ impl SimQueue {
         &self,
         is_client: bool,
         window: Duration,
-        expire_time: Instant,
+        current_time: Instant,
         blocking_head: &SimEvent,
         aggregate_base_delay: Duration,
     ) -> Option<Duration> {
@@ -269,7 +270,7 @@ impl SimQueue {
         };
 
         // and the packet to be sent next in the simulator (either at
-        // expire_time or in the future)
+        // current_time or in the future)
         let base = match is_client {
             // at the client, it's the next packet from the application layer
             true => self.client.base.peek(),
@@ -301,7 +302,7 @@ impl SimQueue {
             debug!("base is outside of the window");
         }
 
-        Some(expire_time - blocking_head.time)
+        Some(current_time - blocking_head.time)
     }
 }
 

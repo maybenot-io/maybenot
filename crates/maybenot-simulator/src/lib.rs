@@ -186,6 +186,8 @@ pub struct SimEvent {
     bypass: bool,
     /// internal flag to mark event as replace
     replace: bool,
+    // debug note
+    pub debug_note: Option<String>,
 }
 
 /// Helper function to convert a TriggerEvent to a usize for sorting purposes.
@@ -538,6 +540,11 @@ pub fn sim_advanced(
                 _ => {}
             }
 
+            n.debug_note = Some(format!(
+                "agg. delay {:?} @c, {:?} @s",
+                network.client_aggregate_base_delay, network.server_aggregate_base_delay
+            ));
+
             trace.push(n);
         }
 
@@ -674,6 +681,7 @@ fn pick_next<M: AsRef<[Machine]>>(
             bypass: false,
             replace: false,
             contains_padding: false,
+            debug_note: None,
         };
         if delay > Duration::default() {
             // if any delay, there might be events before the BlockingEnd event,
@@ -781,6 +789,7 @@ fn do_internal_timer<M: AsRef<[Machine]>>(
         bypass: false,
         replace: false,
         contains_padding: false,
+        debug_note: None,
     })
 }
 
@@ -852,6 +861,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
                 bypass,
                 replace,
                 contains_padding: true,
+                debug_note: None,
             })
         }
         TriggerAction::BlockOutgoing {
@@ -895,6 +905,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
                 bypass: event_bypass,
                 replace: false,
                 contains_padding: false,
+                debug_note: None,
             })
         }
     }
@@ -992,6 +1003,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                         bypass: false,
                         replace: false,
                         contains_padding: false,
+                        debug_note: None,
                     });
                 }
             }

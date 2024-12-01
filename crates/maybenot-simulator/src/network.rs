@@ -288,6 +288,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 contains_padding: false,
                 bypass: false,
                 replace: false,
+                debug_note: None,
             });
             false
         }
@@ -366,6 +367,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 contains_padding: true,
                 bypass: next.bypass,
                 replace: next.replace,
+                debug_note: None,
             });
             false
         }
@@ -403,6 +405,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     contains_padding: false,
                     bypass: false,
                     replace: false,
+                    debug_note: None,
                 });
                 debug!(
                     "\tqueue {:#?}, arriving at recipient in {:?}",
@@ -423,6 +426,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 contains_padding: true,
                 bypass: false,
                 replace: false,
+                debug_note: None,
             });
             debug!(
                 "\tqueue {:#?}, arriving at recipient in {:?}",
