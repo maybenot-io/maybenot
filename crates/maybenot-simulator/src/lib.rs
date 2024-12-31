@@ -102,16 +102,19 @@
 //! // received a normal packet at 9420 ms
 //! ```
 
+pub mod delay;
 pub mod integration;
 pub mod network;
-pub mod peek;
 pub mod queue;
+pub mod queue_event;
+pub mod queue_peek;
 
 use std::{
     cmp::Ordering,
     time::{Duration, Instant},
 };
 
+use delay::agg_delay_on_blocking_expire;
 use integration::Integration;
 use log::debug;
 use network::{Network, NetworkBottleneck, WindowCount};
@@ -124,7 +127,9 @@ use rand_xoshiro::Xoshiro256StarStar;
 
 use crate::{
     network::sim_network_stack,
-    peek::{peek_blocked_exp, peek_queue, peek_scheduled_action, peek_scheduled_internal_timer},
+    queue_peek::{
+        peek_blocked_exp, peek_queue, peek_scheduled_action, peek_scheduled_internal_timer,
+    },
 };
 
 // Enum to encapsulate different RngCore sources: in the Maybenot Framework, the
@@ -658,7 +663,8 @@ fn pick_next<M: AsRef<[Machine]>>(
             if event.time < current_time + b {
                 //let blocked_duration = current_time + b - event.time;
                 let time_of_expiry = current_time + b;
-                if let Some(blocked_duration) = sq.agg_delay_on_blocking_expire(
+                if let Some(blocked_duration) = agg_delay_on_blocking_expire(
+                    sq,
                     b_is_client,
                     time_of_expiry,
                     event,

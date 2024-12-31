@@ -5,10 +5,7 @@ use std::time::{Duration, Instant};
 use log::debug;
 use maybenot::{event::Event, Machine};
 
-use crate::{
-    queue::{Queue, SimQueue},
-    RngSource, ScheduledAction, SimState,
-};
+use crate::{queue::SimQueue, queue_event::Queue, RngSource, ScheduledAction, SimState};
 
 pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
     sq: &SimQueue,

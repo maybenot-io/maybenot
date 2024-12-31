@@ -10,7 +10,9 @@ use std::{
 use log::debug;
 use maybenot::{Machine, TriggerEvent};
 
-use crate::{queue::SimQueue, RngSource, SimEvent, SimState};
+use crate::{
+    delay::agg_delay_on_padding_bypass_replace, queue::SimQueue, RngSource, SimEvent, SimState,
+};
 
 /// A model of the network between the client and server.
 #[derive(Debug, Clone)]
@@ -339,7 +341,8 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                             side
                         );
                         // queue any aggregate delay caused by the blocking
-                        if let Some(block_duration) = sq.agg_delay_on_padding_bypass_replace(
+                        if let Some(block_duration) = agg_delay_on_padding_bypass_replace(
+                            sq,
                             next.client,
                             *current_time,
                             &entry,
