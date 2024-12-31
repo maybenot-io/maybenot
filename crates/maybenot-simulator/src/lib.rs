@@ -1030,8 +1030,10 @@ pub fn parse_trace_advanced(
     server: Option<&Integration>,
 ) -> SimQueue {
     let mut sq = SimQueue::new();
-    let mut sent_window = WindowCount::new(Duration::from_secs(1));
-    let mut recv_window = WindowCount::new(Duration::from_secs(1));
+    // compute max observed packets per second by checking the max number of
+    // packets in a 100ms window
+    let mut sent_window = WindowCount::new(Duration::from_millis(100));
+    let mut recv_window = WindowCount::new(Duration::from_millis(100));
     let mut sent_max_pps = 0;
     let mut recv_max_pps = 0;
 
@@ -1101,7 +1103,7 @@ pub fn parse_trace_advanced(
         }
     }
 
-    sq.max_pps = Some(sent_max_pps.max(recv_max_pps));
+    sq.max_pps = Some(sent_max_pps.max(recv_max_pps) * 10);
 
     sq
 }
