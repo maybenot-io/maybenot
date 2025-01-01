@@ -11,7 +11,9 @@ use log::debug;
 use maybenot::{Machine, TriggerEvent};
 
 use crate::{
-    delay::agg_delay_on_padding_bypass_replace, queue::SimQueue, RngSource, SimEvent, SimState,
+    delay::{agg_delay_on_padding_bypass_replace, should_delayed_packet_prop_agg_delay},
+    queue::SimQueue,
+    RngSource, SimEvent, SimState,
 };
 
 /// A model of the network between the client and server.
@@ -377,10 +379,18 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
             let reporting_delay = recipient.reporting_delay();
             let (network_delay, baseline_delay) = network.sample(current_time, next.client);
             if let Some(pps_delay) = baseline_delay {
-                debug!(
-                    "\tadding {:?} delay to packet due to {:?}pps limit",
-                    pps_delay, network.pps_limit
-                );
+                if should_delayed_packet_prop_agg_delay(
+                    sq,
+                    next.client,
+                    next,
+                    network.client_aggregate_base_delay,
+                ) {
+                    debug!(
+                        "\tadding {:?} delay to packet due to {:?}pps limit",
+                        pps_delay, network.pps_limit
+                    );
+                    network.push_aggregate_delay(pps_delay, current_time, next.client);
+                }
             }
 
             if !next.contains_padding {
