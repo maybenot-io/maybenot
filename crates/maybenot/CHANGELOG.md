@@ -2,6 +2,13 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 2.0.2 - TBD
+
+- Bug fix: remove the use of `Uniform::new()` from `rand_dist` due to underlying
+  `rand` crate bug where specially crated parameters can cause excessive
+  execution time, see [mentions of uniform floats in ongoing rand 0.9
+  tasks](https://github.com/rust-random/rand/issues/1165).
+
 ## 2.0.1 - 2024-10-24
 
 - Bug fix: actions are now scheduled correctly when a counter is zeroed.

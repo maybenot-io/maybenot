@@ -3,7 +3,7 @@
 use rand_core::RngCore;
 use rand_distr::{
     Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, SkewNormal,
-    Uniform, Weibull,
+    Weibull,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -218,6 +218,7 @@ impl Dist {
     }
 
     fn dist_sample<R: RngCore>(self, rng: &mut R) -> f64 {
+        use rand::Rng;
         match self.dist {
             DistType::Uniform { low, high } => {
                 // special common case for handcrafted machines, also not
@@ -225,7 +226,7 @@ impl Dist {
                 if low == high {
                     return low;
                 }
-                Uniform::new(low, high).sample(rng)
+                rng.gen_range(low..high)
             }
             DistType::Normal { mean, stdev } => Normal::new(mean, stdev).unwrap().sample(rng),
             DistType::SkewNormal {
