@@ -14,8 +14,8 @@ use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
 
 pub fn dist_rng_source_benchmarks(c: &mut Criterion) {
-    let n = 1000;
-    c.bench_function("11 distributions 1000 samples, thread_rng()", |b| {
+    let n = 10;
+    c.bench_function("11 distributions 10 samples, thread_rng()", |b| {
         let rng = &mut rand::thread_rng();
         b.iter(|| {
             sample_uniform(rng, black_box(n));
@@ -31,7 +31,7 @@ pub fn dist_rng_source_benchmarks(c: &mut Criterion) {
             sample_beta(rng, black_box(n));
         })
     });
-    c.bench_function("11 distributions 1000 samples, Xoshiro256StarStar", |b| {
+    c.bench_function("11 distributions 10 samples, Xoshiro256StarStar", |b| {
         let rng = &mut Xoshiro256StarStar::seed_from_u64(0);
         b.iter(|| {
             sample_uniform(rng, black_box(n));
@@ -50,7 +50,7 @@ pub fn dist_rng_source_benchmarks(c: &mut Criterion) {
 }
 
 pub fn transition_rng_source_benchmarks(c: &mut Criterion) {
-    let n = 1000;
+    let n = 10;
 
     // create a state with several transition probabilities
     let state = State::new(enum_map! {

@@ -32,3 +32,7 @@ env_logger = "0.10.2"
 [[bench]]
 name = "rng"
 harness = false
+
+[[bench]]
+name = "dists"
+harness = false
