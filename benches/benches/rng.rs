@@ -85,7 +85,8 @@ pub fn transition_rng_source_benchmarks(c: &mut Criterion) {
 
 pub fn complete_trace_rng_source_benchmarks(c: &mut Criterion) {
     let n = 1;
-    const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
     let network = Network::new(Duration::from_millis(10), None);
     let input = parse_trace(EARLY_TRACE, &network);
     let mut args = SimulatorArgs::new(&network, 1000, true);

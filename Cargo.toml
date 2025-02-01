@@ -19,6 +19,8 @@ members = [
     "crates/maybenot-ffi",
     # simulator for the Maybenot framework
     "crates/maybenot-simulator",
+    # benchmarks
+    "benches",
 ]
 
 # Keep all lints in sync with `test/Cargo.toml`
