@@ -121,9 +121,12 @@ impl FromStr for Machine {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // version as first 2 characters, then base64
+        // version as first 2 bytes (len() checks bytes)
         if s.len() < 3 {
             Err(Error::Machine("string too short".to_string()))?;
+        }
+        if !s.is_ascii() {
+            Err(Error::Machine("string is not ascii".to_string()))?;
         }
         let version = &s[0..2];
         if version != format!("{:02}", VERSION) {
