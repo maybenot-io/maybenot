@@ -1024,7 +1024,6 @@ fn trigger_update<M: AsRef<[Machine]>>(
 /// number of bytes sent or received. The delay is used to model the network
 /// delay between the client and server. Returns a SimQueue with the events in
 /// the trace for use with [`sim`].
-
 pub fn parse_trace(trace: &str, network: &Network) -> SimQueue {
     parse_trace_advanced(trace, network, None, None)
 }
