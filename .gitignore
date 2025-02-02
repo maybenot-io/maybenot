@@ -1,3 +1,5 @@
 /target
 /Cargo.lock
 *.a
+fuzz/out/
+fuzz/seeds/
