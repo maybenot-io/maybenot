@@ -18,7 +18,7 @@ jobs:
     strategy:
       matrix:
         # Keep MSRV in sync with rust-version in Cargo.toml
-        rust: [stable, beta, nightly, 1.80.0]
+        rust: [stable, beta, nightly, 1.81.0]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
