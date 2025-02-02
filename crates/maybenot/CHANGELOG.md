@@ -2,8 +2,15 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
-## 2.0.2 - TBD
+## 2.1.0 - 2025-02-02
 
+- Bug fix: restricted parameter values for several distributions that caused
+  crashes, hangs, or very slow sampling due to issues in the underlying crate.
+  This is the reason for the minor version bump; while it is improbable that any
+  machines seeing any use won't be valid anymore, it's possible.
+- Bug fix: attempting to parse a malformed UTF8 string as a machine resulted in
+  a crash. No machines serialized by previous versions of Maybenot are affected.
+  Hardening fix.
 - Bug fix: remove the use of `Uniform::new()` from `rand_dist` due to an
   underlying `rand` crate bug where specially crafted parameters can cause
   excessive execution time; see [mentions of uniform floats in ongoing rand 0.9
