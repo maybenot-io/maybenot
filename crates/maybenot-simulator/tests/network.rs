@@ -21,7 +21,7 @@ fn test_network_excessive_delay() {
 
     // start with a reasonable 10ms delay: we should get events at the client
     let network = Network::new(Duration::from_millis(10), None);
-    let pq = parse_trace(EARLY_TRACE, &network);
+    let pq = parse_trace(EARLY_TRACE, network);
     let trace = sim(&[], &[], &mut pq.clone(), network.delay, 10000, true);
     let client_trace = trace
         .clone()
@@ -34,7 +34,7 @@ fn test_network_excessive_delay() {
     // client, because we hit the limit of events below before we get to the
     // first event at the client
     let network = Network::new(Duration::from_millis(10000), None);
-    let pq = parse_trace(EARLY_TRACE, &network);
+    let pq = parse_trace(EARLY_TRACE, network);
     let trace = sim(&[], &[], &mut pq.clone(), network.delay, 10000, true);
     let client_trace = trace
         .clone()
@@ -61,8 +61,8 @@ fn test_network_bottleneck() {
     // 6th event
     let input = "0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n";
     let network = Network::new(Duration::from_millis(3), Some(3));
-    let mut sq = parse_trace(input, &network);
-    let args = SimulatorArgs::new(&network, 20, true);
+    let mut sq = parse_trace(input, network);
+    let args = SimulatorArgs::new(network, 20, true);
     let trace = sim_advanced(&[], &[], &mut sq, &args);
 
     let client_trace = trace
@@ -157,7 +157,7 @@ fn test_blocking_packet_reordering() {
     // NOTE the 50ms network delay between the client and the server
     let delay = Duration::from_millis(50);
     let network = Network::new(delay, None);
-    let pq = parse_trace(BE000_TRACE, &network);
+    let pq = parse_trace(BE000_TRACE, network);
     let trace = sim(
         &[ratio3_machine()],
         &[],

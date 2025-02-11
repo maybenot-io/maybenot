@@ -41,7 +41,7 @@
 //! // the delay to generate a queue of events at the client and server in such
 //! // a way that the client is ensured to get the packets in the same order and
 //! // at the same time as in the raw trace.
-//! let mut input_trace = parse_trace(raw_trace, &network);
+//! let mut input_trace = parse_trace(raw_trace, network);
 //!
 //! // A simple machine that sends one padding packet 20 milliseconds after the
 //! // first normal packet is sent.
@@ -345,16 +345,16 @@ pub fn sim(
     only_network_activity: bool,
 ) -> Vec<SimEvent> {
     let network = Network::new(delay, None);
-    let args = SimulatorArgs::new(&network, max_trace_length, only_network_activity);
+    let args = SimulatorArgs::new(network, max_trace_length, only_network_activity);
     sim_advanced(machines_client, machines_server, sq, &args)
 }
 
 /// Arguments for [`sim_advanced`].
 #[derive(Clone, Debug)]
-pub struct SimulatorArgs<'a> {
+pub struct SimulatorArgs {
     /// The network model for simulating the network between the client and the
     /// server.
-    pub network: &'a Network,
+    pub network: Network,
     /// The maximum number of events to simulate.
     pub max_trace_length: usize,
     /// The maximum number of iterations to run the simulator for. If 0, the
@@ -381,13 +381,13 @@ pub struct SimulatorArgs<'a> {
     /// None, the simulator will use the cryptographically secure thread_rng().
     pub insecure_rng_seed: Option<u64>,
     /// Optional client integration delays.
-    pub client_integration: Option<&'a Integration>,
+    pub client_integration: Option<Integration>,
     /// Optional server integration delays.
-    pub server_integration: Option<&'a Integration>,
+    pub server_integration: Option<Integration>,
 }
 
-impl<'a> SimulatorArgs<'a> {
-    pub fn new(network: &'a Network, max_trace_length: usize, only_network_activity: bool) -> Self {
+impl SimulatorArgs {
+    pub fn new(network: Network, max_trace_length: usize, only_network_activity: bool) -> Self {
         Self {
             network,
             max_trace_length,
@@ -412,7 +412,7 @@ pub fn sim_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
     sq: &mut SimQueue,
-    args: &SimulatorArgs<'_>,
+    args: &SimulatorArgs,
 ) -> Vec<SimEvent> {
     // the resulting simulated trace
     let expected_trace_len = if args.max_trace_length > 0 {
@@ -431,7 +431,7 @@ pub fn sim_advanced(
         current_time,
         args.max_padding_frac_client,
         args.max_blocking_frac_client,
-        args.client_integration.cloned(),
+        args.clone().client_integration,
         args.insecure_rng_seed,
     );
     let mut server = SimState::new(
@@ -439,14 +439,13 @@ pub fn sim_advanced(
         current_time,
         args.max_padding_frac_server,
         args.max_blocking_frac_server,
-        args.server_integration.cloned(),
+        args.clone().server_integration,
         args.insecure_rng_seed,
     );
     debug!("sim(): client machines {}", machines_client.len());
     debug!("sim(): server machines {}", machines_server.len());
 
-    let mut network =
-        NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
+    let mut network = NetworkBottleneck::new(args.network, Duration::from_secs(1), sq.max_pps);
 
     let mut sim_iterations = 0;
     let start_time = current_time;
@@ -1024,13 +1023,13 @@ fn trigger_update<M: AsRef<[Machine]>>(
 /// number of bytes sent or received. The delay is used to model the network
 /// delay between the client and server. Returns a SimQueue with the events in
 /// the trace for use with [`sim`].
-pub fn parse_trace(trace: &str, network: &Network) -> SimQueue {
+pub fn parse_trace(trace: &str, network: Network) -> SimQueue {
     parse_trace_advanced(trace, network, None, None)
 }
 
 pub fn parse_trace_advanced(
     trace: &str,
-    network: &Network,
+    network: Network,
     client: Option<&Integration>,
     server: Option<&Integration>,
 ) -> SimQueue {

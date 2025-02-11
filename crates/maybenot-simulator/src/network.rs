@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// A model of the network between the client and server.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Network {
     // The delay between the client and server.
     pub delay: Duration,
