@@ -2,7 +2,9 @@ use std::time::{Duration, Instant};
 
 use log::debug;
 use maybenot::{action::Action, state::State, Machine, TriggerEvent};
-use maybenot_simulator::{queue::SimQueue, sim, SimEvent};
+use maybenot_simulator::{
+    network::Network, queue::SimQueue, sim_advanced, SimEvent, SimulatorArgs,
+};
 
 #[allow(clippy::too_many_arguments)]
 pub fn run_test_sim(
@@ -16,16 +18,11 @@ pub fn run_test_sim(
     only_packets: bool,
     as_ms: bool,
 ) {
+    let mut args = SimulatorArgs::new(Network::new(delay, None), max_trace_length, only_packets);
+    args.continue_after_all_normal_packets_processed = true;
     let starting_time = Instant::now();
     let mut sq = make_sq(input.to_string(), delay, starting_time, as_ms);
-    let trace = sim(
-        machines_client,
-        machines_server,
-        &mut sq,
-        delay,
-        max_trace_length,
-        only_packets,
-    );
+    let trace = sim_advanced(machines_client, machines_server, &mut sq, &args);
     let mut fmt = fmt_trace(&trace, client, as_ms);
     if fmt.len() > output.len() {
         fmt = fmt.get(0..output.len()).unwrap().to_string();

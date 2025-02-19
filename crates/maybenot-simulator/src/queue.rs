@@ -47,6 +47,10 @@ impl SimQueue {
         self.len() == 0
     }
 
+    pub fn no_normal_packets(&self) -> bool {
+        self.client.no_normal_packets() && self.server.no_normal_packets()
+    }
+
     pub fn push(
         &mut self,
         event: TriggerEvent,

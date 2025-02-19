@@ -360,6 +360,9 @@ pub struct SimulatorArgs {
     /// The maximum number of iterations to run the simulator for. If 0, the
     /// simulator will run until it stops.
     pub max_sim_iterations: usize,
+    /// If true, the simulator will continue after all normal packets have been
+    /// processed.
+    pub continue_after_all_normal_packets_processed: bool,
     /// If true, only client events are returned in the output trace.
     pub only_client_events: bool,
     /// If true, only events that represent network packets are returned in the
@@ -392,6 +395,7 @@ impl SimulatorArgs {
             network,
             max_trace_length,
             max_sim_iterations: 0,
+            continue_after_all_normal_packets_processed: false,
             only_client_events: false,
             only_network_activity,
             max_padding_frac_client: 0.0,
@@ -567,6 +571,12 @@ pub fn sim_advanced(
                 "sim(): we done, reached max sim iterations {}",
                 args.max_sim_iterations
             );
+            break;
+        }
+
+        // check if we should stop after all normal packets have been processed
+        if !args.continue_after_all_normal_packets_processed && sq.no_normal_packets() {
+            debug!("sim(): we done, all normal packets processed");
             break;
         }
 
