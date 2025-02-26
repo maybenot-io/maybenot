@@ -444,7 +444,9 @@ pub fn sim_advanced(
         args.max_padding_frac_server,
         args.max_blocking_frac_server,
         args.clone().server_integration,
-        args.insecure_rng_seed,
+        // if we have an insecure seed, we use the next number in the sequence
+        // to avoid the same seed for both client and server
+        args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
     );
     debug!("sim(): client machines {}", machines_client.len());
     debug!("sim(): server machines {}", machines_server.len());
