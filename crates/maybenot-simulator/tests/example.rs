@@ -63,7 +63,7 @@ fn simulator_example_use() {
     // the delay to generate a queue of events at the client and server in such
     // a way that the client is ensured to get the packets in the same order and
     // at the same time as in the raw trace.
-    let mut input_trace = parse_trace(raw_trace, &network);
+    let mut input_trace = parse_trace(raw_trace, network);
 
     // A simple machine that sends one padding packet 20 milliseconds after the
     // first normal packet is sent.

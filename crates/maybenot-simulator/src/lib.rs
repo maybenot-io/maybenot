@@ -42,7 +42,7 @@
 //! // the delay to generate a queue of events at the client and server in such
 //! // a way that the client is ensured to get the packets in the same order and
 //! // at the same time as in the raw trace.
-//! let mut input_trace = parse_trace(raw_trace, &network);
+//! let mut input_trace = parse_trace(raw_trace, network);
 //!
 //! // A simple machine that sends one padding packet 20 milliseconds after the
 //! // first normal packet is sent.
@@ -103,10 +103,12 @@
 //! // received a normal packet at 9420 ms
 //! ```
 
+pub mod delay;
 pub mod integration;
 pub mod network;
-pub mod peek;
 pub mod queue;
+pub mod queue_event;
+pub mod queue_peek;
 
 pub mod linktrace;
 
@@ -116,6 +118,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use delay::agg_delay_on_blocking_expire;
 use integration::Integration;
 use linktrace::{mk_start_instant, LinkTrace};
 use log::debug;
@@ -129,7 +132,9 @@ use rand_xoshiro::Xoshiro256StarStar;
 
 use crate::{
     network::sim_network_stack,
-    peek::{peek_blocked_exp, peek_queue, peek_scheduled_action, peek_scheduled_internal_timer},
+    queue_peek::{
+        peek_blocked_exp, peek_queue, peek_scheduled_action, peek_scheduled_internal_timer,
+    },
 };
 
 // Enum to encapsulate different RngCore sources: in the Maybenot Framework, the
@@ -191,9 +196,8 @@ pub struct SimEvent {
     bypass: bool,
     /// internal flag to mark event as replace
     replace: bool,
-    /// internal duration to propagate base trace delay from one party to the
-    /// other due to bottleneck and blocking
-    propagate_base_delay: Option<Duration>,
+    // debug note
+    pub debug_note: Option<String>,
 }
 
 /// Helper function to convert a TriggerEvent to a usize for sorting purposes.
@@ -346,27 +350,24 @@ pub fn sim(
     only_network_activity: bool,
 ) -> Vec<SimEvent> {
     let network = Network::new(delay, None);
-    let args = SimulatorArgs::new(
-        &network,
-        max_trace_length,
-        only_network_activity,
-        None,
-        None,
-    );
+    let args = SimulatorArgs::new(network, max_trace_length, only_network_activity);
     sim_advanced(machines_client, machines_server, sq, &args)
 }
 
 /// Arguments for [`sim_advanced`].
 #[derive(Clone, Debug)]
-pub struct SimulatorArgs<'a> {
+pub struct SimulatorArgs {
     /// The network model for simulating the network between the client and the
     /// server.
-    pub network: &'a Network,
+    pub network: Network,
     /// The maximum number of events to simulate.
     pub max_trace_length: usize,
     /// The maximum number of iterations to run the simulator for. If 0, the
     /// simulator will run until it stops.
     pub max_sim_iterations: usize,
+    /// If true, the simulator will continue after all normal packets have been
+    /// processed.
+    pub continue_after_all_normal_packets_processed: bool,
     /// If true, only client events are returned in the output trace.
     pub only_client_events: bool,
     /// If true, only events that represent network packets are returned in the
@@ -388,8 +389,9 @@ pub struct SimulatorArgs<'a> {
     /// None, the simulator will use the cryptographically secure thread_rng().
     pub insecure_rng_seed: Option<u64>,
     /// Optional client integration delays.
-    pub client_integration: Option<&'a Integration>,
+    pub client_integration: Option<Integration>,
     /// Optional server integration delays.
+<<<<<<< HEAD
     pub server_integration: Option<&'a Integration>,
     /// Optional simulated network type specification.
     pub simulated_network_type: Option<ExtendedNetworkLabels>,
@@ -405,10 +407,18 @@ impl<'a> SimulatorArgs<'a> {
         simulated_network_type: Option<ExtendedNetworkLabels>, // Optional argument
         linktrace: Option<Arc<LinkTrace>>,                     // Optional argument
     ) -> Self {
+=======
+    pub server_integration: Option<Integration>,
+}
+
+impl SimulatorArgs {
+    pub fn new(network: Network, max_trace_length: usize, only_network_activity: bool) -> Self {
+>>>>>>> origin/main
         Self {
             network,
             max_trace_length,
             max_sim_iterations: 0,
+            continue_after_all_normal_packets_processed: false,
             only_client_events: false,
             only_network_activity,
             max_padding_frac_client: 0.0,
@@ -431,7 +441,7 @@ pub fn sim_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
     sq: &mut SimQueue,
-    args: &SimulatorArgs<'_>,
+    args: &SimulatorArgs,
 ) -> Vec<SimEvent> {
     // the resulting simulated trace
     let expected_trace_len = if args.max_trace_length > 0 {
@@ -450,7 +460,7 @@ pub fn sim_advanced(
         current_time,
         args.max_padding_frac_client,
         args.max_blocking_frac_client,
-        args.client_integration.cloned(),
+        args.clone().client_integration,
         args.insecure_rng_seed,
     );
     let mut server = SimState::new(
@@ -458,12 +468,15 @@ pub fn sim_advanced(
         current_time,
         args.max_padding_frac_server,
         args.max_blocking_frac_server,
-        args.server_integration.cloned(),
-        args.insecure_rng_seed,
+        args.clone().server_integration,
+        // if we have an insecure seed, we use the next number in the sequence
+        // to avoid the same seed for both client and server
+        args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
     );
     debug!("sim(): client machines {}", machines_client.len());
     debug!("sim(): server machines {}", machines_server.len());
 
+<<<<<<< HEAD
     let mut network;
     match &args.simulated_network_type {
         // Grouping None and NetworkBottleneck to the same action
@@ -482,6 +495,9 @@ pub fn sim_advanced(
             }
         }
     }
+=======
+    let mut network = NetworkBottleneck::new(args.network, Duration::from_secs(1), sq.max_pps);
+>>>>>>> origin/main
 
     let mut sim_iterations = 0;
     let start_time = current_time;
@@ -505,9 +521,14 @@ pub fn sim_advanced(
 
         // status
         debug!(
-            "sim(): at time {:#?}, aggregate network base delay {:#?}",
+            "sim(): at time {:#?}, aggregate network base delay {:#?} @client and {:#?} @server",
             current_time.duration_since(start_time),
+<<<<<<< HEAD
             network.get_aggregate_base_delay()
+=======
+            network.client_aggregate_base_delay,
+            network.server_aggregate_base_delay,
+>>>>>>> origin/main
         );
         if next.client {
             debug!("sim(): @client next\n{:#?}", next);
@@ -579,6 +600,11 @@ pub fn sim_advanced(
                 _ => {}
             }
 
+            n.debug_note = Some(format!(
+                "agg. delay {:?} @c, {:?} @s",
+                network.client_aggregate_base_delay, network.server_aggregate_base_delay
+            ));
+
             trace.push(n);
         }
 
@@ -597,6 +623,12 @@ pub fn sim_advanced(
                 "sim(): we done, reached max sim iterations {}",
                 args.max_sim_iterations
             );
+            break;
+        }
+
+        // check if we should stop after all normal packets have been processed
+        if !args.continue_after_all_normal_packets_processed && sq.no_normal_packets() {
+            debug!("sim(): we done, all normal packets processed");
             break;
         }
 
@@ -644,7 +676,12 @@ fn pick_next<M: AsRef<[Machine]>>(
         sq,
         client,
         server,
+<<<<<<< HEAD
         network.get_aggregate_base_delay(),
+=======
+        network.client_aggregate_base_delay,
+        network.server_aggregate_base_delay,
+>>>>>>> origin/main
         s.min(i).min(b).min(n),
         current_time,
     );
@@ -668,6 +705,7 @@ fn pick_next<M: AsRef<[Machine]>>(
         return pick_next(sq, client, server, network, current_time);
     }
 
+<<<<<<< HEAD
     // We prioritize the queue next: in general, stuff happens faster outside
     // the framework than inside it. On overload, the user of the framework will
     // bulk trigger events in the framework.
@@ -703,10 +741,13 @@ fn pick_next<M: AsRef<[Machine]>>(
     // next is blocking expiry, happens outside of framework, so probably faster
     // than framework
     if b <= s && b <= i {
+=======
+    // next is blocking expiry, fundamental due to how we aggregate delay
+    if b <= s && b <= i && b <= q {
+>>>>>>> origin/main
         debug!("\tpick_next(): picked blocking");
-        // create SimEvent and move blocking into (what soon will be) the past
-        // to indicate that it has been processed
-        // ASSUMPTION: block outgoing is reported from integration
+        // create SimEvent and turn off blocking, ASSUMPTION: block outgoing is
+        // reported from integration
         let delay: Duration;
         if b_is_client {
             delay = client.reporting_delay();
@@ -716,7 +757,31 @@ fn pick_next<M: AsRef<[Machine]>>(
             server.blocking_until = None;
         }
 
-        return Some(SimEvent {
+        // determine if we have any aggregate delay to schedule (are we blocking
+        // anything?)
+        let (blocking, _) = sq.peek_blocking(false, b_is_client);
+        if let Some(event) = blocking {
+            // if the first blocking event is in the past, it was delayed by the
+            // blocking: note that the blocking ends at current_time + b
+            if event.time < current_time + b {
+                //let blocked_duration = current_time + b - event.time;
+                let time_of_expiry = current_time + b;
+                if let Some(blocked_duration) = agg_delay_on_blocking_expire(
+                    sq,
+                    b_is_client,
+                    time_of_expiry,
+                    event,
+                    match b_is_client {
+                        true => network.client_aggregate_base_delay,
+                        false => network.server_aggregate_base_delay,
+                    },
+                ) {
+                    network.push_aggregate_delay(blocked_duration, &time_of_expiry, b_is_client);
+                }
+            }
+        }
+
+        let e = SimEvent {
             client: b_is_client,
             event: TriggerEvent::BlockingEnd,
             time: current_time + b + delay,
@@ -724,8 +789,44 @@ fn pick_next<M: AsRef<[Machine]>>(
             bypass: false,
             replace: false,
             contains_padding: false,
-            propagate_base_delay: None,
-        });
+            debug_note: None,
+        };
+        if delay > Duration::default() {
+            // if any delay, there might be events before the BlockingEnd event,
+            // so queue up and pick again
+            sq.push_sim(e);
+            return pick_next(sq, client, server, network, current_time);
+        }
+        return Some(e);
+    }
+
+    // We prioritize the queue next: in general, stuff happens faster outside
+    // the framework than inside it. On overload, the user of the framework will
+    // bulk trigger events in the framework.
+    if q <= s && q <= i {
+        debug!(
+            "\tpick_next(): picked queue, is_client {}, queue {:?}",
+            q_is_client, qid
+        );
+        let mut tmp = sq
+            .pop(
+                qid,
+                q_is_client,
+                if q_is_client {
+                    network.client_aggregate_base_delay
+                } else {
+                    network.server_aggregate_base_delay
+                },
+            )
+            .unwrap();
+        debug!("\tpick_next(): popped from queue {:?}", tmp);
+        // check if blocking moves the event forward in time
+        if current_time + q > tmp.time {
+            // move the event forward in time
+            tmp.time = current_time + q;
+        }
+
+        return Some(tmp);
     }
 
     // next we pick internal events, which should be faster than scheduled
@@ -796,7 +897,7 @@ fn do_internal_timer<M: AsRef<[Machine]>>(
         bypass: false,
         replace: false,
         contains_padding: false,
-        propagate_base_delay: None,
+        debug_note: None,
     })
 }
 
@@ -868,7 +969,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
                 bypass,
                 replace,
                 contains_padding: true,
-                propagate_base_delay: None,
+                debug_note: None,
             })
         }
         TriggerAction::BlockOutgoing {
@@ -912,7 +1013,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
                 bypass: event_bypass,
                 replace: false,
                 contains_padding: false,
-                propagate_base_delay: None,
+                debug_note: None,
             })
         }
     }
@@ -1010,7 +1111,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                         bypass: false,
                         replace: false,
                         contains_padding: false,
-                        propagate_base_delay: None,
+                        debug_note: None,
                     });
                 }
             }
@@ -1026,20 +1127,21 @@ fn trigger_update<M: AsRef<[Machine]>>(
 /// number of bytes sent or received. The delay is used to model the network
 /// delay between the client and server. Returns a SimQueue with the events in
 /// the trace for use with [`sim`].
-
-pub fn parse_trace(trace: &str, network: &Network) -> SimQueue {
+pub fn parse_trace(trace: &str, network: Network) -> SimQueue {
     parse_trace_advanced(trace, network, None, None)
 }
 
 pub fn parse_trace_advanced(
     trace: &str,
-    network: &Network,
+    network: Network,
     client: Option<&Integration>,
     server: Option<&Integration>,
 ) -> SimQueue {
     let mut sq = SimQueue::new();
-    let mut sent_window = WindowCount::new(Duration::from_secs(1));
-    let mut recv_window = WindowCount::new(Duration::from_secs(1));
+    // compute max observed packets per second by checking the max number of
+    // packets in a 100ms window
+    let mut sent_window = WindowCount::new(Duration::from_millis(100));
+    let mut recv_window = WindowCount::new(Duration::from_millis(100));
     let mut sent_max_pps = 0;
     let mut recv_max_pps = 0;
 
@@ -1114,7 +1216,7 @@ pub fn parse_trace_advanced(
         }
     }
 
-    sq.max_pps = Some(sent_max_pps.max(recv_max_pps));
+    sq.max_pps = Some(sent_max_pps.max(recv_max_pps) * 10);
 
     sq
 }

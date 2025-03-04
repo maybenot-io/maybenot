@@ -2,7 +2,9 @@ use std::time::{Duration, Instant};
 
 use log::debug;
 use maybenot::{action::Action, state::State, Machine, TriggerEvent};
-use maybenot_simulator::{queue::SimQueue, sim, SimEvent};
+use maybenot_simulator::{
+    network::Network, queue::SimQueue, sim_advanced, SimEvent, SimulatorArgs,
+};
 
 #[allow(clippy::too_many_arguments)]
 pub fn run_test_sim(
@@ -14,18 +16,14 @@ pub fn run_test_sim(
     client: bool,
     max_trace_length: usize,
     only_packets: bool,
+    as_ms: bool,
 ) {
+    let mut args = SimulatorArgs::new(Network::new(delay, None), max_trace_length, only_packets);
+    args.continue_after_all_normal_packets_processed = true;
     let starting_time = Instant::now();
-    let mut sq = make_sq(input.to_string(), delay, starting_time);
-    let trace = sim(
-        machines_client,
-        machines_server,
-        &mut sq,
-        delay,
-        max_trace_length,
-        only_packets,
-    );
-    let mut fmt = fmt_trace(&trace, client);
+    let mut sq = make_sq(input.to_string(), delay, starting_time, as_ms);
+    let trace = sim_advanced(machines_client, machines_server, &mut sq, &args);
+    let mut fmt = fmt_trace(&trace, client, as_ms);
     if fmt.len() > output.len() {
         fmt = fmt.get(0..output.len()).unwrap().to_string();
     }
@@ -33,22 +31,29 @@ pub fn run_test_sim(
     assert_eq!(output, fmt);
 }
 
-fn fmt_trace(trace: &[SimEvent], client: bool) -> String {
+fn fmt_trace(trace: &[SimEvent], client: bool, ms: bool) -> String {
+    fn fmt_event(e: &SimEvent, base: Instant, ms: bool) -> String {
+        format!(
+            "{:1},{}",
+            match ms {
+                true => e.time.duration_since(base).as_millis(),
+                false => e.time.duration_since(base).as_micros(),
+            },
+            e.event
+        )
+    }
+
     let base = trace[0].time;
     let mut s: String = "".to_string();
     for trace in trace {
         if trace.client == client {
-            s = format!("{} {}", s, fmt_event(trace, base));
+            s = format!("{} {}", s, fmt_event(trace, base, ms));
         }
     }
     s.trim().to_string()
 }
 
-fn fmt_event(e: &SimEvent, base: Instant) -> String {
-    format!("{:1},{}", e.time.duration_since(base).as_micros(), e.event)
-}
-
-pub fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
+pub fn make_sq(s: String, delay: Duration, starting_time: Instant, as_ms: bool) -> SimQueue {
     let mut sq = SimQueue::new();
     let integration_delay = Duration::from_micros(0);
 
@@ -56,7 +61,11 @@ pub fn make_sq(s: String, delay: Duration, starting_time: Instant) -> SimQueue {
     for line in s.split(' ') {
         let parts: Vec<&str> = line.split(',').collect();
         if parts.len() == 2 {
-            let timestamp = starting_time + Duration::from_micros(parts[0].parse::<u64>().unwrap());
+            let timestamp = starting_time
+                + match as_ms {
+                    true => Duration::from_millis(parts[0].parse::<u64>().unwrap()),
+                    false => Duration::from_micros(parts[0].parse::<u64>().unwrap()),
+                };
 
             match parts[1] {
                 "s" | "sn" => {

@@ -3,12 +3,17 @@
 use rand_core::RngCore;
 use rand_distr::{
     Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, SkewNormal,
-    Uniform, Weibull,
+    Weibull,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use crate::Error;
+
+/// The minimum probability of a [`Dist`](crate::dist) with a probability
+/// parameter. This is set to prevent poor sampling performance for low
+/// probabilities. Set to 1e-9.
+pub const DIST_MIN_PROBABILITY: f64 = 0.000_000_001;
 
 /// DistType represents the type of a [`Dist`]. Supports a wide range of
 /// different distributions. Some are probably useless and some are probably
@@ -156,9 +161,25 @@ impl Dist {
     pub fn validate(&self) -> Result<(), Error> {
         match self.dist {
             DistType::Uniform { low, high } => {
+                if low.is_nan() || high.is_nan() {
+                    Err(Error::Machine(
+                        "for Uniform dist, got low or high as NaN".to_string(),
+                    ))?;
+                }
+                if low.is_infinite() || high.is_infinite() {
+                    Err(Error::Machine(
+                        "for Uniform dist, got low or high as infinite".to_string(),
+                    ))?;
+                }
                 if low > high {
                     Err(Error::Machine(
                         "for Uniform dist, got low > high".to_string(),
+                    ))?;
+                }
+                let range = high - low;
+                if range.is_infinite() {
+                    Err(Error::Machine(
+                        "for Uniform dist, range hig - low overflows".to_string(),
                     ))?;
                 }
             }
@@ -180,15 +201,38 @@ impl Dist {
                 trials,
                 probability,
             } => {
+                if probability != 0.0 && probability < DIST_MIN_PROBABILITY {
+                    Err(Error::Machine(format!(
+                        "for Binomial dist, probability 0.0 > {:?} < DIST_MIN_PROBABILITY (1e-9), error due to too slow sampling",
+                        probability
+                    )))?;
+                }
+                if trials > 1_000_000_000 {
+                    Err(Error::Machine(format!(
+                        "for Binomial dist, {} trials > 1e9, error due to too slow sampling",
+                        trials
+                    )))?;
+                }
                 Binomial::new(trials, probability).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Geometric { probability } => {
+                if probability != 0.0 && probability < DIST_MIN_PROBABILITY {
+                    Err(Error::Machine(
+                        format!("for Geometric dist, probability 0.0 > {:?} < DIST_MIN_PROBABILITY (1e-9), error due to too slow sampling", probability),
+                    ))?;
+                }
                 Geometric::new(probability).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Pareto { scale, shape } => {
                 Pareto::new(scale, shape).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Poisson { lambda } => {
+                if lambda > 1_000_000_000_000_000_000_000_000_000_000_000_000_000_000.0 {
+                    Err(Error::Machine(format!(
+                        "for Poisson dist, lambda {} > 1e42, error due to too slow sampling",
+                        lambda
+                    )))?;
+                }
                 Poisson::new(lambda).map_err(|e| Error::Machine(e.to_string()))?;
             }
             DistType::Weibull { scale, shape } => {
@@ -218,6 +262,7 @@ impl Dist {
     }
 
     fn dist_sample<R: RngCore>(self, rng: &mut R) -> f64 {
+        use rand::Rng;
         match self.dist {
             DistType::Uniform { low, high } => {
                 // special common case for handcrafted machines, also not
@@ -225,7 +270,7 @@ impl Dist {
                 if low == high {
                     return low;
                 }
-                Uniform::new(low, high).sample(rng)
+                rng.gen_range(low..high)
             }
             DistType::Normal { mean, stdev } => Normal::new(mean, stdev).unwrap().sample(rng),
             DistType::SkewNormal {

@@ -1,0 +1,85 @@
+[package]
+name = "fuzz"
+description = "fuzz"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# enable to build the fuzz targets
+fuzzing = []
+
+[dependencies]
+afl = "0.15.13"
+rand = "0.8.5"
+rand_xoshiro = "0.6.0"
+rand_core = "0.6.4"
+maybenot = { path = "../crates/maybenot/" }
+maybenot-simulator = { path = "../crates/maybenot-simulator" }
+
+[[bin]]
+name = "maybenot_dist_uniform"
+path = "fuzz_targets/maybenot_dist_uniform.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_dist_normal"
+path = "fuzz_targets/maybenot_dist_normal.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_dist_skew_normal"
+path = "fuzz_targets/maybenot_dist_skew_normal.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_dist_log_normal"
+path = "fuzz_targets/maybenot_dist_log_normal.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_dist_binomial"
+path = "fuzz_targets/maybenot_dist_binomial.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_dist_geometric"
+path = "fuzz_targets/maybenot_dist_geometric.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_dist_pareto"
+path = "fuzz_targets/maybenot_dist_pareto.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_dist_poisson"
+path = "fuzz_targets/maybenot_dist_poisson.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_dist_weibull"
+path = "fuzz_targets/maybenot_dist_weibull.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_dist_gamma"
+path = "fuzz_targets/maybenot_dist_gamma.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_dist_beta"
+path = "fuzz_targets/maybenot_dist_beta.rs"
+required-features = ["fuzzing"]
+
+[[bin]]
+name = "maybenot_machine_string"
+path = "fuzz_targets/maybenot_machine_string.rs"
+required-features = ["fuzzing"]

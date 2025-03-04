@@ -14,8 +14,8 @@ use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
 
 pub fn dist_rng_source_benchmarks(c: &mut Criterion) {
-    let n = 1000;
-    c.bench_function("11 distributions 1000 samples, thread_rng()", |b| {
+    let n = 10;
+    c.bench_function("11 distributions 10 samples, thread_rng()", |b| {
         let rng = &mut rand::thread_rng();
         b.iter(|| {
             sample_uniform(rng, black_box(n));
@@ -31,7 +31,7 @@ pub fn dist_rng_source_benchmarks(c: &mut Criterion) {
             sample_beta(rng, black_box(n));
         })
     });
-    c.bench_function("11 distributions 1000 samples, Xoshiro256StarStar", |b| {
+    c.bench_function("11 distributions 10 samples, Xoshiro256StarStar", |b| {
         let rng = &mut Xoshiro256StarStar::seed_from_u64(0);
         b.iter(|| {
             sample_uniform(rng, black_box(n));
@@ -50,7 +50,7 @@ pub fn dist_rng_source_benchmarks(c: &mut Criterion) {
 }
 
 pub fn transition_rng_source_benchmarks(c: &mut Criterion) {
-    let n = 1000;
+    let n = 10;
 
     // create a state with several transition probabilities
     let state = State::new(enum_map! {
@@ -85,11 +85,11 @@ pub fn transition_rng_source_benchmarks(c: &mut Criterion) {
 
 pub fn complete_trace_rng_source_benchmarks(c: &mut Criterion) {
     let n = 1;
-    const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
     let network = Network::new(Duration::from_millis(10), None);
     let input = parse_trace(EARLY_TRACE, &network);
     let mut args = SimulatorArgs::new(&network, 1000, true, None, None);
-
     let client: Vec<Machine> = vec![];
     let server: Vec<Machine> = vec![];
     // default is to use thread_rng()
@@ -125,7 +125,7 @@ fn run_sim(
     client: &[Machine],
     server: &[Machine],
     input: &SimQueue,
-    args: &SimulatorArgs<'_>,
+    args: &SimulatorArgs,
     n: usize,
 ) {
     for _ in 0..n {

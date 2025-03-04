@@ -2,6 +2,28 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 2.1.0 - 2025-02-02
+
+- Bug fix: restricted parameter values for several distributions that caused
+  crashes, hangs, or very slow sampling due to issues in the underlying crate.
+  This is the reason for the minor version bump; while it is improbable that any
+  machines seeing any use won't be valid anymore, it's possible.
+- Bug fix: attempting to parse a malformed UTF8 string as a machine resulted in
+  a crash. No machines serialized by previous versions of Maybenot are affected.
+  Hardening fix.
+- Bug fix: remove the use of `Uniform::new()` from `rand_dist` due to an
+  underlying `rand` crate bug where specially crafted parameters can cause
+  excessive execution time; see [mentions of uniform floats in ongoing rand 0.9
+  tasks](https://github.com/rust-random/rand/issues/1165).
+
+## 2.0.1 - 2024-10-24
+
+- Bug fix: actions are now scheduled correctly when a counter is zeroed.
+  Previously, a counter being decremented to zero on a state transition would
+  result in no action in the absence of further transitions.
+- Bug fix: account for two CounterZero transitions out and back into a state
+  being state changes (that should not prematurely decrement any set limits).
+
 ## 2.0.0 - 2024-09-09
 
 - Substantial refactoring and interface simplification. As an integrator, the

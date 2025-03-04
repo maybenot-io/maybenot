@@ -111,7 +111,7 @@ the framework.
 The current version of the framework includes a number of improvements over v1,
 some of which are discussed in the paper. Refer to the [arXiv design
 document](https://arxiv.org/abs/2304.09510) for an in-depth explanation of the
-new capabilities (soon updated to v2).
+new capabilities.
 
 Development of defenses using Maybenot is under active development. For some
 early results, see

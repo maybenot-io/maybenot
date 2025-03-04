@@ -237,7 +237,7 @@ fn bottleneck_simulator_run(c: &mut Criterion) {
         b.iter(|| {
             let network = Network::new(Duration::from_millis(10), None);
             let sq = parse_trace(EARLY_TRACE, &network);
-            let args = SimulatorArgs::new(&network, 10000, true, None, None);
+            let args = SimulatorArgs::new(&network, 10000, true);
             black_box(sim_advanced(&[], &[], &mut sq.clone(), &args));
         });
     });

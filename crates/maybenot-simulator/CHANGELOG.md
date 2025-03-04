@@ -2,6 +2,22 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## XXX - XXX
+
+- The version of the simulator now longer tracks the framework and instead
+  follows SemVer compatible updates.
+- Completely reworked aggregated delays due to blocking, now tracked separately
+  at client and server. *When* blocking should go into effect is a function of
+  network delay (when we might have packet interdependencies). *How much* delay
+  should be added is split into separate logic for blocking expiry and padding
+  with bypass and replace set. There is a a 1ms window (TODO:tune or parameter?)
+  within other packets part of the same burst (conceptually) will reduce the
+  amount of delay.
+
+## 2.0.1 - 2024-10-24
+
+- Bumped together with framework to v2.0.1.
+
 ## 2.0.0 - 2024-09-09
 
 - Update to Maybenot v2.0.0.

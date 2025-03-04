@@ -1,6 +1,6 @@
 [package]
 name = "maybenot-simulator"
-version = "2.0.0"
+version = "2.0.1"
 description = "A simulator for the Maybenot framework"
 authors = ["Tobias Pulls <tobias@pulls.name>"]
 edition.workspace = true
@@ -15,14 +15,13 @@ workspace = true
 
 [dependencies]
 # defaults to relative path in workspace
-maybenot = { version = "2.0.0", path = "../maybenot/" }
+maybenot = { version = "2.0.1", path = "../maybenot/" }
 log = "0.4.21"
 test-log = "0.2.15"
 #serde = "1.0.198"
 rand = "0.8.5"
 serde_json = "1.0.116"
 enum-map = "2.7.3"
-criterion = "0.5.1"
 rand_xoshiro = "0.6.0"
 rand_core = "0.6.4"
 rand_distr = "0.4.3"
