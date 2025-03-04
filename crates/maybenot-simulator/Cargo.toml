@@ -41,10 +41,10 @@ env_logger = "0.10.2"
 criterion = "0.5.1"
 
 
-[[bench]]
-name = "rng"
-harness = false
+#[[bench]]
+#name = "rng"
+#harness = false
 
-[[bench]]
-name = "lookup_bench"
-harness = false
+#[[bench]]
+#name = "lookup_bench"
+#harness = false

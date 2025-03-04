@@ -350,16 +350,22 @@ pub fn sim(
     only_network_activity: bool,
 ) -> Vec<SimEvent> {
     let network = Network::new(delay, None);
-    let args = SimulatorArgs::new(network, max_trace_length, only_network_activity);
+    let args = SimulatorArgs::new(
+        &network,
+        max_trace_length,
+        only_network_activity,
+        None,
+        None,
+    );
     sim_advanced(machines_client, machines_server, sq, &args)
 }
 
 /// Arguments for [`sim_advanced`].
 #[derive(Clone, Debug)]
-pub struct SimulatorArgs {
+pub struct SimulatorArgs<'a> {
     /// The network model for simulating the network between the client and the
     /// server.
-    pub network: Network,
+    pub network: &'a Network,
     /// The maximum number of events to simulate.
     pub max_trace_length: usize,
     /// The maximum number of iterations to run the simulator for. If 0, the
@@ -391,8 +397,7 @@ pub struct SimulatorArgs {
     /// Optional client integration delays.
     pub client_integration: Option<Integration>,
     /// Optional server integration delays.
-<<<<<<< HEAD
-    pub server_integration: Option<&'a Integration>,
+    pub server_integration: Option<Integration>,
     /// Optional simulated network type specification.
     pub simulated_network_type: Option<ExtendedNetworkLabels>,
     /// Optional simulated network linktrace.
@@ -407,13 +412,6 @@ impl<'a> SimulatorArgs<'a> {
         simulated_network_type: Option<ExtendedNetworkLabels>, // Optional argument
         linktrace: Option<Arc<LinkTrace>>,                     // Optional argument
     ) -> Self {
-=======
-    pub server_integration: Option<Integration>,
-}
-
-impl SimulatorArgs {
-    pub fn new(network: Network, max_trace_length: usize, only_network_activity: bool) -> Self {
->>>>>>> origin/main
         Self {
             network,
             max_trace_length,
@@ -441,7 +439,7 @@ pub fn sim_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
     sq: &mut SimQueue,
-    args: &SimulatorArgs,
+    args: &SimulatorArgs<'_>,
 ) -> Vec<SimEvent> {
     // the resulting simulated trace
     let expected_trace_len = if args.max_trace_length > 0 {
@@ -476,28 +474,24 @@ pub fn sim_advanced(
     debug!("sim(): client machines {}", machines_client.len());
     debug!("sim(): server machines {}", machines_server.len());
 
-<<<<<<< HEAD
     let mut network;
     match &args.simulated_network_type {
         // Grouping None and NetworkBottleneck to the same action
         None | Some(ExtendedNetworkLabels::Bottleneck) => {
             network =
                 //NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
-                ExtendedNetwork::new_bottleneck(args.network.clone(), Duration::from_secs(1), sq.max_pps);
+                ExtendedNetwork::new_bottleneck(*args.network, Duration::from_secs(1), sq.max_pps);
         }
         Some(ExtendedNetworkLabels::Linktrace) => {
             // Ensure that linktrace is provided in args, otherwise handle the error
             if let Some(linktrace) = &args.linktrace {
                 // Use the existing linktrace, note that cloning an Arc only increases reference count, no extra memory consumed
-                network = ExtendedNetwork::new_linktrace(args.network.clone(), linktrace.clone());
+                network = ExtendedNetwork::new_linktrace(*args.network, linktrace.clone());
             } else {
                 panic!("No linktrace specified for SimulatorArgs.");
             }
         }
     }
-=======
-    let mut network = NetworkBottleneck::new(args.network, Duration::from_secs(1), sq.max_pps);
->>>>>>> origin/main
 
     let mut sim_iterations = 0;
     let start_time = current_time;
@@ -523,12 +517,8 @@ pub fn sim_advanced(
         debug!(
             "sim(): at time {:#?}, aggregate network base delay {:#?} @client and {:#?} @server",
             current_time.duration_since(start_time),
-<<<<<<< HEAD
-            network.get_aggregate_base_delay()
-=======
-            network.client_aggregate_base_delay,
-            network.server_aggregate_base_delay,
->>>>>>> origin/main
+            network.get_client_aggregate_base_delay(),
+            network.get_server_aggregate_base_delay(),
         );
         if next.client {
             debug!("sim(): @client next\n{:#?}", next);
@@ -602,7 +592,8 @@ pub fn sim_advanced(
 
             n.debug_note = Some(format!(
                 "agg. delay {:?} @c, {:?} @s",
-                network.client_aggregate_base_delay, network.server_aggregate_base_delay
+                network.get_client_aggregate_base_delay(),
+                network.get_server_aggregate_base_delay()
             ));
 
             trace.push(n);
@@ -676,12 +667,8 @@ fn pick_next<M: AsRef<[Machine]>>(
         sq,
         client,
         server,
-<<<<<<< HEAD
-        network.get_aggregate_base_delay(),
-=======
-        network.client_aggregate_base_delay,
-        network.server_aggregate_base_delay,
->>>>>>> origin/main
+        network.get_client_aggregate_base_delay(),
+        network.get_server_aggregate_base_delay(),
         s.min(i).min(b).min(n),
         current_time,
     );
@@ -705,46 +692,8 @@ fn pick_next<M: AsRef<[Machine]>>(
         return pick_next(sq, client, server, network, current_time);
     }
 
-<<<<<<< HEAD
-    // We prioritize the queue next: in general, stuff happens faster outside
-    // the framework than inside it. On overload, the user of the framework will
-    // bulk trigger events in the framework.
-    if q <= s && q <= i && q <= b {
-        debug!(
-            "\tpick_next(): picked queue, is_client {}, queue {:?}",
-            q_is_client, qid
-        );
-        let mut tmp = sq
-            .pop(qid, q_is_client, network.get_aggregate_base_delay())
-            .unwrap();
-        debug!("\tpick_next(): popped from queue {:?}", tmp);
-        // check if blocking moves the event forward in time
-        if current_time + q > tmp.time {
-            if q > Duration::default() && !tmp.contains_padding {
-                // NOTE: this blocking is also considered a delay, but only if
-                // it moves time forward (otherwise, it's a question of sending
-                // rate / pps) and it doesn't contain padding.
-                tmp.propagate_base_delay = Some((current_time + q) - tmp.time);
-                debug!(
-                    "\tpick_next(): blocking delayed base TunnelSent by {:#?}, propagating in event",
-                    tmp.propagate_base_delay.unwrap()
-                );
-            }
-
-            // move the event forward in time
-            tmp.time = current_time + q;
-        }
-
-        return Some(tmp);
-    }
-
-    // next is blocking expiry, happens outside of framework, so probably faster
-    // than framework
-    if b <= s && b <= i {
-=======
     // next is blocking expiry, fundamental due to how we aggregate delay
     if b <= s && b <= i && b <= q {
->>>>>>> origin/main
         debug!("\tpick_next(): picked blocking");
         // create SimEvent and turn off blocking, ASSUMPTION: block outgoing is
         // reported from integration
@@ -772,8 +721,8 @@ fn pick_next<M: AsRef<[Machine]>>(
                     time_of_expiry,
                     event,
                     match b_is_client {
-                        true => network.client_aggregate_base_delay,
-                        false => network.server_aggregate_base_delay,
+                        true => network.get_client_aggregate_base_delay(),
+                        false => network.get_server_aggregate_base_delay(),
                     },
                 ) {
                     network.push_aggregate_delay(blocked_duration, &time_of_expiry, b_is_client);
@@ -813,9 +762,9 @@ fn pick_next<M: AsRef<[Machine]>>(
                 qid,
                 q_is_client,
                 if q_is_client {
-                    network.client_aggregate_base_delay
+                    network.get_client_aggregate_base_delay()
                 } else {
-                    network.server_aggregate_base_delay
+                    network.get_server_aggregate_base_delay()
                 },
             )
             .unwrap();

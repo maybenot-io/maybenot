@@ -14,13 +14,11 @@ use std::{
 use log::debug;
 use maybenot::{Machine, TriggerEvent};
 
-use crate::{queue::SimQueue, RngSource, SimEvent, SimState};
 use crate::{
     delay::{agg_delay_on_padding_bypass_replace, should_delayed_packet_prop_agg_delay},
     linktrace::{mk_start_instant, LinkTrace},
     queue::SimQueue,
     RngSource, SimEvent, SimState,
-
 };
 
 /// A model of the network between the client and server.
@@ -114,6 +112,20 @@ impl ExtendedNetwork {
         }
     }
 
+    pub fn get_client_aggregate_base_delay(&self) -> Duration {
+        match self {
+            ExtendedNetwork::Bottleneck(bn) => bn.client_aggregate_base_delay,
+            ExtendedNetwork::Linktrace(lt) => lt.client_aggregate_base_delay,
+        }
+    }
+
+    pub fn get_server_aggregate_base_delay(&self) -> Duration {
+        match self {
+            ExtendedNetwork::Bottleneck(bn) => bn.server_aggregate_base_delay,
+            ExtendedNetwork::Linktrace(lt) => lt.server_aggregate_base_delay,
+        }
+    }
+
     pub fn push_aggregate_delay(
         &mut self,
         delay: Duration,
@@ -134,12 +146,6 @@ impl ExtendedNetwork {
         match self {
             ExtendedNetwork::Bottleneck(bn) => bn.pop_aggregate_delay(),
             ExtendedNetwork::Linktrace(lt) => lt.pop_aggregate_delay(),
-        }
-    }
-    pub fn get_aggregate_base_delay(&mut self) -> Duration {
-        match self {
-            ExtendedNetwork::Bottleneck(bn) => bn.aggregate_base_delay,
-            ExtendedNetwork::Linktrace(lt) => lt.aggregate_base_delay,
         }
     }
     pub fn get_pps_limit(&mut self) -> usize {
@@ -355,16 +361,16 @@ impl WindowCount {
 /// machines: used to shift the baseline trace time at both client and relay
 #[derive(Debug, Clone)]
 pub struct NetworkLinktrace {
-    // the current aggregate of delays to add to base packets due to the
-    // bottleneck or accumulated blocking by machines: used to shift the
-    // baseline trace time at both client and relay
-    pub aggregate_base_delay: Duration,
+    // the aggregate delay for the client
+    pub client_aggregate_base_delay: Duration,
+    // the aggregate delay for the server
+    pub server_aggregate_base_delay: Duration,
     // the pending aggregate delays to add to packets due to the bottleneck
     aggregate_delay_queue: BinaryHeap<PendingAggregateDelay>,
-    // packets per second limit
-    pps_limit: usize,
     // the network model
     network: Network,
+    // packets per second limit
+    pps_limit: usize,
     linktrace: Arc<LinkTrace>,
     //linktrace: &'a LinkTrace,
     // The start instant used by parse_trace for the first event at the server side
@@ -376,7 +382,8 @@ impl NetworkLinktrace {
     pub fn new(network: Network, linktrace: Arc<LinkTrace>) -> Self {
         Self {
             network,
-            aggregate_base_delay: Duration::default(),
+            client_aggregate_base_delay: Duration::default(),
+            server_aggregate_base_delay: Duration::default(),
             aggregate_delay_queue: BinaryHeap::new(),
             pps_limit: usize::MAX,
             linktrace,
@@ -428,7 +435,8 @@ impl NetworkLinktrace {
     }
 
     pub fn reset_linktrace(&mut self) {
-        self.aggregate_base_delay = Duration::default();
+        self.client_aggregate_base_delay = Duration::default();
+        self.server_aggregate_base_delay = Duration::default();
         self.aggregate_delay_queue = BinaryHeap::new();
         self.sim_trace_startinstant = mk_start_instant();
         self.next_busy_to = 0
@@ -446,42 +454,73 @@ impl NetworkLinktrace {
 
     pub fn push_aggregate_delay(
         &mut self,
-        delay: Duration,
+        block_duration: Duration,
         current_time: &Instant,
-        reached_client: bool,
+        client_expiry: bool,
     ) {
-        let active_delay = match reached_client {
-            // the delay originates from a packet sent by the server that
-            // reached the client: from here, the client would send the packet
-            // to the application layer (because a client) nearly instant, so
-            // the aggregated delay should be in effect right away
-            true => Duration::default(),
-            // The delay originates from a packet sent by the client that
-            // reached the server. We make the ASSUMPTION that the server is in
-            // the middle between client and destination, and that the RTT is
-            // the same in both directions. From here, the server would send the
-            // packet to the destination (taking network.sample() time). During
-            // that transmission time, the destination may send further packets
-            // to the server, up to the point in time when the packet arrives.
-            // Therefore, the aggregated delay should be in effect after 2x
-            // network.sample() time.
-            false => self.network.sample() + self.network.sample(),
+        // TODO: refine the network model, for now, we sample the delay once and
+        // assume it's the same delay in both directions as well as between
+        // client-server and server-destination.
+        let d = self.network.sample();
+
+        // did the blocking expire at the client?
+        let mut client = Duration::default();
+        let mut server = Duration::default();
+        match client_expiry {
+            true => {
+                // @client: max(4D-B, 0)
+                if 4 * d > block_duration {
+                    client = 4 * d - block_duration;
+                };
+                // @server: max(3D-B, 0)
+                if 3 * d > block_duration {
+                    server = 3 * d - block_duration;
+                };
+            }
+            false => {
+                // @client: max(D-B, 0)
+                if d > block_duration {
+                    client = d - block_duration;
+                };
+                // @server: max(4D-B, 0)
+                if 4 * d > block_duration {
+                    server = 4 * d - block_duration;
+                };
+            }
         };
+
         debug!(
-            "\tpushing aggregate delay {:?} in {:?}",
-            delay, active_delay
+            "\tpushing aggregate delay {:?} in {:?} at the client",
+            block_duration, client
         );
         self.aggregate_delay_queue.push(PendingAggregateDelay {
-            time: *current_time + active_delay,
-            delay,
+            time: *current_time + client,
+            delay: block_duration,
+            client: true,
+        });
+        debug!(
+            "\tpushing aggregate delay {:?} in {:?} at the server",
+            block_duration, server
+        );
+        self.aggregate_delay_queue.push(PendingAggregateDelay {
+            time: *current_time + server,
+            delay: block_duration,
+            client: false,
         });
     }
 
     pub fn pop_aggregate_delay(&mut self) {
-        let a = self.aggregate_delay_queue.pop();
-        if let Some(aggregate) = a {
-            debug!("\tpopping aggregate delay {:?}", aggregate.delay);
-            self.aggregate_base_delay += aggregate.delay;
+        if let Some(aggregate) = self.aggregate_delay_queue.pop() {
+            match aggregate.client {
+                true => {
+                    debug!("\tpopping aggregate delay at client {:?}", aggregate.delay);
+                    self.client_aggregate_base_delay += aggregate.delay;
+                }
+                false => {
+                    debug!("\tpopping aggregate delay at server {:?}", aggregate.delay);
+                    self.server_aggregate_base_delay += aggregate.delay;
+                }
+            };
         }
     }
 }
@@ -563,15 +602,11 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                                 qid,
                                 state.blocking_bypassable,
                                 next.client,
-<<<<<<< HEAD
-                                network.get_aggregate_base_delay(),
-=======
                                 if next.client {
-                                    network.client_aggregate_base_delay
+                                    network.get_client_aggregate_base_delay()
                                 } else {
-                                    network.server_aggregate_base_delay
+                                    network.get_server_aggregate_base_delay()
                                 },
->>>>>>> origin/main
                             )
                             .unwrap();
                         entry.bypass = true;
@@ -587,8 +622,8 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                             *current_time,
                             &entry,
                             match next.client {
-                                true => network.client_aggregate_base_delay,
-                                false => network.server_aggregate_base_delay,
+                                true => network.get_client_aggregate_base_delay(),
+                                false => network.get_server_aggregate_base_delay(),
                             },
                         ) {
                             network.push_aggregate_delay(block_duration, current_time, next.client);
@@ -617,31 +652,18 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
             let reporting_delay = recipient.reporting_delay();
             let (network_delay, baseline_delay) = network.sample(current_time, next.client);
             if let Some(pps_delay) = baseline_delay {
-<<<<<<< HEAD
-                debug!(
-                    "\tadding {:?} delay to packet due to {:?}pps limit",
-                    pps_delay,
-                    network.get_pps_limit()
-                );
-            }
-
-            // blocked TunnelSent may have a base delay to propagate
-            match (next.propagate_base_delay, baseline_delay) {
-                (Some(baseline), Some(delay)) => {
-                    baseline_delay = Some(baseline + delay);
-=======
                 if should_delayed_packet_prop_agg_delay(
                     sq,
                     next.client,
                     next,
-                    network.client_aggregate_base_delay,
+                    network.get_client_aggregate_base_delay(),
                 ) {
                     debug!(
                         "\tadding {:?} delay to packet due to {:?}pps limit",
-                        pps_delay, network.pps_limit
+                        pps_delay,
+                        network.get_pps_limit()
                     );
                     network.push_aggregate_delay(pps_delay, current_time, next.client);
->>>>>>> origin/main
                 }
             }
 

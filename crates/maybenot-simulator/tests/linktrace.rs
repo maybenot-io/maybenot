@@ -199,7 +199,7 @@ mod tests {
         println!("{}", linktrace);
 
         let network = Network::new(Duration::from_millis(10), None);
-        let sq = parse_trace(EARLY_TRACE, &network);
+        let sq = parse_trace(EARLY_TRACE, network);
         let args = SimulatorArgs::new(
             &network,
             20,
