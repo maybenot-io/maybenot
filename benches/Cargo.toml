@@ -19,6 +19,8 @@ enum-map = "2.7.3"
 rand = "0.8.5"
 rand_xoshiro = "0.6.0"
 rand_core = "0.6.4"
+ndarray = { version = "0.16", features = ["serde"] }
+rayon = "1.10"
 
 [dev-dependencies]
 criterion = "0.5.1"
@@ -29,4 +31,8 @@ harness = false
 
 [[bench]]
 name = "dists"
+harness = false
+
+[[bench]]
+name = "lookup_bench"
 harness = false

@@ -98,9 +98,9 @@ pub fn benchmark_ndarray(c: &mut Criterion) {
 pub fn benchmark_busy_to(c: &mut Criterion) {
     // List of linktrace files to benchmark
     let linktrace_files = vec![
-        "tests/ether100M_synth5K.ltbin.gz",
-        "tests/ether100M_synth5M.ltbin.gz",
-        "tests/ether100M_synth40M.ltbin.gz",
+        "../crates/maybenot-simulator/tests/ether100M_synth5K.ltbin.gz",
+        "../crates/maybenot-simulator/tests/ether100M_synth5M.ltbin.gz",
+        "../crates/maybenot-simulator/tests/ether100M_synth40M.ltbin.gz",
     ];
 
     let nr_samples = 10_000;
@@ -173,8 +173,9 @@ fn simulator_network_sample(c: &mut Criterion) {
     println!("{:?}", instants[nr_iter - 1]);
     // Initalize network, start with a reasonable 10ms delay
     let network = Network::new(Duration::from_millis(10), None);
-    let linktrace = load_linktrace_from_file("tests/ether100M_synth5M.ltbin.gz")
-        .expect("Failed to load LinkTrace ltbin from file");
+    let linktrace =
+        load_linktrace_from_file("../crates/maybenot-simulator/tests/ether100M_synth5M.ltbin.gz")
+            .expect("Failed to load LinkTrace ltbin from file");
     let mut network_lt = NetworkLinktrace::new(network, linktrace);
 
     c.bench_function("Linktrace network.sample", |b| {
@@ -219,40 +220,44 @@ fn simulator_network_sample(c: &mut Criterion) {
 }
 
 fn simple_simulator_run(c: &mut Criterion) {
-    const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
 
     c.bench_function("Simple network simulation run", |b| {
         b.iter(|| {
             let network = Network::new(Duration::from_millis(10), None);
-            let pq = parse_trace(EARLY_TRACE, &network);
+            let pq = parse_trace(EARLY_TRACE, network);
             black_box(sim(&[], &[], &mut pq.clone(), network.delay, 10000, true));
         });
     });
 }
 
 fn bottleneck_simulator_run(c: &mut Criterion) {
-    const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
 
     c.bench_function("Bottleneck network simulation run", |b| {
         b.iter(|| {
             let network = Network::new(Duration::from_millis(10), None);
-            let sq = parse_trace(EARLY_TRACE, &network);
-            let args = SimulatorArgs::new(&network, 10000, true);
+            let sq = parse_trace(EARLY_TRACE, network);
+            let args = SimulatorArgs::new(&network, 10000, true, None, None);
             black_box(sim_advanced(&[], &[], &mut sq.clone(), &args));
         });
     });
 }
 
 fn linktrace_simulator_run(c: &mut Criterion) {
-    const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
 
-    let linktrace = load_linktrace_from_file("tests/ether100M_synth40M.ltbin.gz")
-        .expect("Failed to load LinkTrace ltbin from file");
+    let linktrace =
+        load_linktrace_from_file("../crates/maybenot-simulator/tests/ether100M_synth40M.ltbin.gz")
+            .expect("Failed to load LinkTrace ltbin from file");
 
     c.bench_function("Linktrace network simulation run", |b| {
         b.iter(|| {
             let network = Network::new(Duration::from_millis(10), None);
-            let sq = parse_trace(EARLY_TRACE, &network);
+            let sq = parse_trace(EARLY_TRACE, network);
             let args = SimulatorArgs::new(
                 &network,
                 10000,
@@ -267,16 +272,18 @@ fn linktrace_simulator_run(c: &mut Criterion) {
 
 //To verify that parallellization works fine on linktraces which are huge.
 fn linktrace_parallel_run(c: &mut Criterion) {
-    const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
 
-    let linktrace = load_linktrace_from_file("tests/ether100M_synth40M.ltbin.gz")
-        .expect("Failed to load LinkTrace ltbin from file");
+    let linktrace =
+        load_linktrace_from_file("../crates/maybenot-simulator/tests/ether100M_synth40M.ltbin.gz")
+            .expect("Failed to load LinkTrace ltbin from file");
 
     c.bench_function("Linktrace parallel simulation run", |b| {
         b.iter(|| {
             (0..100).into_par_iter().for_each(|_| {
                 let network = Network::new(Duration::from_millis(10), None);
-                let sq = parse_trace(EARLY_TRACE, &network);
+                let sq = parse_trace(EARLY_TRACE, network);
                 let args = SimulatorArgs::new(
                     &network,
                     10000,

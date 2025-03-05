@@ -88,7 +88,7 @@ pub fn complete_trace_rng_source_benchmarks(c: &mut Criterion) {
     const EARLY_TRACE: &str =
         include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
     let network = Network::new(Duration::from_millis(10), None);
-    let input = parse_trace(EARLY_TRACE, &network);
+    let input = parse_trace(EARLY_TRACE, network);
     let mut args = SimulatorArgs::new(&network, 1000, true, None, None);
     let client: Vec<Machine> = vec![];
     let server: Vec<Machine> = vec![];
@@ -125,7 +125,7 @@ fn run_sim(
     client: &[Machine],
     server: &[Machine],
     input: &SimQueue,
-    args: &SimulatorArgs,
+    args: &SimulatorArgs<'_>,
     n: usize,
 ) {
     for _ in 0..n {
