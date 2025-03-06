@@ -354,8 +354,6 @@ pub fn sim(
         &network,
         max_trace_length,
         only_network_activity,
-        None,
-        None,
     );
     sim_advanced(machines_client, machines_server, sq, &args)
 }
@@ -409,8 +407,6 @@ impl<'a> SimulatorArgs<'a> {
         network: &'a Network,
         max_trace_length: usize,
         only_network_activity: bool,
-        simulated_network_type: Option<ExtendedNetworkLabels>, // Optional argument
-        linktrace: Option<Arc<LinkTrace>>,                     // Optional argument
     ) -> Self {
         Self {
             network,
@@ -426,8 +422,8 @@ impl<'a> SimulatorArgs<'a> {
             insecure_rng_seed: None,
             client_integration: None,
             server_integration: None,
-            simulated_network_type,
-            linktrace,
+            simulated_network_type: None,
+            linktrace: None,
         }
     }
 }

@@ -240,7 +240,7 @@ fn bottleneck_simulator_run(c: &mut Criterion) {
         b.iter(|| {
             let network = Network::new(Duration::from_millis(10), None);
             let sq = parse_trace(EARLY_TRACE, network);
-            let args = SimulatorArgs::new(&network, 10000, true, None, None);
+            let args = SimulatorArgs::new(&network, 10000, true);
             black_box(sim_advanced(&[], &[], &mut sq.clone(), &args));
         });
     });
@@ -262,10 +262,14 @@ fn linktrace_simulator_run(c: &mut Criterion) {
                 &network,
                 10000,
                 true,
-                Some(ExtendedNetworkLabels::Linktrace),
-                Some(linktrace.clone()),
             );
-            black_box(sim_advanced(&[], &[], &mut sq.clone(), &args));
+            let linktrace_args = SimulatorArgs {
+                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                linktrace: Some(linktrace.clone()),
+                ..args
+            };
+        
+            black_box(sim_advanced(&[], &[], &mut sq.clone(), &linktrace_args));
         });
     });
 }
@@ -288,10 +292,13 @@ fn linktrace_parallel_run(c: &mut Criterion) {
                     &network,
                     10000,
                     true,
-                    Some(ExtendedNetworkLabels::Linktrace),
-                    Some(linktrace.clone()),
                 );
-                black_box(sim_advanced(&[], &[], &mut sq.clone(), &args));
+                let linktrace_args = SimulatorArgs {
+                    simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                    linktrace: Some(linktrace.clone()),
+                    ..args
+                };            
+                black_box(sim_advanced(&[], &[], &mut sq.clone(), &linktrace_args));
             });
         });
     });

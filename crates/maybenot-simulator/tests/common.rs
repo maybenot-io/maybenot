@@ -19,7 +19,7 @@ pub fn run_test_sim(
     as_ms: bool,
 ) {
     let binding = Network::new(delay, None);
-    let mut args = SimulatorArgs::new(&binding, max_trace_length, only_packets, None, None);
+    let mut args = SimulatorArgs::new(&binding, max_trace_length, only_packets);
     args.continue_after_all_normal_packets_processed = true;
     let starting_time = Instant::now();
     let mut sq = make_sq(input.to_string(), delay, starting_time, as_ms);

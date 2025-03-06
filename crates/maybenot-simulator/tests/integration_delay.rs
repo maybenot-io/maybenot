@@ -60,7 +60,7 @@ fn run_sim(
 
     let mut input_trace = parse_trace_advanced(raw_trace, network, client, server);
 
-    let mut args = SimulatorArgs::new(&network, 100, true, None, None);
+    let mut args = SimulatorArgs::new(&network, 100, true);
     args.client_integration = client.cloned();
     args.server_integration = server.cloned();
     let trace = sim_advanced(&[m], &[], &mut input_trace, &args);

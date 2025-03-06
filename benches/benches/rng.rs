@@ -89,7 +89,7 @@ pub fn complete_trace_rng_source_benchmarks(c: &mut Criterion) {
         include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
     let network = Network::new(Duration::from_millis(10), None);
     let input = parse_trace(EARLY_TRACE, network);
-    let mut args = SimulatorArgs::new(&network, 1000, true, None, None);
+    let mut args = SimulatorArgs::new(&network, 1000, true);
     let client: Vec<Machine> = vec![];
     let server: Vec<Machine> = vec![];
     // default is to use thread_rng()
