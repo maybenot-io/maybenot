@@ -2,7 +2,7 @@ pub mod common;
 
 use std::time::Duration;
 
-use common::run_test_sim;
+use common::{run_test_sim, run_and_save_trace};
 use maybenot::{
     action::Action,
     constants::MAX_SAMPLED_BLOCK_DURATION,
@@ -120,7 +120,9 @@ fn test_network_linktrace() {
         ..args
     };
 
-    let trace = sim_advanced(&[], &[], &mut sq, &linktrace_args);
+    let trace = run_and_save_trace("test_network_linktrace.trace", || {
+        sim_advanced(&[], &[], &mut sq, &linktrace_args)
+    });
 
     let client_trace = trace
         .clone()
@@ -155,10 +157,6 @@ fn test_network_linktrace() {
         server_trace[4].time - server_trace[3].time,
         Duration::from_micros(120)
     );
-
-    // Unintutive naming of client and server, looks backward based on timings??
-    //println!("{:?}{:?}", server_trace, client_trace);
-    //assert_eq!(1, 0, "Forced stop");
 }
 
 #[test_log::test]

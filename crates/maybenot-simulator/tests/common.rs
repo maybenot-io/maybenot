@@ -1,4 +1,7 @@
 use std::time::{Duration, Instant};
+use std::env;
+use std::fs::File;
+use std::io::Write;
 
 use log::debug;
 use maybenot::{action::Action, state::State, Machine, TriggerEvent};
@@ -128,3 +131,24 @@ pub fn set_replace(s: &mut State, value: bool) {
         }
     }
 }
+
+/// Runs the closure `f` to produce a result (e.g. the trace), and if the
+/// environment variable `SAVE_TRACE` is set to "1", writes the formatted result
+/// to the specified filename.
+pub fn run_and_save_trace<T, F>(filename: &str, f: F) -> T
+where
+    F: FnOnce() -> T,
+    T: std::fmt::Debug,
+{
+    let result = f();
+    if env::var("SAVE_TRACE").unwrap_or_default() == "1" {
+        let mut file = File::create(filename)
+            .expect("Failed to create trace output file");
+        // You can format the output as needed (here using pretty debug format)
+        write!(file, "{:#?}", result)
+            .expect("Failed to write trace to file");
+        println!("Trace saved to {}", filename);
+    }
+    result
+}
+
