@@ -1,8 +1,4 @@
 //! For simulating the network stack and network between client and server.
-
-// To use new Linktrace functionality inplace, rename NetowrkBottleneck
-// and NetworkLinktraceBneck, to NetowrkBottleneckInactive and NetowrkBottleneck
-
 use std::{
     cmp::{max, Ordering},
     collections::{BinaryHeap, VecDeque},
