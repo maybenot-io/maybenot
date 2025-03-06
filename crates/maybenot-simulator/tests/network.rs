@@ -66,7 +66,7 @@ fn test_network_bottleneck() {
     let input = "0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n";
     let network = Network::new(Duration::from_millis(3), Some(3));
     let mut sq = parse_trace(input, network);
-    let args = SimulatorArgs::new(&network, 20, true);
+    let args = SimulatorArgs::new(network, 20, true);
     let trace = sim_advanced(&[], &[], &mut sq, &args);
 
     let client_trace = trace
@@ -110,7 +110,7 @@ fn test_network_linktrace() {
     let input = "0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n";
     let network = Network::new(Duration::from_millis(3), Some(3));
     let mut sq = parse_trace(input, network);
-    let args = SimulatorArgs::new(&network, 20, true);
+    let args = SimulatorArgs::new(network, 20, true);
 
     let linktrace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
         .expect("Failed to load LinkTrace ltbin from file");

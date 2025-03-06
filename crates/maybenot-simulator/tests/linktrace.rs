@@ -200,7 +200,7 @@ mod tests {
 
         let network = Network::new(Duration::from_millis(10), None);
         let sq = parse_trace(EARLY_TRACE, network);
-        let args = SimulatorArgs::new(&network, 20, true);
+        let args = SimulatorArgs::new(network, 20, true);
         let linktrace_args = SimulatorArgs {
             simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
             linktrace: Some(linktrace),

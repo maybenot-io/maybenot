@@ -240,7 +240,7 @@ fn bottleneck_simulator_run(c: &mut Criterion) {
         b.iter(|| {
             let network = Network::new(Duration::from_millis(10), None);
             let sq = parse_trace(EARLY_TRACE, network);
-            let args = SimulatorArgs::new(&network, 10000, true);
+            let args = SimulatorArgs::new(network, 10000, true);
             black_box(sim_advanced(&[], &[], &mut sq.clone(), &args));
         });
     });
@@ -258,17 +258,13 @@ fn linktrace_simulator_run(c: &mut Criterion) {
         b.iter(|| {
             let network = Network::new(Duration::from_millis(10), None);
             let sq = parse_trace(EARLY_TRACE, network);
-            let args = SimulatorArgs::new(
-                &network,
-                10000,
-                true,
-            );
+            let args = SimulatorArgs::new(network, 10000, true);
             let linktrace_args = SimulatorArgs {
                 simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
                 linktrace: Some(linktrace.clone()),
                 ..args
             };
-        
+
             black_box(sim_advanced(&[], &[], &mut sq.clone(), &linktrace_args));
         });
     });
@@ -288,16 +284,12 @@ fn linktrace_parallel_run(c: &mut Criterion) {
             (0..100).into_par_iter().for_each(|_| {
                 let network = Network::new(Duration::from_millis(10), None);
                 let sq = parse_trace(EARLY_TRACE, network);
-                let args = SimulatorArgs::new(
-                    &network,
-                    10000,
-                    true,
-                );
+                let args = SimulatorArgs::new(network, 10000, true);
                 let linktrace_args = SimulatorArgs {
                     simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
                     linktrace: Some(linktrace.clone()),
                     ..args
-                };            
+                };
                 black_box(sim_advanced(&[], &[], &mut sq.clone(), &linktrace_args));
             });
         });

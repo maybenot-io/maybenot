@@ -350,20 +350,16 @@ pub fn sim(
     only_network_activity: bool,
 ) -> Vec<SimEvent> {
     let network = Network::new(delay, None);
-    let args = SimulatorArgs::new(
-        &network,
-        max_trace_length,
-        only_network_activity,
-    );
+    let args = SimulatorArgs::new(network, max_trace_length, only_network_activity);
     sim_advanced(machines_client, machines_server, sq, &args)
 }
 
 /// Arguments for [`sim_advanced`].
 #[derive(Clone, Debug)]
-pub struct SimulatorArgs<'a> {
+pub struct SimulatorArgs {
     /// The network model for simulating the network between the client and the
     /// server.
-    pub network: &'a Network,
+    pub network: Network,
     /// The maximum number of events to simulate.
     pub max_trace_length: usize,
     /// The maximum number of iterations to run the simulator for. If 0, the
@@ -402,12 +398,8 @@ pub struct SimulatorArgs<'a> {
     pub linktrace: Option<Arc<LinkTrace>>,
 }
 
-impl<'a> SimulatorArgs<'a> {
-    pub fn new(
-        network: &'a Network,
-        max_trace_length: usize,
-        only_network_activity: bool,
-    ) -> Self {
+impl SimulatorArgs {
+    pub fn new(network: Network, max_trace_length: usize, only_network_activity: bool) -> Self {
         Self {
             network,
             max_trace_length,
@@ -435,7 +427,7 @@ pub fn sim_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
     sq: &mut SimQueue,
-    args: &SimulatorArgs<'_>,
+    args: &SimulatorArgs,
 ) -> Vec<SimEvent> {
     // the resulting simulated trace
     let expected_trace_len = if args.max_trace_length > 0 {
@@ -476,13 +468,13 @@ pub fn sim_advanced(
         None | Some(ExtendedNetworkLabels::Bottleneck) => {
             network =
                 //NetworkBottleneck::new(args.network.clone(), Duration::from_secs(1), sq.max_pps);
-                ExtendedNetwork::new_bottleneck(*args.network, Duration::from_secs(1), sq.max_pps);
+                ExtendedNetwork::new_bottleneck(args.network, Duration::from_secs(1), sq.max_pps);
         }
         Some(ExtendedNetworkLabels::Linktrace) => {
             // Ensure that linktrace is provided in args, otherwise handle the error
             if let Some(linktrace) = &args.linktrace {
                 // Use the existing linktrace, note that cloning an Arc only increases reference count, no extra memory consumed
-                network = ExtendedNetwork::new_linktrace(*args.network, linktrace.clone());
+                network = ExtendedNetwork::new_linktrace(args.network, linktrace.clone());
             } else {
                 panic!("No linktrace specified for SimulatorArgs.");
             }
