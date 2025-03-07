@@ -135,6 +135,7 @@ pub fn set_replace(s: &mut State, value: bool) {
 /// Runs the closure `f` to produce a result (e.g. the trace), and if the
 /// environment variable `SAVE_TRACE` is set to "1", writes the formatted result
 /// to the specified filename.
+/// eg.   $SAVE_TRACE=1 cargo test
 pub fn run_and_save_trace<T, F>(filename: &str, f: F) -> T
 where
     F: FnOnce() -> T,
@@ -142,13 +143,10 @@ where
 {
     let result = f();
     if env::var("SAVE_TRACE").unwrap_or_default() == "1" {
-        let mut file = File::create(filename)
-            .expect("Failed to create trace output file");
+        let mut file = File::create(filename).expect("Failed to create trace output file");
         // You can format the output as needed (here using pretty debug format)
-        write!(file, "{:#?}", result)
-            .expect("Failed to write trace to file");
+        write!(file, "{:#?}", result).expect("Failed to write trace to file");
         println!("Trace saved to {}", filename);
     }
     result
 }
-
