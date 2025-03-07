@@ -393,22 +393,25 @@ impl NetworkLinktrace {
         current_time: &Instant,
         _is_client: bool,
     ) -> (Duration, Option<Duration>) {
-        // Need to some type conversion to make it work for busy_to matrix lookup ....
+        // Need to do some type conversion to make it work for busy_to matrix lookup ....
         let sim_relative_duration = current_time.duration_since(self.sim_trace_startinstant);
         let current_time_slot = sim_relative_duration.as_micros() as usize;
 
         let busy_to;
         let mut queueing_delay_duration = Duration::default();
+        let this_packet_duration;
 
-        // Check if packet arrives after previous pakcet has finished, i.e after next_bust_to
+        // Check if packet arrives after previous packet has finished, i.e after next_bust_to
         if self.next_busy_to <= current_time_slot {
             busy_to = self.linktrace.get_dl_busy_to(current_time_slot, 1500);
-        // If previous packet is still being sent, get the end time for the new packet
-        // based starting when the previous packet has finished, and add up the queueing delay
+            this_packet_duration = Duration::from_micros((busy_to - current_time_slot) as u64);
+        // If previous packet(s) is still being sent, get the end time for the new packet
+        // based on starting when the previous packet(s) has finished, and add up the queueing
         } else {
             busy_to = self.linktrace.get_dl_busy_to(self.next_busy_to, 1500);
             queueing_delay_duration =
                 Duration::from_micros((self.next_busy_to - current_time_slot) as u64);
+            this_packet_duration = Duration::from_micros((busy_to - self.next_busy_to) as u64);
         }
         // Make sure that we are not at the end of the link trace
         assert_ne!(
@@ -419,14 +422,13 @@ impl NetworkLinktrace {
         // update next_busy_to in preparation for the next packet
         self.next_busy_to = busy_to;
 
-        let pkt_txdelay_duration = Duration::from_micros((busy_to - current_time_slot) as u64);
         if queueing_delay_duration > Duration::default() {
             (
-                self.network.sample() + queueing_delay_duration,
-                Some(queueing_delay_duration),
+                self.network.sample() + queueing_delay_duration + this_packet_duration,
+                Some(queueing_delay_duration + this_packet_duration),
             )
         } else {
-            (self.network.sample() + pkt_txdelay_duration, None)
+            (self.network.sample() + this_packet_duration, None)
         }
     }
 
