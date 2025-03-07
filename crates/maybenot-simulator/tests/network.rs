@@ -2,7 +2,7 @@ pub mod common;
 
 use std::time::Duration;
 
-use common::{run_test_sim, run_and_save_trace};
+use common::{run_and_save_trace, run_test_sim};
 use maybenot::{
     action::Action,
     constants::MAX_SAMPLED_BLOCK_DURATION,
@@ -67,7 +67,9 @@ fn test_network_bottleneck() {
     let network = Network::new(Duration::from_millis(3), Some(3));
     let mut sq = parse_trace(input, network);
     let args = SimulatorArgs::new(network, 20, true);
-    let trace = sim_advanced(&[], &[], &mut sq, &args);
+    let trace = run_and_save_trace("6x0ts__3pps.simtrace", || {
+        sim_advanced(&[], &[], &mut sq, &args)
+    });
 
     let client_trace = trace
         .clone()
@@ -100,7 +102,6 @@ fn test_network_bottleneck() {
 }
 
 /// This tests the linktrace Network variant.
-/// TODO: Find out why first packet sometimes do not get txdelay added
 #[test_log::test]
 fn test_network_linktrace() {
     // send 6 events right away and verify increasing delay at the server
@@ -113,6 +114,7 @@ fn test_network_linktrace() {
     let args = SimulatorArgs::new(network, 20, true);
 
     let linktrace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
+        //let linktrace = load_linktrace_from_file("tests/ether1G_synth.ltbin.gz")
         .expect("Failed to load LinkTrace ltbin from file");
     let linktrace_args = SimulatorArgs {
         simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
@@ -120,7 +122,8 @@ fn test_network_linktrace() {
         ..args
     };
 
-    let trace = run_and_save_trace("test_network_linktrace.trace", || {
+    let trace = run_and_save_trace("6x0ts__100Meth.simtrace", || {
+        //let trace = run_and_save_trace("6x0ts__1Geth.simtrace", || {
         sim_advanced(&[], &[], &mut sq, &linktrace_args)
     });
 
@@ -139,12 +142,10 @@ fn test_network_linktrace() {
         .collect::<Vec<_>>();
     assert_eq!(server_trace.len(), 6);
 
-    // Second packet does not get txdelay, unclear why
     assert_eq!(
         server_trace[1].time - server_trace[0].time,
-        Duration::from_millis(0) //Duration::from_millis(120)
+        Duration::from_micros(120)
     );
-
     assert_eq!(
         server_trace[2].time - server_trace[1].time,
         Duration::from_micros(120)
@@ -155,6 +156,10 @@ fn test_network_linktrace() {
     );
     assert_eq!(
         server_trace[4].time - server_trace[3].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        server_trace[5].time - server_trace[4].time,
         Duration::from_micros(120)
     );
 }
