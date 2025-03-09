@@ -195,6 +195,11 @@ impl LinkTrace {
         let bin_idx = self.sizebin_lookuptable.get_bin_idx(pkt_size) as usize;
         self.dl_busy_to_mtx[(bin_idx, time_slot)] as usize
     }
+
+    pub fn get_ul_busy_to(&self, time_slot: usize, pkt_size: i32) -> usize {
+        let bin_idx = self.sizebin_lookuptable.get_bin_idx(pkt_size) as usize;
+        self.ul_busy_to_mtx[(bin_idx, time_slot)] as usize
+    }
 }
 
 impl fmt::Display for LinkTrace {

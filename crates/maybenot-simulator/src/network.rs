@@ -371,7 +371,8 @@ pub struct NetworkLinktrace {
     //linktrace: &'a LinkTrace,
     // The start instant used by parse_trace for the first event at the server side
     sim_trace_startinstant: Instant,
-    next_busy_to: usize,
+    client_next_busy_to: usize,
+    server_next_busy_to: usize,
 }
 
 impl NetworkLinktrace {
@@ -384,7 +385,8 @@ impl NetworkLinktrace {
             pps_limit: usize::MAX,
             linktrace,
             sim_trace_startinstant: mk_start_instant(),
-            next_busy_to: 0,
+            client_next_busy_to: 0,
+            server_next_busy_to: 0,
         }
     }
 
@@ -393,7 +395,7 @@ impl NetworkLinktrace {
         current_time: &Instant,
         _is_client: bool,
     ) -> (Duration, Option<Duration>) {
-        // Need to do some type conversion to make it work for busy_to matrix lookup ....
+        // Compute the simulation relative duration and determine the current time slot.
         let sim_relative_duration = current_time.duration_since(self.sim_trace_startinstant);
         let current_time_slot = sim_relative_duration.as_micros() as usize;
 
@@ -401,26 +403,41 @@ impl NetworkLinktrace {
         let mut queueing_delay_duration = Duration::default();
         let this_packet_duration;
 
-        // Check if packet arrives after previous packet has finished, i.e after next_bust_to
-        if self.next_busy_to <= current_time_slot {
-            busy_to = self.linktrace.get_dl_busy_to(current_time_slot, 1500);
-            this_packet_duration = Duration::from_micros((busy_to - current_time_slot) as u64);
-        // If previous packet(s) is still being sent, get the end time for the new packet
-        // based on starting when the previous packet(s) has finished, and add up the queueing
+        // Choose the appropriate next_busy_to field based on _is_client.
+        let next_busy_to = if _is_client {
+            &mut self.client_next_busy_to
         } else {
-            busy_to = self.linktrace.get_dl_busy_to(self.next_busy_to, 1500);
+            &mut self.server_next_busy_to
+        };
+
+        // Depending on whether the current time slot is after the previous packet finished,
+        // choose the lookup function and compute delays.
+        if *next_busy_to <= current_time_slot {
+            busy_to = if _is_client {
+                self.linktrace.get_ul_busy_to(current_time_slot, 1500)
+            } else {
+                self.linktrace.get_dl_busy_to(current_time_slot, 1500)
+            };
+            this_packet_duration = Duration::from_micros((busy_to - current_time_slot) as u64);
+        } else {
+            busy_to = if _is_client {
+                self.linktrace.get_ul_busy_to(*next_busy_to, 1500)
+            } else {
+                self.linktrace.get_dl_busy_to(*next_busy_to, 1500)
+            };
             queueing_delay_duration =
-                Duration::from_micros((self.next_busy_to - current_time_slot) as u64);
-            this_packet_duration = Duration::from_micros((busy_to - self.next_busy_to) as u64);
+                Duration::from_micros((*next_busy_to - current_time_slot) as u64);
+            this_packet_duration = Duration::from_micros((busy_to - *next_busy_to) as u64);
         }
+
         // Make sure that we are not at the end of the link trace
         assert_ne!(
             busy_to, 0,
             "Packet to be scheduled outside of link trace end"
         );
 
-        // update next_busy_to in preparation for the next packet
-        self.next_busy_to = busy_to;
+        // Update next_busy_to in preparation for the next packet
+        *next_busy_to = busy_to;
 
         if queueing_delay_duration > Duration::default() {
             (
@@ -437,7 +454,8 @@ impl NetworkLinktrace {
         self.server_aggregate_base_delay = Duration::default();
         self.aggregate_delay_queue = BinaryHeap::new();
         self.sim_trace_startinstant = mk_start_instant();
-        self.next_busy_to = 0
+        self.client_next_busy_to = 0;
+        self.server_next_busy_to = 0;
     }
 
     pub fn peek_aggregate_delay(&self, current_time: Instant) -> Duration {
