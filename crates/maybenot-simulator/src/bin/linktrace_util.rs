@@ -22,7 +22,13 @@ enum Commands {
     /// Creates a trace binary file
     CreateTracebin {
         #[arg(long)]
-        tracefile: String,
+        client_bw_tracefile: String,
+
+        #[arg(long)]
+        server_bw_tracefile: String,
+
+        #[arg(long)]
+        save_file: String,
 
         #[arg(long)]
         sizebins: String,
@@ -33,7 +39,7 @@ enum Commands {
     /// Generates synthetic link trace
     CreateSynthlinktrace {
         #[arg(long)]
-        filename: String,
+        save_file: String,
 
         #[arg(long, default_value_t = 10_000_000)]
         total_lines: usize,
@@ -76,14 +82,22 @@ fn main() {
 
     match &cli.command {
         Commands::CreateTracebin {
-            tracefile,
+            client_bw_tracefile,
+            server_bw_tracefile,
+            save_file,
             sizebins,
             binpktsizes,
         } => {
-            create_tracebin(tracefile, sizebins, binpktsizes);
+            create_tracebin(
+                client_bw_tracefile,
+                server_bw_tracefile,
+                save_file,
+                sizebins,
+                binpktsizes,
+            );
         }
         Commands::CreateSynthlinktrace {
-            filename,
+            save_file,
             total_lines,
             burst_interval,
             burst_length,
@@ -104,7 +118,7 @@ fn main() {
                 frame_burst_length: *frame_burst_length,
                 slot_bytes: *slot_bytes,
             };
-            match create_synthlinktrace(filename, params, preset.clone()) {
+            match create_synthlinktrace(save_file, params, preset.clone()) {
                 Ok(_) => {
                     println!("Synthetic link trace created successfully");
                 }
@@ -131,14 +145,24 @@ fn trace_info(filename: &str) {
     println!("{}", linktrace);
 }
 
-fn create_tracebin(tracefile: &str, sizebins: &str, binpktsizes: &str) {
-    if !tracefile.ends_with(".tr") && !tracefile.ends_with(".tr.gz") {
-        panic!("The tracefile must end with .tr or .tr.gz");
+fn create_tracebin(
+    // ul = uplink = client,  dl = downlink = server  directions
+    ul_bw_tracefile: &str,
+    dl_bw_tracefile: &str,
+    save_file: &str,
+    sizebins: &str,
+    binpktsizes: &str,
+) {
+    if !ul_bw_tracefile.ends_with(".tr") && !ul_bw_tracefile.ends_with(".tr.gz") {
+        panic!("The uplink tracefile must end with .tr or .tr.gz");
+    }
+    if !dl_bw_tracefile.ends_with(".tr") && !dl_bw_tracefile.ends_with(".tr.gz") {
+        panic!("The downlink tracefile must end with .tr or .tr.gz");
     }
 
     println!(
-        "Creating trace bin with tracefile: {}, sizebins: {}, binpktsizes: {}",
-        tracefile, sizebins, binpktsizes
+        "Creating trace binary file with uplink tracefile: {}, downlink tracefile: {}, sizebins: {}, binpktsizes: {}",
+        ul_bw_tracefile, dl_bw_tracefile, sizebins, binpktsizes
     );
 
     let sizebinvec: Vec<i32> = sizebins
@@ -153,15 +177,9 @@ fn create_tracebin(tracefile: &str, sizebins: &str, binpktsizes: &str) {
 
     let sizebin_lookuptable = SizebinLookupTable::new(&sizebinvec, &binpktvec);
 
-    let linktrace = LinkTrace::new(tracefile, tracefile, sizebin_lookuptable);
+    let linktrace = LinkTrace::new(dl_bw_tracefile, ul_bw_tracefile, sizebin_lookuptable);
 
-    let save_filname = if tracefile.ends_with(".tr.gz") {
-        tracefile.replace(".tr.gz", ".ltbin.gz")
-    } else {
-        tracefile.replace(".tr", ".ltbin.gz")
-    };
-
-    save_linktrace_to_file(&save_filname, &linktrace)
+    save_linktrace_to_file(&format!("{}{}", save_file, ".ltbin.gz"), &linktrace)
         .expect("Failed to save LinkTrace to ltbin file");
 }
 
@@ -178,9 +196,11 @@ struct TraceParams {
 
 fn list_presets() {
     println!("Available presets:");
-    println!("  starlink");
+    println!("  starlink_dl");
+    println!("  starlink_ul");
     println!("  ether1G");
     println!("  ether10M");
+    println!("  ether10M_5M");
     println!("  ether100M_5K");
     println!("  ether100M_5M");
     println!("  ether100M_40M");
@@ -205,13 +225,23 @@ fn create_synthlinktrace(
         frame_burst_length,
         slot_bytes,
     } = match preset.as_deref() {
-        Some("starlink") => TraceParams {
+        Some("starlink_dl") => TraceParams {
             total_lines: DEFAULT_TOTAL_LINES,
             burst_interval: 13333,
             burst_length: 5000,
             sub_burst_interval: 1333,
             sub_burst_length: 700,
             frame_burst_interval: 12,
+            frame_burst_length: 1,
+            slot_bytes: 1500,
+        },
+        Some("starlink_ul") => TraceParams {
+            total_lines: DEFAULT_TOTAL_LINES,
+            burst_interval: 13333,
+            burst_length: 5000,
+            sub_burst_interval: 1333,
+            sub_burst_length: 350,
+            frame_burst_interval: 60,
             frame_burst_length: 1,
             slot_bytes: 1500,
         },
@@ -227,13 +257,23 @@ fn create_synthlinktrace(
         },
         Some("ether10M") => TraceParams {
             total_lines: DEFAULT_TOTAL_LINES,
-            burst_interval: 20,
+            burst_interval: 4,
             burst_length: 1,
             sub_burst_interval: 1,
             sub_burst_length: 1,
             frame_burst_interval: 1,
             frame_burst_length: 1,
-            slot_bytes: 25,
+            slot_bytes: 5,
+        },
+        Some("ether10M_5M") => TraceParams {
+            total_lines: 5_000_000,
+            burst_interval: 4,
+            burst_length: 1,
+            sub_burst_interval: 1,
+            sub_burst_length: 1,
+            frame_burst_interval: 1,
+            frame_burst_length: 1,
+            slot_bytes: 5,
         },
         Some("ether100M_5K") => TraceParams {
             total_lines: 5000,
