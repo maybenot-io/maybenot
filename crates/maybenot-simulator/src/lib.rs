@@ -394,8 +394,12 @@ pub struct SimulatorArgs {
     pub server_integration: Option<Integration>,
     /// Optional simulated network type specification.
     pub simulated_network_type: Option<ExtendedNetworkLabels>,
-    /// Optional simulated network linktrace.
+    /// Optional simulated network bandwidth linktrace.
     pub linktrace: Option<Arc<LinkTrace>>,
+    /// Optional client bottleneck throughput
+    pub client_tput: Option<usize>,
+    /// Optional server bottleneck throughput
+    pub server_tput: Option<usize>,
 }
 
 impl SimulatorArgs {
@@ -416,6 +420,8 @@ impl SimulatorArgs {
             server_integration: None,
             simulated_network_type: None,
             linktrace: None,
+            client_tput: None,
+            server_tput: None,
         }
     }
 }
@@ -477,6 +483,13 @@ pub fn sim_advanced(
                 network = ExtendedNetwork::new_linktrace(args.network, linktrace.clone());
             } else {
                 panic!("No linktrace specified for SimulatorArgs.");
+            }
+        }
+        Some(ExtendedNetworkLabels::FixedTput) => {
+            if let (Some(client_tput), Some(server_tput)) = (args.client_tput, args.server_tput) {
+                network = ExtendedNetwork::new_fixedtput(args.network, client_tput, server_tput);
+            } else {
+                panic!("Missing throughput values for FixedTput network.");
             }
         }
     }

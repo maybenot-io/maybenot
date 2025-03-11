@@ -71,6 +71,7 @@ pub enum NetworkConfiguration {
 pub enum ExtendedNetworkLabels {
     Bottleneck,
     Linktrace,
+    FixedTput,
     //  LinkTraceHiRes,  // For future
     //  LinkTraceLoRes,  // For future
 }
@@ -79,6 +80,7 @@ pub enum ExtendedNetworkLabels {
 pub enum ExtendedNetwork {
     Bottleneck(NetworkBottleneck),
     Linktrace(NetworkLinktrace),
+    FixedTput(NetworkFixedTput),
 }
 
 impl ExtendedNetwork {
@@ -90,6 +92,10 @@ impl ExtendedNetwork {
         ExtendedNetwork::Linktrace(NetworkLinktrace::new(network, linktrace))
     }
 
+    pub fn new_fixedtput(network: Network, client_tput: usize, server_tput: usize) -> Self {
+        ExtendedNetwork::FixedTput(NetworkFixedTput::new(network, client_tput, server_tput))
+    }
+
     pub fn sample(
         &mut self,
         current_time: &Instant,
@@ -98,6 +104,7 @@ impl ExtendedNetwork {
         match self {
             ExtendedNetwork::Bottleneck(bn) => bn.sample(current_time, is_client),
             ExtendedNetwork::Linktrace(lt) => lt.sample(current_time, is_client),
+            ExtendedNetwork::FixedTput(ft) => ft.sample(current_time, is_client),
         }
     }
 
@@ -105,6 +112,7 @@ impl ExtendedNetwork {
         match self {
             ExtendedNetwork::Bottleneck(bn) => bn.peek_aggregate_delay(current_time),
             ExtendedNetwork::Linktrace(lt) => lt.peek_aggregate_delay(current_time),
+            ExtendedNetwork::FixedTput(ft) => ft.peek_aggregate_delay(current_time),
         }
     }
 
@@ -112,6 +120,7 @@ impl ExtendedNetwork {
         match self {
             ExtendedNetwork::Bottleneck(bn) => bn.client_aggregate_base_delay,
             ExtendedNetwork::Linktrace(lt) => lt.client_aggregate_base_delay,
+            ExtendedNetwork::FixedTput(ft) => ft.client_aggregate_base_delay,
         }
     }
 
@@ -119,6 +128,7 @@ impl ExtendedNetwork {
         match self {
             ExtendedNetwork::Bottleneck(bn) => bn.server_aggregate_base_delay,
             ExtendedNetwork::Linktrace(lt) => lt.server_aggregate_base_delay,
+            ExtendedNetwork::FixedTput(ft) => ft.server_aggregate_base_delay,
         }
     }
 
@@ -135,6 +145,9 @@ impl ExtendedNetwork {
             ExtendedNetwork::Linktrace(lt) => {
                 lt.push_aggregate_delay(delay, current_time, reached_client)
             }
+            ExtendedNetwork::FixedTput(ft) => {
+                ft.push_aggregate_delay(delay, current_time, reached_client)
+            }
         }
     }
 
@@ -142,12 +155,14 @@ impl ExtendedNetwork {
         match self {
             ExtendedNetwork::Bottleneck(bn) => bn.pop_aggregate_delay(),
             ExtendedNetwork::Linktrace(lt) => lt.pop_aggregate_delay(),
+            ExtendedNetwork::FixedTput(ft) => ft.pop_aggregate_delay(),
         }
     }
     pub fn get_pps_limit(&mut self) -> usize {
         match self {
             ExtendedNetwork::Bottleneck(bn) => bn.pps_limit,
             ExtendedNetwork::Linktrace(lt) => lt.pps_limit,
+            ExtendedNetwork::FixedTput(ft) => ft.pps_limit,
         }
     }
 }
@@ -368,7 +383,6 @@ pub struct NetworkLinktrace {
     // packets per second limit
     pps_limit: usize,
     linktrace: Arc<LinkTrace>,
-    //linktrace: &'a LinkTrace,
     // The start instant used by parse_trace for the first event at the server side
     sim_trace_startinstant: Instant,
     client_next_busy_to: usize,
@@ -456,6 +470,176 @@ impl NetworkLinktrace {
         self.sim_trace_startinstant = mk_start_instant();
         self.client_next_busy_to = 0;
         self.server_next_busy_to = 0;
+    }
+
+    pub fn peek_aggregate_delay(&self, current_time: Instant) -> Duration {
+        // for the peeked one, the duration since the current time is the
+        // duration until the delay is in effect: if none is peeked, return
+        // Duration::MAX
+        self.aggregate_delay_queue
+            .peek()
+            .map(|d| d.time.duration_since(current_time))
+            .unwrap_or(Duration::MAX)
+    }
+
+    pub fn push_aggregate_delay(
+        &mut self,
+        block_duration: Duration,
+        current_time: &Instant,
+        client_expiry: bool,
+    ) {
+        // TODO: refine the network model, for now, we sample the delay once and
+        // assume it's the same delay in both directions as well as between
+        // client-server and server-destination.
+        let d = self.network.sample();
+
+        // did the blocking expire at the client?
+        let mut client = Duration::default();
+        let mut server = Duration::default();
+        match client_expiry {
+            true => {
+                // @client: max(4D-B, 0)
+                if 4 * d > block_duration {
+                    client = 4 * d - block_duration;
+                };
+                // @server: max(3D-B, 0)
+                if 3 * d > block_duration {
+                    server = 3 * d - block_duration;
+                };
+            }
+            false => {
+                // @client: max(D-B, 0)
+                if d > block_duration {
+                    client = d - block_duration;
+                };
+                // @server: max(4D-B, 0)
+                if 4 * d > block_duration {
+                    server = 4 * d - block_duration;
+                };
+            }
+        };
+
+        debug!(
+            "\tpushing aggregate delay {:?} in {:?} at the client",
+            block_duration, client
+        );
+        self.aggregate_delay_queue.push(PendingAggregateDelay {
+            time: *current_time + client,
+            delay: block_duration,
+            client: true,
+        });
+        debug!(
+            "\tpushing aggregate delay {:?} in {:?} at the server",
+            block_duration, server
+        );
+        self.aggregate_delay_queue.push(PendingAggregateDelay {
+            time: *current_time + server,
+            delay: block_duration,
+            client: false,
+        });
+    }
+
+    pub fn pop_aggregate_delay(&mut self) {
+        if let Some(aggregate) = self.aggregate_delay_queue.pop() {
+            match aggregate.client {
+                true => {
+                    debug!("\tpopping aggregate delay at client {:?}", aggregate.delay);
+                    self.client_aggregate_base_delay += aggregate.delay;
+                }
+                false => {
+                    debug!("\tpopping aggregate delay at server {:?}", aggregate.delay);
+                    self.server_aggregate_base_delay += aggregate.delay;
+                }
+            };
+        }
+    }
+}
+
+/// a network that adds delay to packets according to the transmission delay
+/// as calculated from some fixed bottleneck throughput. Keeps track of the aggregate
+/// delay to add to packets due to the bottleneck or accumulated blocking by
+/// machines: used to shift the baseline trace time at both client and relay
+#[derive(Debug, Clone)]
+pub struct NetworkFixedTput {
+    // the aggregate delay for the client
+    pub client_aggregate_base_delay: Duration,
+    // the aggregate delay for the server
+    pub server_aggregate_base_delay: Duration,
+    // the pending aggregate delays to add to packets due to the bottleneck
+    aggregate_delay_queue: BinaryHeap<PendingAggregateDelay>,
+    // the network model
+    network: Network,
+    // packets per second limit
+    pps_limit: usize,
+    // The bottleneck throughput for the client(uplink) and server(downlink) in bits/s
+    client_tput: usize,
+    server_tput: usize,
+    // The start instant used by parse_trace for the first event at the server side
+    sim_trace_startinstant: Instant,
+    client_next_busy_to_duration: Duration,
+    server_next_busy_to_duration: Duration,
+}
+
+impl NetworkFixedTput {
+    pub fn new(network: Network, client_tput: usize, server_tput: usize) -> Self {
+        Self {
+            network,
+            client_aggregate_base_delay: Duration::default(),
+            server_aggregate_base_delay: Duration::default(),
+            aggregate_delay_queue: BinaryHeap::new(),
+            pps_limit: usize::MAX,
+            client_tput,
+            server_tput,
+            sim_trace_startinstant: mk_start_instant(),
+            client_next_busy_to_duration: Duration::default(),
+            server_next_busy_to_duration: Duration::default(),
+        }
+    }
+
+    pub fn sample(
+        &mut self,
+        current_time: &Instant,
+        _is_client: bool,
+    ) -> (Duration, Option<Duration>) {
+        let current_duration = current_time.duration_since(self.sim_trace_startinstant);
+
+        // Select the appropriate busy-to field and throughput.
+        let (next_busy_duration, throughput) = if _is_client {
+            (&mut self.client_next_busy_to_duration, self.client_tput)
+        } else {
+            (&mut self.server_next_busy_to_duration, self.server_tput)
+        };
+
+        // Calculate the transmission delay for a packet with a given size:
+        // this_packet_duration (ns) = (1500 * 8 * 1e9) / throughput (bits/s)
+        let packet_size_bits = 1500 * 8;
+        let this_packet_duration =
+            Duration::from_nanos((packet_size_bits as u64 * 1_000_000_000) / throughput as u64);
+
+        // Compute the new busy time and any queueing delay.
+        let (new_busy_to_dur, queueing_delay_duration) = if *next_busy_duration <= current_duration
+        {
+            // No waiting required.
+            (current_duration + this_packet_duration, Duration::default())
+        } else {
+            // Packet must wait: the queueing delay is the gap between current time and the stored busy time.
+            let q_delay = *next_busy_duration - current_duration;
+            (*next_busy_duration + this_packet_duration, q_delay)
+        };
+
+        // Update the stored busy time (in ns) from the computed Duration.
+        *next_busy_duration = new_busy_to_dur;
+
+        // Combine the network's own sample with the computed delay.
+        let network_sample = self.network.sample();
+        if queueing_delay_duration > Duration::default() {
+            (
+                network_sample + queueing_delay_duration + this_packet_duration,
+                Some(queueing_delay_duration + this_packet_duration),
+            )
+        } else {
+            (network_sample + this_packet_duration, None)
+        }
     }
 
     pub fn peek_aggregate_delay(&self, current_time: Instant) -> Duration {

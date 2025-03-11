@@ -220,6 +220,61 @@ fn test_network_linktrace_duplex() {
 }
 
 #[test_log::test]
+fn test_network_fixedtput_duplex() {
+    // send 3 events in both directions, with different traces in server->client
+    // and client->right server direction.
+    // Since the setup simulates 100 and 10 Mbps Ethernet, and packet size is 1500 bytes,
+    // the packets should be 120us and 1200 us apart.
+    let input = "0,sn\n0,sn\n0,sn\n3000000,rn\n3000000,rn\n3000000,rn\n";
+    let network = Network::new(Duration::from_millis(3), Some(3));
+    let mut sq = parse_trace(input, network);
+    let args = SimulatorArgs::new(network, 20, true);
+
+    let fixedtput_args = SimulatorArgs {
+        simulated_network_type: Some(ExtendedNetworkLabels::FixedTput),
+        client_tput: Some(10_000_000),
+        server_tput: Some(100_000_000),
+        ..args
+    };
+
+    let trace = run_and_save_trace("100M_10M_assymFixedTput.simtrace", || {
+        sim_advanced(&[], &[], &mut sq, &fixedtput_args)
+    });
+
+    let client_trace = trace
+        .clone()
+        .into_iter()
+        .filter(|t| t.client)
+        .collect::<Vec<_>>();
+    assert_eq!(client_trace.len(), 6);
+    assert_eq!(client_trace[0].time, client_trace[2].time);
+    assert_eq!(
+        client_trace[4].time - client_trace[3].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        client_trace[5].time - client_trace[4].time,
+        Duration::from_micros(120)
+    );
+
+    let server_trace = trace
+        .clone()
+        .into_iter()
+        .filter(|t| !t.client)
+        .collect::<Vec<_>>();
+    assert_eq!(server_trace.len(), 6);
+    assert_eq!(server_trace[0].time, server_trace[2].time);
+    assert_eq!(
+        server_trace[4].time - server_trace[3].time,
+        Duration::from_micros(1200)
+    );
+    assert_eq!(
+        server_trace[5].time - server_trace[4].time,
+        Duration::from_micros(1200)
+    );
+}
+
+#[test_log::test]
 fn test_blocking_packet_reordering() {
     // The purpose of this test is to test packet reordering in the simulator,
     // using bypassable blocking to create a constant-rate defense on one side
