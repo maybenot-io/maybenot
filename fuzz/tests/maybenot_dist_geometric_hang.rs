@@ -8,10 +8,10 @@ mod tests {
     #[test]
     fn test_geometric_hang() {
         let artifacts = vec![
-            include_bytes!("../artifacts/geometric,id:000000,src:000000,time:1023,execs:16,op:havoc,rep:7").to_vec(),
-            include_bytes!("../artifacts/geometric,id:000001,src:000002,time:2586,execs:645,op:int16,pos:14,val:+0").to_vec(),
-            include_bytes!("../artifacts/geometric,id:000002,src:000002,time:9545,execs:2175,op:havoc,rep:3").to_vec(),
-            include_bytes!("../artifacts/geometric,id:000003,src:000002,time:19309,execs:4395,op:havoc,rep:6").to_vec(),
+            include_bytes!("../artifacts/geometric,id-000000,src-000000,time-1023,execs-16,op-havoc,rep-7").to_vec(),
+            include_bytes!("../artifacts/geometric,id-000001,src-000002,time-2586,execs-645,op-int16,pos-14,val:+0").to_vec(),
+            include_bytes!("../artifacts/geometric,id-000002,src-000002,time-9545,execs-2175,op-havoc,rep-3").to_vec(),
+            include_bytes!("../artifacts/geometric,id-000003,src-000002,time-19309,execs-4395,op-havoc,rep-6").to_vec(),
         ];
 
         for data in artifacts {

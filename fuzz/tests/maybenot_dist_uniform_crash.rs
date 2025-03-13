@@ -8,10 +8,10 @@ mod tests {
     #[test]
     fn test_uniform_crash() {
         let artifacts = vec![
-            include_bytes!("../artifacts/uniform,id:000000,sig:06,src:000000,time:7,execs:303,op:havoc,rep:15").to_vec(),
-            include_bytes!("../artifacts/uniform,id:000001,sig:06,src:000001,time:48,execs:3481,op:colorization,rep:2").to_vec(),
-            include_bytes!("../artifacts/uniform,id:000002,sig:06,src:000003,time:9977,execs:788634,op:havoc,rep:3").to_vec(),
-            include_bytes!("../artifacts/uniform,id:000003,sig:06,src:000009+000002,time:29455,execs:2157264,op:splice,rep:34").to_vec(),
+            include_bytes!("../artifacts/uniform,id-000000,sig-06,src-000000,time-7,execs-303,op-havoc,rep-15").to_vec(),
+            include_bytes!("../artifacts/uniform,id-000001,sig-06,src-000001,time-48,execs-3481,op-colorization,rep-2").to_vec(),
+            include_bytes!("../artifacts/uniform,id-000002,sig-06,src-000003,time-9977,execs-788634,op-havoc,rep-3").to_vec(),
+            include_bytes!("../artifacts/uniform,id-000003,sig-06,src-000009+000002,time-29455,execs-2157264,op-splice,rep-34").to_vec(),
         ];
 
         for data in artifacts {

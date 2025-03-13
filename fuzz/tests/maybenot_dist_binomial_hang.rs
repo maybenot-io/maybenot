@@ -8,8 +8,8 @@ mod tests {
     #[test]
     fn test_binomial_hang() {
         let artifacts = vec![
-            include_bytes!("../artifacts/bionomial,id:000000,src:000018+000083,time:43455,execs:576361,op:splice,rep:4").to_vec(),
-            include_bytes!("../artifacts/bionomial,id:000000,src:000049,time:1595,execs:25705,op:havoc,rep:1").to_vec(),
+            include_bytes!("../artifacts/bionomial,id-000000,src-000018+000083,time-43455,execs-576361,op-splice,rep-4").to_vec(),
+            include_bytes!("../artifacts/bionomial,id-000000,src-000049,time-1595,execs-25705,op-havoc,rep-1").to_vec(),
         ];
 
         for data in artifacts {
