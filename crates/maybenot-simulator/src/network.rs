@@ -466,8 +466,9 @@ impl NetworkLinktrace {
     pub fn reset_linktrace(&mut self) {
         self.client_aggregate_base_delay = Duration::default();
         self.server_aggregate_base_delay = Duration::default();
-        self.aggregate_delay_queue = BinaryHeap::new();
-        self.sim_trace_startinstant = mk_start_instant();
+        // The two lines below are skewing the benchmark timing comparisons...
+        //self.aggregate_delay_queue = BinaryHeap::new();
+        //self.sim_trace_startinstant = mk_start_instant();
         self.client_next_busy_to = 0;
         self.server_next_busy_to = 0;
     }
