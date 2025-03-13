@@ -2,7 +2,9 @@ use std::time::Duration;
 
 use maybenot_simulator::{
     linktrace::{load_linktrace_from_file, mk_start_instant},
-    network::{ExtendedNetworkLabels, Network, NetworkBottleneck, NetworkLinktrace},
+    network::{
+        ExtendedNetworkLabels, Network, NetworkBottleneck, NetworkFixedTput, NetworkLinktrace,
+    },
     parse_trace, sim, sim_advanced, SimulatorArgs,
 };
 
@@ -170,7 +172,6 @@ fn simulator_network_sample(c: &mut Criterion) {
         instants.push(current_instant);
     }
 
-    println!("{:?}", instants[nr_iter - 1]);
     // Initalize network, start with a reasonable 10ms delay
     let network = Network::new(Duration::from_millis(10), None);
     let linktrace =
@@ -197,6 +198,20 @@ fn simulator_network_sample(c: &mut Criterion) {
             for i in 0..nr_iter {
                 // Use black_box to prevent the compiler from optimizing away the call
                 black_box(network_bneck.sample(&instants[i], true));
+                // TODO: Find out why memory consumption goes haywaire without the line below...
+                network_lt.reset_linktrace();
+            }
+        })
+    });
+
+    let network = Network::new(Duration::from_millis(10), None);
+    let mut network_ftput = NetworkFixedTput::new(network, 10_000_000, 100_000_000);
+
+    c.bench_function("FixedTput network.sample", |b| {
+        b.iter(|| {
+            for i in 0..nr_iter {
+                // Use black_box to prevent the compiler from optimizing away the call
+                black_box(network_ftput.sample(&instants[i], true));
                 // TODO: Find out why memory consumption goes haywaire without the line below...
                 network_lt.reset_linktrace();
             }
@@ -246,6 +261,26 @@ fn bottleneck_simulator_run(c: &mut Criterion) {
     });
 }
 
+fn fixedtput_simulator_run(c: &mut Criterion) {
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
+
+    c.bench_function("FixedTput network simulation run", |b| {
+        b.iter(|| {
+            let network = Network::new(Duration::from_millis(10), None);
+            let sq = parse_trace(EARLY_TRACE, network);
+            let args = SimulatorArgs::new(network, 10000, true);
+            let fixedtput_args = SimulatorArgs {
+                simulated_network_type: Some(ExtendedNetworkLabels::FixedTput),
+                client_tput: Some(10_000_000),
+                server_tput: Some(100_000_000),
+                ..args
+            };
+            black_box(sim_advanced(&[], &[], &mut sq.clone(), &fixedtput_args));
+        });
+    });
+}
+
 fn linktrace_simulator_run(c: &mut Criterion) {
     const EARLY_TRACE: &str =
         include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
@@ -266,6 +301,22 @@ fn linktrace_simulator_run(c: &mut Criterion) {
             };
 
             black_box(sim_advanced(&[], &[], &mut sq.clone(), &linktrace_args));
+        });
+    });
+}
+
+fn bottleneck_parallel_run(c: &mut Criterion) {
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
+
+    c.bench_function("Bottleneck parallel simulation run", |b| {
+        b.iter(|| {
+            (0..100).into_par_iter().for_each(|_| {
+                let network = Network::new(Duration::from_millis(10), None);
+                let sq = parse_trace(EARLY_TRACE, network);
+                let args = SimulatorArgs::new(network, 10000, true);
+                black_box(sim_advanced(&[], &[], &mut sq.clone(), &args));
+            });
         });
     });
 }
@@ -296,6 +347,28 @@ fn linktrace_parallel_run(c: &mut Criterion) {
     });
 }
 
+fn fixedtput_parallel_run(c: &mut Criterion) {
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
+
+    c.bench_function("FixedTput parallel simulation run", |b| {
+        b.iter(|| {
+            (0..100).into_par_iter().for_each(|_| {
+                let network = Network::new(Duration::from_millis(10), None);
+                let sq = parse_trace(EARLY_TRACE, network);
+                let args = SimulatorArgs::new(network, 10000, true);
+                let fixedtput_args = SimulatorArgs {
+                    simulated_network_type: Some(ExtendedNetworkLabels::FixedTput),
+                    client_tput: Some(10_000_000),
+                    server_tput: Some(100_000_000),
+                    ..args
+                };
+                black_box(sim_advanced(&[], &[], &mut sq.clone(), &fixedtput_args));
+            });
+        });
+    });
+}
+
 //criterion_group!(benches, benchmark_flat_vector, benchmark_ndarray);
 //criterion_group!(benches, benchmark_busy_to, simulator_network_sample);
 //criterion_group!(benches, simple_simulator_run, bottleneck_simulator_run, linktrace_simulator_run);
@@ -310,8 +383,11 @@ criterion_group!(
     simulator_network_sample,
     simple_simulator_run,
     bottleneck_simulator_run,
+    fixedtput_simulator_run,
     linktrace_simulator_run,
-    linktrace_parallel_run
+    linktrace_parallel_run,
+    fixedtput_parallel_run,
+    bottleneck_parallel_run
 );
 
 criterion_main!(benches);

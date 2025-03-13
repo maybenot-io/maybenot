@@ -36,6 +36,13 @@ binpktsizes_21="48, 64, 80, 96, 112, 128, 144, 160, 192, 240, 288, 368, 448, 512
     --sizebins "$sizebins_2" \
     --binpktsizes "$binpktsizes_2"
 
+../../../target/release/linktrace_util create-tracebin \
+    --client-bw-tracefile "ether100M_synth5M.tr.gz" \
+    --server-bw-tracefile "ether100M_synth5M.tr.gz" \
+    --save-file "ether100M_synth5M_21bins" \
+    --sizebins "$sizebins_21" \
+    --binpktsizes "$binpktsizes_21"
+
 
 # Create ether10M_5M trace and corresponding symmetric binary trace
 ../../../target/release/linktrace_util create-synthlinktrace \
