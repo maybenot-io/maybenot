@@ -108,7 +108,7 @@ fn test_network_linktrace() {
     // Since the trace simulates 100 Mbps Ethernet, and packet size is 1500 bytes,
     // the packets should be 120us apart.
     let input = "0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n";
-    let network = Network::new(Duration::from_millis(3), Some(3));
+    let network = Network::new(Duration::from_millis(3), None);
     let mut sq = parse_trace(input, network);
     let args = SimulatorArgs::new(network, 20, true);
 
@@ -170,7 +170,7 @@ fn test_network_linktrace_duplex() {
     // Since the trace simulates 100 and 10 Mbps Ethernet, and packet size is 1500 bytes,
     // the packets should be 120us and 1200 us apart.
     let input = "0,sn\n0,sn\n0,sn\n3000000,rn\n3000000,rn\n3000000,rn\n";
-    let network = Network::new(Duration::from_millis(3), Some(3));
+    let network = Network::new(Duration::from_millis(3), None);
     let mut sq = parse_trace(input, network);
     let args = SimulatorArgs::new(network, 20, true);
 
@@ -226,7 +226,7 @@ fn test_network_fixedtput_duplex() {
     // Since the setup simulates 100 and 10 Mbps Ethernet, and packet size is 1500 bytes,
     // the packets should be 120us and 1200 us apart.
     let input = "0,sn\n0,sn\n0,sn\n3000000,rn\n3000000,rn\n3000000,rn\n";
-    let network = Network::new(Duration::from_millis(3), Some(3));
+    let network = Network::new(Duration::from_millis(3), None);
     let mut sq = parse_trace(input, network);
     let args = SimulatorArgs::new(network, 20, true);
 
