@@ -3,3 +3,8 @@
 *.a
 fuzz/out/
 fuzz/seeds/
+*.simtrace
+*.ltbin.gz
+*.ltbin
+*.tr.gz
+*.tr
