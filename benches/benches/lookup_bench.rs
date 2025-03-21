@@ -2,9 +2,7 @@ use std::time::Duration;
 
 use maybenot_simulator::{
     linktrace::{load_linktrace_from_file, mk_start_instant},
-    network::{
-        ExtendedNetworkLabels, Network, NetworkBottleneck, NetworkFixedTput, NetworkLinktrace,
-    },
+    network::{ExtendedNetworkLabels, Network, NetworkBottleneck, NetworkLinktrace},
     parse_trace, sim, sim_advanced, SimulatorArgs,
 };
 
@@ -177,9 +175,43 @@ fn simulator_network_sample(c: &mut Criterion) {
     let linktrace =
         load_linktrace_from_file("../crates/maybenot-simulator/tests/ether100M_synth5M.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
-    let mut network_lt = NetworkLinktrace::new(network, linktrace);
+    let mut network_lt = NetworkLinktrace::new_linktrace(network, linktrace);
 
-    c.bench_function("Linktrace network.sample", |b| {
+    c.bench_function("Linktrace HiRes network.sample", |b| {
+        b.iter(|| {
+            for i in 0..nr_iter {
+                // Use black_box to prevent the compiler from optimizing away the call
+                black_box(network_lt.sample(&instants[i], true));
+                network_lt.reset_linktrace();
+            }
+        })
+    });
+
+    let network = Network::new(Duration::from_millis(10), None);
+    let linktrace = load_linktrace_from_file(
+        "../crates/maybenot-simulator/tests/ether100M_synth10K_std.ltbin.gz",
+    )
+    .expect("Failed to load LinkTrace ltbin from file");
+    let mut network_lt = NetworkLinktrace::new_linktrace(network, linktrace);
+
+    c.bench_function("Linktrace StdRes eth 100Mbps network.sample", |b| {
+        b.iter(|| {
+            for i in 0..nr_iter {
+                // Use black_box to prevent the compiler from optimizing away the call
+                black_box(network_lt.sample(&instants[i], true));
+                network_lt.reset_linktrace();
+            }
+        })
+    });
+
+    let network = Network::new(Duration::from_millis(10), None);
+    let linktrace = load_linktrace_from_file(
+        "../crates/maybenot-simulator/tests/test100K_synth2M_std.ltbin.gz",
+    )
+    .expect("Failed to load LinkTrace ltbin from file");
+    let mut network_lt = NetworkLinktrace::new_linktrace(network, linktrace);
+
+    c.bench_function("Linktrace StdRes slow 100Kbps network.sample", |b| {
         b.iter(|| {
             for i in 0..nr_iter {
                 // Use black_box to prevent the compiler from optimizing away the call
@@ -205,7 +237,7 @@ fn simulator_network_sample(c: &mut Criterion) {
     });
 
     let network = Network::new(Duration::from_millis(10), None);
-    let mut network_ftput = NetworkFixedTput::new(network, 10_000_000, 100_000_000);
+    let mut network_ftput = NetworkLinktrace::new_fixed(network, 10_000_000, 100_000_000);
 
     c.bench_function("FixedTput network.sample", |b| {
         b.iter(|| {
@@ -305,6 +337,56 @@ fn linktrace_simulator_run(c: &mut Criterion) {
     });
 }
 
+fn linktrace_std100m_simulator_run(c: &mut Criterion) {
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
+
+    let linktrace = load_linktrace_from_file(
+        "../crates/maybenot-simulator/tests/ether100M_synth10K_std.ltbin.gz",
+    )
+    .expect("Failed to load LinkTrace ltbin from file");
+
+    c.bench_function("Linktrace StdRes eth 100Mbps network simulation run", |b| {
+        b.iter(|| {
+            let network = Network::new(Duration::from_millis(10), None);
+            let sq = parse_trace(EARLY_TRACE, network);
+            let args = SimulatorArgs::new(network, 10000, true);
+            let linktrace_args = SimulatorArgs {
+                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                linktrace: Some(linktrace.clone()),
+                ..args
+            };
+
+            black_box(sim_advanced(&[], &[], &mut sq.clone(), &linktrace_args));
+        });
+    });
+}
+
+fn linktrace_std100k_simulator_run(c: &mut Criterion) {
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
+
+    let linktrace = load_linktrace_from_file(
+        "../crates/maybenot-simulator/tests/test100K_synth2M_std.ltbin.gz",
+    )
+    .expect("Failed to load LinkTrace ltbin from file");
+
+    c.bench_function("Linktrace StdRes slow 100K network simulation run", |b| {
+        b.iter(|| {
+            let network = Network::new(Duration::from_millis(10), None);
+            let sq = parse_trace(EARLY_TRACE, network);
+            let args = SimulatorArgs::new(network, 10000, true);
+            let linktrace_args = SimulatorArgs {
+                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                linktrace: Some(linktrace.clone()),
+                ..args
+            };
+
+            black_box(sim_advanced(&[], &[], &mut sq.clone(), &linktrace_args));
+        });
+    });
+}
+
 fn bottleneck_parallel_run(c: &mut Criterion) {
     const EARLY_TRACE: &str =
         include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
@@ -330,7 +412,7 @@ fn linktrace_parallel_run(c: &mut Criterion) {
         load_linktrace_from_file("../crates/maybenot-simulator/tests/ether100M_synth40M.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
 
-    c.bench_function("Linktrace parallel simulation run", |b| {
+    c.bench_function("Linktrace HiRes parallel simulation run", |b| {
         b.iter(|| {
             (0..100).into_par_iter().for_each(|_| {
                 let network = Network::new(Duration::from_millis(10), None);
@@ -345,6 +427,64 @@ fn linktrace_parallel_run(c: &mut Criterion) {
             });
         });
     });
+}
+
+fn linktrace_std100m_parallel_run(c: &mut Criterion) {
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
+
+    let linktrace = load_linktrace_from_file(
+        "../crates/maybenot-simulator/tests/ether100M_synth10K_std.ltbin.gz",
+    )
+    .expect("Failed to load LinkTrace ltbin from file");
+
+    c.bench_function(
+        "Linktrace StdRes eth 100Mbps parallel simulation run",
+        |b| {
+            b.iter(|| {
+                (0..100).into_par_iter().for_each(|_| {
+                    let network = Network::new(Duration::from_millis(10), None);
+                    let sq = parse_trace(EARLY_TRACE, network);
+                    let args = SimulatorArgs::new(network, 10000, true);
+                    let linktrace_args = SimulatorArgs {
+                        simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                        linktrace: Some(linktrace.clone()),
+                        ..args
+                    };
+                    black_box(sim_advanced(&[], &[], &mut sq.clone(), &linktrace_args));
+                });
+            });
+        },
+    );
+}
+
+fn linktrace_std100k_parallel_run(c: &mut Criterion) {
+    const EARLY_TRACE: &str =
+        include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
+
+    let linktrace = load_linktrace_from_file(
+        "../crates/maybenot-simulator/tests/test100K_synth2M_std.ltbin.gz",
+    )
+    .expect("Failed to load LinkTrace ltbin from file");
+
+    c.bench_function(
+        "Linktrace StdRes slow 100Kbps parallel simulation run",
+        |b| {
+            b.iter(|| {
+                (0..100).into_par_iter().for_each(|_| {
+                    let network = Network::new(Duration::from_millis(10), None);
+                    let sq = parse_trace(EARLY_TRACE, network);
+                    let args = SimulatorArgs::new(network, 10000, true);
+                    let linktrace_args = SimulatorArgs {
+                        simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                        linktrace: Some(linktrace.clone()),
+                        ..args
+                    };
+                    black_box(sim_advanced(&[], &[], &mut sq.clone(), &linktrace_args));
+                });
+            });
+        },
+    );
 }
 
 fn fixedtput_parallel_run(c: &mut Criterion) {
@@ -385,9 +525,13 @@ criterion_group!(
     bottleneck_simulator_run,
     fixedtput_simulator_run,
     linktrace_simulator_run,
-    linktrace_parallel_run,
+    linktrace_std100m_simulator_run,
+    linktrace_std100k_simulator_run,
+    bottleneck_parallel_run,
     fixedtput_parallel_run,
-    bottleneck_parallel_run
+    linktrace_parallel_run,
+    linktrace_std100m_parallel_run,
+    linktrace_std100k_parallel_run,
 );
 
 criterion_main!(benches);

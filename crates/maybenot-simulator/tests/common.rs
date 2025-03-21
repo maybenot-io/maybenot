@@ -1,13 +1,17 @@
-use std::time::{Duration, Instant};
 use std::env;
 use std::fs::File;
 use std::io::Write;
+use std::time::{Duration, Instant};
 
 use log::debug;
 use maybenot::{action::Action, state::State, Machine, TriggerEvent};
 use maybenot_simulator::{
-    network::Network, queue::SimQueue, sim_advanced, SimEvent, SimulatorArgs,
+    linktrace::{load_linktrace_from_file, mk_start_instant},
+    network::{ExtendedNetworkLabels, Network},
+    queue::SimQueue,
+    sim_advanced, SimEvent, SimulatorArgs,
 };
+use once_cell::sync::Lazy;
 
 #[allow(clippy::too_many_arguments)]
 pub fn run_test_sim(
@@ -34,6 +38,142 @@ pub fn run_test_sim(
     }
     debug!("input: {}", input);
     assert_eq!(output, fmt);
+}
+
+#[allow(non_camel_case_types)]
+pub enum TraceSpec {
+    ether100M,
+    ether100M_10M_assym,
+}
+
+pub fn get_test_simargs(
+    base_args: SimulatorArgs,
+    use_network: String,
+    tracespec: TraceSpec,
+) -> SimulatorArgs {
+    match (use_network.as_str(), tracespec) {
+        ("hires", TraceSpec::ether100M) => {
+            let linktrace = load_linktrace_from_file("tests/ether100M_synth5M.ltbin.gz")
+                .expect("Failed to load LinkTrace ltbin from file");
+            SimulatorArgs {
+                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                linktrace: Some(linktrace),
+                ..base_args
+            }
+        }
+        ("hires", TraceSpec::ether100M_10M_assym) => {
+            let linktrace = load_linktrace_from_file("tests/ether_100Mserv_10Mcli_5M.ltbin.gz")
+                .expect("Failed to load LinkTrace ltbin from file");
+            SimulatorArgs {
+                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                linktrace: Some(linktrace),
+                ..base_args
+            }
+        }
+        ("stdres", TraceSpec::ether100M) => {
+            let linktrace = load_linktrace_from_file("tests/ether100M_synth10K_std.ltbin.gz")
+                .expect("Failed to load LinkTrace ltbin from file");
+            SimulatorArgs {
+                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                linktrace: Some(linktrace),
+                ..base_args
+            }
+        }
+        ("stdres", TraceSpec::ether100M_10M_assym) => {
+            let linktrace =
+                load_linktrace_from_file("tests/ether_100Mserv_10Mcli_10K_std.ltbin.gz")
+                    .expect("Failed to load LinkTrace ltbin from file");
+            SimulatorArgs {
+                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                linktrace: Some(linktrace),
+                ..base_args
+            }
+        }
+        ("fixed", TraceSpec::ether100M) => SimulatorArgs {
+            simulated_network_type: Some(ExtendedNetworkLabels::FixedTput),
+            client_tput: Some(100_000_000),
+            server_tput: Some(100_000_000),
+            ..base_args
+        },
+        ("fixed", TraceSpec::ether100M_10M_assym) => SimulatorArgs {
+            simulated_network_type: Some(ExtendedNetworkLabels::FixedTput),
+            client_tput: Some(10_000_000),
+            server_tput: Some(100_000_000),
+            ..base_args
+        },
+        ("bneck", _) => base_args,
+        (other, _) => panic!(
+            "Invalid USE_NETWORK value: {}. Expected either 'hires', 'stdres', 'fixed', 'bneck'.",
+            other
+        ),
+    }
+}
+
+pub fn run_test_sim_trace(
+    input: &str,
+    output: &str,
+    delay: Duration,
+    machines_client: &[Machine],
+    machines_server: &[Machine],
+    client: bool,
+    max_trace_length: usize,
+    only_packets: bool,
+    as_ms: bool,
+    description: &str,
+    use_network: &str,
+    skip_asserts: bool,
+) {
+    let network = Network::new(delay, None);
+    let base_args = SimulatorArgs::new(network, max_trace_length, only_packets);
+
+    let mut args = match use_network {
+        "hires" => {
+            let linktrace = load_linktrace_from_file("tests/ether100M_synth5M.ltbin.gz")
+                .expect("Failed to load LinkTrace ltbin from file");
+            SimulatorArgs {
+                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                linktrace: Some(linktrace),
+                ..base_args
+            }
+        }
+        "stdres" => {
+            let linktrace = load_linktrace_from_file("tests/ether100M_synth10K_std.ltbin.gz")
+                .expect("Failed to load LinkTrace ltbin from file");
+            SimulatorArgs {
+                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
+                linktrace: Some(linktrace),
+                ..base_args
+            }
+        }
+        "fixed" => SimulatorArgs {
+            simulated_network_type: Some(ExtendedNetworkLabels::FixedTput),
+            client_tput: Some(100_000_000),
+            server_tput: Some(100_000_000),
+            ..base_args
+        },
+        "bneck" => base_args,
+        other => panic!(
+            "Invalid USE_NETWORK value: {}. Expected either 'fixed' or 'bneck'.",
+            other
+        ),
+    };
+
+    let tracefilename = format!("{}__{}.simtrace", description, use_network);
+
+    args.continue_after_all_normal_packets_processed = true;
+    let starting_time = mk_start_instant();
+    let mut sq = make_sq(input.to_string(), delay, starting_time, as_ms);
+    let trace = run_and_save_trace(&tracefilename, || {
+        sim_advanced(machines_client, machines_server, &mut sq, &args)
+    });
+    let mut fmt = fmt_trace(&trace, client, as_ms);
+    if fmt.len() > output.len() {
+        fmt = fmt.get(0..output.len()).unwrap().to_string();
+    }
+    debug!("input: {}", input);
+    if !skip_asserts {
+        assert_eq!(output, fmt);
+    }
 }
 
 fn fmt_trace(trace: &[SimEvent], client: bool, ms: bool) -> String {
@@ -136,15 +276,22 @@ pub fn set_replace(s: &mut State, value: bool) {
 /// environment variable `SAVE_TRACE` is set to "1", writes the formatted result
 /// to the specified filename.
 /// eg.   $SAVE_TRACE=1 cargo test
+static SAVE_TRACE: Lazy<bool> = Lazy::new(|| match env::var("SAVE_TRACE").as_deref() {
+    Ok("0") => false,
+    Ok("1") => true,
+    Ok(v) => panic!("Invalid SAVE_TRACE value: {}. Expected 0 or 1.", v),
+    Err(_) => false,
+});
+
 pub fn run_and_save_trace<T, F>(filename: &str, f: F) -> T
 where
     F: FnOnce() -> T,
     T: std::fmt::Debug,
 {
     let result = f();
-    if env::var("SAVE_TRACE").unwrap_or_default() == "1" {
+
+    if *SAVE_TRACE {
         let mut file = File::create(filename).expect("Failed to create trace output file");
-        // You can format the output as needed (here using pretty debug format)
         write!(file, "{:#?}", result).expect("Failed to write trace to file");
         println!("Trace saved to {}", filename);
     }

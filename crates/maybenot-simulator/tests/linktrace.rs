@@ -95,7 +95,7 @@ mod tests {
         let dl_traceinput = "tests/ether100M_synth5K.tr";
         let ul_traceinput = "tests/ether100M_synth5K.tr";
         let sizebin_lookuptable = mk_sizebin_lookuptable();
-        let link_trace = Arc::new(LinkTrace::new(
+        let link_trace = Arc::new(LinkTrace::new_hi_res(
             dl_traceinput,
             ul_traceinput,
             sizebin_lookuptable,
@@ -117,9 +117,9 @@ mod tests {
         let linksim_trace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
         // Confirm that different packet sizes give different busy_to times
-        assert_eq!(linksim_trace.get_dl_busy_to(1000, 1500), 1119);
-        assert_eq!(linksim_trace.get_dl_busy_to(1000, 750), 1067);
-        assert_eq!(linksim_trace.get_dl_busy_to(1000, 56), 1005);
+        assert_eq!(linksim_trace.get_dl_busy_to(1000, 1500), 1120);
+        assert_eq!(linksim_trace.get_dl_busy_to(1000, 750), 1068);
+        assert_eq!(linksim_trace.get_dl_busy_to(1000, 56), 1006);
 
         assert_eq!(linksim_trace.get_dl_busy_to(3245, 1500), 3365);
 
@@ -171,7 +171,7 @@ mod tests {
         let network = Network::new(Duration::from_millis(10), None);
         let linktrace = load_linktrace_from_file("tests/ether100M_synth5M.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
-        let mut network_lt = NetworkLinktrace::new(network, linktrace);
+        let mut network_lt = NetworkLinktrace::new_linktrace(network, linktrace);
 
         let tinstant = mk_start_instant() + Duration::from_micros(1);
         network_lt.sample(&tinstant, true);

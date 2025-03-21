@@ -1,8 +1,9 @@
 pub mod common;
 
+use std::env;
 use std::time::Duration;
 
-use common::run_test_sim;
+use common::{get_test_simargs, run_and_save_trace, run_test_sim_trace, TraceSpec};
 use maybenot::{
     action::Action,
     constants::MAX_SAMPLED_BLOCK_DURATION,
@@ -12,8 +13,24 @@ use maybenot::{
     Machine,
 };
 use maybenot_simulator::{network::Network, parse_trace, sim, sim_advanced, SimulatorArgs};
+use once_cell::sync::Lazy;
 
 use enum_map::enum_map;
+
+/// Global runtime-modifiable variable to control which network type is used in simulation.
+/// Can be set when executing tests, e.g.:
+/// SAVE_TRACE=1 USE_NETWORK=hires cargo test --test network_tracing test_network_aggregate_blocking_many_packets
+/// Valid values: "bneck", "stdres", "hires", "fixed", with bneck default if var not defined
+static USE_NETWORK: Lazy<String> =
+    Lazy::new(|| env::var("USE_NETWORK").unwrap_or_else(|_| "bneck".to_string()));
+
+/// Global runtime-modifiable variable to control asserts should be skipped, for initial testing
+static SKIP_ASSERTS: Lazy<bool> = Lazy::new(|| match env::var("SKIP_ASSERTS").as_deref() {
+    Ok("0") => false,
+    Ok("1") => true,
+    Ok(v) => panic!("Invalid SKIP_ASSERTS value: {}. Expected 0 or 1.", v),
+    Err(_) => false,
+});
 
 #[test_log::test]
 fn test_network_excessive_delay() {
@@ -63,7 +80,9 @@ fn test_network_bottleneck() {
     let network = Network::new(Duration::from_millis(3), Some(3));
     let mut sq = parse_trace(input, network);
     let args = SimulatorArgs::new(network, 20, true);
-    let trace = sim_advanced(&[], &[], &mut sq, &args);
+    let trace = run_and_save_trace("6x0ts__3pps.simtrace", || {
+        sim_advanced(&[], &[], &mut sq, &args)
+    });
 
     let client_trace = trace
         .clone()
@@ -92,6 +111,117 @@ fn test_network_bottleneck() {
     assert_eq!(
         server_trace[5].time - server_trace[4].time,
         Duration::from_secs(1) / 3
+    );
+}
+
+// This tests the linktrace Network variant.
+#[test_log::test]
+fn test_network_linktrace() {
+    // send 6 events right away and verify increasing delay at the server
+    // Since the trace simulates 100 Mbps Ethernet, and packet size is 1500 bytes,
+    // the packets should be 120us apart.
+    let input = "0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n";
+    let network = Network::new(Duration::from_millis(3), None);
+    let mut sq = parse_trace(input, network);
+    let args = SimulatorArgs::new(network, 20, true);
+
+    let linktrace_args = get_test_simargs(args, USE_NETWORK.to_string(), TraceSpec::ether100M);
+
+    let filename = format!("6x0ts__100Meth__{}.simtrace", &USE_NETWORK.as_str());
+    let trace = run_and_save_trace(&filename, || {
+        sim_advanced(&[], &[], &mut sq, &linktrace_args)
+    });
+
+    let client_trace = trace
+        .clone()
+        .into_iter()
+        .filter(|t| t.client)
+        .collect::<Vec<_>>();
+    assert_eq!(client_trace.len(), 6);
+    assert_eq!(client_trace[0].time, client_trace[5].time);
+
+    let server_trace = trace
+        .clone()
+        .into_iter()
+        .filter(|t| !t.client)
+        .collect::<Vec<_>>();
+    assert_eq!(server_trace.len(), 6);
+
+    assert_eq!(
+        server_trace[1].time - server_trace[0].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        server_trace[2].time - server_trace[1].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        server_trace[3].time - server_trace[2].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        server_trace[4].time - server_trace[3].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        server_trace[5].time - server_trace[4].time,
+        Duration::from_micros(120)
+    );
+}
+
+#[test_log::test]
+fn test_network_linktrace_duplex() {
+    // send 3 events in both directions, with different traces in server->client
+    // and client->right server direction.
+    // Since the trace simulates 100 and 10 Mbps Ethernet, and packet size is 1500 bytes,
+    // the packets should be 120us and 1200 us apart.
+    let input = "0,sn\n0,sn\n0,sn\n3000000,rn\n3000000,rn\n3000000,rn\n";
+    let network = Network::new(Duration::from_millis(3), None);
+    let mut sq = parse_trace(input, network);
+    let args = SimulatorArgs::new(network, 20, true);
+
+    let linktrace_args = get_test_simargs(
+        args,
+        USE_NETWORK.to_string(),
+        TraceSpec::ether100M_10M_assym,
+    );
+
+    let filename = format!("2x3__100M_10M_assym__{}.simtrace", &USE_NETWORK.as_str());
+
+    let trace = run_and_save_trace(&filename, || {
+        sim_advanced(&[], &[], &mut sq, &linktrace_args)
+    });
+
+    let client_trace = trace
+        .clone()
+        .into_iter()
+        .filter(|t| t.client)
+        .collect::<Vec<_>>();
+    assert_eq!(client_trace.len(), 6);
+    assert_eq!(client_trace[0].time, client_trace[2].time);
+    assert_eq!(
+        client_trace[4].time - client_trace[3].time,
+        Duration::from_micros(120)
+    );
+    assert_eq!(
+        client_trace[5].time - client_trace[4].time,
+        Duration::from_micros(120)
+    );
+
+    let server_trace = trace
+        .clone()
+        .into_iter()
+        .filter(|t| !t.client)
+        .collect::<Vec<_>>();
+    assert_eq!(server_trace.len(), 6);
+    assert_eq!(server_trace[0].time, server_trace[2].time);
+    assert_eq!(
+        server_trace[4].time - server_trace[3].time,
+        Duration::from_micros(1200)
+    );
+    assert_eq!(
+        server_trace[5].time - server_trace[4].time,
+        Duration::from_micros(1200)
     );
 }
 
@@ -158,14 +288,15 @@ fn test_blocking_packet_reordering() {
     let delay = Duration::from_millis(50);
     let network = Network::new(delay, None);
     let pq = parse_trace(BE000_TRACE, network);
-    let trace = sim(
-        &[ratio3_machine()],
-        &[],
-        &mut pq.clone(),
-        network.delay,
-        10000,
-        true,
-    );
+    let base_args = SimulatorArgs::new(network, 10000, true);
+
+    let args = get_test_simargs(base_args, USE_NETWORK.to_string(), TraceSpec::ether100M);
+
+    let outfile = format!("test_blocking_packet_reordering__{}.simtrace", *USE_NETWORK);
+    let trace = run_and_save_trace(outfile.as_str(), || {
+        sim_advanced(&[ratio3_machine()], &[], &mut pq.clone(), &args)
+    });
+
     let client_trace = trace
         .clone()
         .into_iter()
@@ -373,7 +504,7 @@ fn test_network_aggregate_blocking_one_packet() {
     // - delay goes into effect at 41 at client
     // - delay goes into effect at 31 at server
     let result = "0,st 5,st 40,st 40,rt 45,st 45,rt";
-    run_test_sim(
+    run_test_sim_trace(
         base,
         result,
         delay,
@@ -383,6 +514,9 @@ fn test_network_aggregate_blocking_one_packet() {
         50,
         true, // only packets
         true, // ms, needed because delay window is expressed in ms
+        "test_network_aggregate_blocking_one_packet__machine_at_client",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
     );
 
     // machine at client and server
@@ -394,7 +528,7 @@ fn test_network_aggregate_blocking_one_packet() {
     // - delay goes into effect at 31 at client
     // - delay goes into effect at 61 at server
     let result = "0,st 5,st 30,rt 35,rt 45,rt 48,st 49,st 88,rt";
-    run_test_sim(
+    run_test_sim_trace(
         base,
         result,
         delay,
@@ -404,6 +538,9 @@ fn test_network_aggregate_blocking_one_packet() {
         50,
         true,
         true,
+        "test_network_aggregate_blocking_one_packet__machine_at_client_and_server",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
     );
 }
 
@@ -422,13 +559,52 @@ fn test_network_aggregate_blocking_many_packets() {
     );
     let delay = Duration::from_millis(10);
 
+    // Temp Test with microsecs
+    // machine at client and server
+    let base = "0,sn 1000,sn 2000,sn 2000,sn 3000,sn 29000,rn 30000,rn 31000,rn 42000,sn 80000,rn";
+    // blocking at 0, delaying burst 1-2 by 3 (tail, window 1ms) until 5:
+    // - delay goes into effect at 42 at client
+    // - delay goes into effect at 32 at server
+    // @server: blocking at 19, delaying 20-21 by 4 (tail, window 1ms) until 25
+    // - delay goes into effect at 30 at client
+    // - delay goes into effect at 60 at server
+    let result =
+        "0,st 5000,st 5000,st 5000,st 5000,st 29000,rt 34000,rt 34000,rt 49000,st 87000,rt";
+    run_test_sim_trace(
+        base,
+        result,
+        delay,
+        &[m.clone()],
+        &[m.clone()],
+        true,
+        50,
+        true,
+        false,
+        "test_network_aggregate_blocking_many_packets__machine_at_client_and_server",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
+    );
+
     // machine only at client
     let base = "0,sn 1,sn 2,sn 2,sn 3,sn 40,sn 40,rn 42,sn 42,rn";
     // blocking at 0, delaying burst 1-2 by 3 (tail, window 1ms) until 5:
     // - delay goes into effect at 42 at client
     // - delay goes into effect at 32 at server
     let result = "0,st 5,st 5,st 5,st 5,st 40,st 40,rt 45,st 45,rt";
-    run_test_sim(base, result, delay, &[m.clone()], &[], true, 50, true, true);
+    run_test_sim_trace(
+        base,
+        result,
+        delay,
+        &[m.clone()],
+        &[],
+        true,
+        50,
+        true,
+        true,
+        "test_network_aggregate_blocking_many_packets__machine_at_client",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
+    );
 
     // machine at client and server
     let base = "0,sn 1,sn 2,sn 2,sn 3,sn 29,rn 30,rn 31,rn 42,sn 80,rn";
@@ -439,7 +615,7 @@ fn test_network_aggregate_blocking_many_packets() {
     // - delay goes into effect at 30 at client
     // - delay goes into effect at 60 at server
     let result = "0,st 5,st 5,st 5,st 5,st 29,rt 34,rt 34,rt 49,st 87,rt";
-    run_test_sim(
+    run_test_sim_trace(
         base,
         result,
         delay,
@@ -449,6 +625,9 @@ fn test_network_aggregate_blocking_many_packets() {
         50,
         true,
         true,
+        "test_network_aggregate_blocking_many_packets__machine_at_client_and_server",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
     );
 }
 
@@ -471,12 +650,25 @@ fn test_network_aggregate_blocking_many_packets_normal_no_delay() {
     let base = "0,sn 4,sn 5,sn 45,sn 45,rn 47,sn 47,rn";
     // blocking at 0, delaying 4 BUT also 5 normal so no delay:
     let result = "0,st 5,st 5,st 45,st 45,rt 47,st 47,rt";
-    run_test_sim(base, result, delay, &[m.clone()], &[], true, 50, true, true);
+    run_test_sim_trace(
+        base,
+        result,
+        delay,
+        &[m.clone()],
+        &[],
+        true,
+        50,
+        true,
+        true,
+        "test_network_aggregate_blocking_many_packets_normal_no_delay__client",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
+    );
 
     // machine at client and server
     let base = "0,sn 4,sn 5,sn 45,sn 45,rn 47,sn 49,rn 50,rn";
     let result = "0,st 5,st 5,st 45,st 45,rt 47,st 50,rt 50,rt";
-    run_test_sim(
+    run_test_sim_trace(
         base,
         result,
         delay,
@@ -486,6 +678,9 @@ fn test_network_aggregate_blocking_many_packets_normal_no_delay() {
         50,
         true,
         true,
+        "test_network_aggregate_blocking_many_packets_normal_no_delay__client_and_server",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
     );
 }
 
@@ -510,7 +705,20 @@ fn test_network_aggregate_padding_bypass_replace_one_packet() {
     // - delay goes into effect at 41 at client
     // - delay goes into effect at 31 at server
     let result = "0,st 5,st 40,rt 45,rt 100,st 100,st";
-    run_test_sim(base, result, delay, &[m.clone()], &[], true, 50, true, true);
+    run_test_sim_trace(
+        base,
+        result,
+        delay,
+        &[m.clone()],
+        &[],
+        true,
+        50,
+        true,
+        true,
+        "test_network_aggregate_padding_bypass_replace_one_packet__client",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
+    );
 
     // machine at client and server
     let base = "0,sn 1,sn 40,sn 40,rn 41,sn 41,rn 100,rn 100,sn";
@@ -521,7 +729,7 @@ fn test_network_aggregate_padding_bypass_replace_one_packet() {
     // resulting in 36 delay
     // total delay: 36+4+60 = 100
     let result = "0,st 5,st 40,rt 45,rt 100,st 100,st 140,rt 200,st";
-    run_test_sim(
+    run_test_sim_trace(
         base,
         result,
         delay,
@@ -531,6 +739,9 @@ fn test_network_aggregate_padding_bypass_replace_one_packet() {
         50,
         true,
         true,
+        "test_network_aggregate_padding_bypass_replace_one_packet__client_and_server",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
     );
 }
 
@@ -554,7 +765,7 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
     // the padding at 2000 sends packet blocked at 15000, but since 2499 is
     // within the 1000 microseconds window, no delay is added
     let result = "0,st 2000,st 40000,rt 41000,rt 100000,st 100000,st 100000,st";
-    run_test_sim(
+    run_test_sim_trace(
         base,
         result,
         delay,
@@ -564,6 +775,9 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
         50,
         true,
         false,
+        "test_network_aggregate_padding_bypass_replace_one_packet_normal__client",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
     );
 
     // machine at client and server
@@ -572,7 +786,7 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
     // blocked at 415000, but since 42499 is within the 1000 microseconds
     // window, no delay is added
     let result = "0,st 2000,st 40000,rt 42000,rt 100000,st 100000,st 100000,st 140000,rt";
-    run_test_sim(
+    run_test_sim_trace(
         base,
         result,
         delay,
@@ -582,6 +796,9 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
         50,
         true,
         false,
+        "test_network_aggregate_padding_bypass_replace_one_packet_normal__client_and_server",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
     );
 }
 
@@ -604,12 +821,25 @@ fn test_network_aggregate_padding_bypass_replace_many_packets() {
     let base = "0,sn 1,sn 40,sn 40,rn 41,sn 41,rn";
     // causes 4 delay by blocking 1 until 5, in effect at server at 31
     let result = "0,st 5,st 40,rt 45,rt 100,st 100,st";
-    run_test_sim(base, result, delay, &[m.clone()], &[], true, 50, true, true);
+    run_test_sim_trace(
+        base,
+        result,
+        delay,
+        &[m.clone()],
+        &[],
+        true,
+        50,
+        true,
+        true,
+        "test_network_aggregate_padding_bypass_replace_many_packets__client",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
+    );
 
     // machine at client and server
     let base = "0,sn 1,sn 40,sn 41,rn 42,sn 42,rn 50,rn 70,sn";
     let result = "0,st 5,st 45,rt 50,rt 100,st 100,st 100,st 145,rt";
-    run_test_sim(
+    run_test_sim_trace(
         base,
         result,
         delay,
@@ -619,6 +849,9 @@ fn test_network_aggregate_padding_bypass_replace_many_packets() {
         50,
         true,
         true,
+        "test_network_aggregate_padding_bypass_replace_many_packets__client_and_server",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
     );
 }
 
@@ -640,12 +873,25 @@ fn test_network_aggregate_padding_bypass_replace_many_packets_window() {
     // machine only at client
     let base = "0,sn 1,sn 2,sn 40,sn 40,rn 41,sn 41,rn";
     let result = "0,st 5,st 40,rt 41,rt 100,st 100,st 100,st";
-    run_test_sim(base, result, delay, &[m.clone()], &[], true, 50, true, true);
+    run_test_sim_trace(
+        base,
+        result,
+        delay,
+        &[m.clone()],
+        &[],
+        true,
+        50,
+        true,
+        true,
+        "test_network_aggregate_padding_bypass_replace_many_packets_window__client",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
+    );
 
     // machine at client and server
     let base = "0,sn 1,sn 2,sn 40,sn 40,rn 41,sn 41,rn 42,rn";
     let result = "0,st 5,st 40,rt 45,rt 100,st 100,st 100,st 140,rt";
-    run_test_sim(
+    run_test_sim_trace(
         base,
         result,
         delay,
@@ -655,5 +901,8 @@ fn test_network_aggregate_padding_bypass_replace_many_packets_window() {
         50,
         true,
         true,
+        "test_network_aggregate_padding_bypass_replace_many_packets_window__client_and_server",
+        &USE_NETWORK,
+        *SKIP_ASSERTS,
     );
 }
