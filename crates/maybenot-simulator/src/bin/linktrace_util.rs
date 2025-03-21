@@ -19,8 +19,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Creates a trace binary file
-    CreateTracebin {
+    /// Creates a high resolution trace binary file (1 us slots)
+    CreateTracebinHi {
         #[arg(long)]
         client_bw_tracefile: String,
 
@@ -36,13 +36,24 @@ enum Commands {
         #[arg(long)]
         binpktsizes: String,
     },
+    /// Creates a standard resolution trace binary file (1 ms slots)
+    CreateTracebinStd {
+        #[arg(long)]
+        client_bw_tracefile: String,
+
+        #[arg(long)]
+        server_bw_tracefile: String,
+
+        #[arg(long)]
+        save_file: String,
+    },
     /// Generates synthetic link trace
     CreateSynthlinktrace {
         #[arg(long)]
         save_file: String,
 
         #[arg(long, default_value_t = 10_000_000)]
-        total_lines: usize,
+        linecount: usize,
 
         #[arg(long, default_value_t = 10000)]
         burst_interval: usize,
@@ -62,8 +73,8 @@ enum Commands {
         #[arg(long, default_value_t = 10)]
         frame_burst_length: usize,
 
-        #[arg(long, default_value_t = 1500)]
-        slot_bytes: usize,
+        #[arg(long, default_value_t = 1500.0)]
+        slot_bytes: f64,
 
         #[arg(long)]
         preset: Option<String>,
@@ -77,18 +88,28 @@ enum Commands {
     ListPresets,
 }
 
+struct TraceParams {
+    burst_interval: usize,
+    burst_length: usize,
+    sub_burst_interval: usize,
+    sub_burst_length: usize,
+    frame_burst_interval: usize,
+    frame_burst_length: usize,
+    slot_bytes: f64,
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::CreateTracebin {
+        Commands::CreateTracebinHi {
             client_bw_tracefile,
             server_bw_tracefile,
             save_file,
             sizebins,
             binpktsizes,
         } => {
-            create_tracebin(
+            create_tracebin_hi(
                 client_bw_tracefile,
                 server_bw_tracefile,
                 save_file,
@@ -96,9 +117,16 @@ fn main() {
                 binpktsizes,
             );
         }
+        Commands::CreateTracebinStd {
+            client_bw_tracefile,
+            server_bw_tracefile,
+            save_file,
+        } => {
+            create_tracebin_std(client_bw_tracefile, server_bw_tracefile, save_file);
+        }
         Commands::CreateSynthlinktrace {
             save_file,
-            total_lines,
+            linecount,
             burst_interval,
             burst_length,
             sub_burst_interval,
@@ -109,7 +137,6 @@ fn main() {
             preset,
         } => {
             let params = TraceParams {
-                total_lines: *total_lines,
                 burst_interval: *burst_interval,
                 burst_length: *burst_length,
                 sub_burst_interval: *sub_burst_interval,
@@ -118,7 +145,7 @@ fn main() {
                 frame_burst_length: *frame_burst_length,
                 slot_bytes: *slot_bytes,
             };
-            match create_synthlinktrace(save_file, params, preset.clone()) {
+            match create_synthlinktrace(save_file, *linecount, params, preset.clone()) {
                 Ok(_) => {
                     println!("Synthetic link trace created successfully");
                 }
@@ -145,7 +172,7 @@ fn trace_info(filename: &str) {
     println!("{}", linktrace);
 }
 
-fn create_tracebin(
+fn create_tracebin_hi(
     // ul = uplink = client,  dl = downlink = server  directions
     ul_bw_tracefile: &str,
     dl_bw_tracefile: &str,
@@ -177,46 +204,59 @@ fn create_tracebin(
 
     let sizebin_lookuptable = SizebinLookupTable::new(&sizebinvec, &binpktvec);
 
-    let linktrace = LinkTrace::new(dl_bw_tracefile, ul_bw_tracefile, sizebin_lookuptable);
+    let linktrace = LinkTrace::new_hi_res(dl_bw_tracefile, ul_bw_tracefile, sizebin_lookuptable);
 
     save_linktrace_to_file(&format!("{}{}", save_file, ".ltbin.gz"), &linktrace)
         .expect("Failed to save LinkTrace to ltbin file");
 }
 
-struct TraceParams {
-    total_lines: usize,
-    burst_interval: usize,
-    burst_length: usize,
-    sub_burst_interval: usize,
-    sub_burst_length: usize,
-    frame_burst_interval: usize,
-    frame_burst_length: usize,
-    slot_bytes: usize,
+fn create_tracebin_std(
+    // ul = uplink = client,  dl = downlink = server  directions
+    ul_bw_tracefile: &str,
+    dl_bw_tracefile: &str,
+    save_file: &str,
+) {
+    if !ul_bw_tracefile.ends_with(".tr") && !ul_bw_tracefile.ends_with(".tr.gz") {
+        panic!("The uplink tracefile must end with .tr or .tr.gz");
+    }
+    if !dl_bw_tracefile.ends_with(".tr") && !dl_bw_tracefile.ends_with(".tr.gz") {
+        panic!("The downlink tracefile must end with .tr or .tr.gz");
+    }
+
+    println!(
+        "Creating trace binary file with uplink tracefile: {}, downlink tracefile: {}",
+        ul_bw_tracefile, dl_bw_tracefile
+    );
+
+    let linktrace = LinkTrace::new_std_res(dl_bw_tracefile, ul_bw_tracefile);
+
+    save_linktrace_to_file(&format!("{}{}", save_file, ".ltbin.gz"), &linktrace)
+        .expect("Failed to save LinkTrace to ltbin file");
 }
 
 fn list_presets() {
     println!("Available presets:");
-    println!("  starlink_dl");
-    println!("  starlink_ul");
-    println!("  ether1G");
-    println!("  ether10M");
-    println!("  ether10M_5M");
-    println!("  ether100M_5K");
-    println!("  ether100M_5M");
-    println!("  ether100M_40M");
+    println!("  hires_starlink_dl");
+    println!("  hires_starlink_ul");
+    println!("  hires_ether1G");
+    println!("  hires_ether100M");
+    println!("  hires_ether10M");
+    println!("  stdres_ether1G");
+    println!("  stdres_ether100M");
+    println!("  stdres_ether10M");
+    println!("  stdres_test100K");
 }
 
 fn create_synthlinktrace(
     filename: &str,
+    linecount: usize,
     traceparams: TraceParams,
     preset: Option<String>,
 ) -> Result<(), String> {
-    const DEFAULT_TOTAL_LINES: usize = 10_000_000;
     if !filename.ends_with(".tr") && !filename.ends_with(".tr.gz") {
         panic!("The tracefile must end with .tr or .tr.gz");
     }
     let TraceParams {
-        total_lines,
         burst_interval,
         burst_length,
         sub_burst_interval,
@@ -225,98 +265,98 @@ fn create_synthlinktrace(
         frame_burst_length,
         slot_bytes,
     } = match preset.as_deref() {
-        Some("starlink_dl") => TraceParams {
-            total_lines: DEFAULT_TOTAL_LINES,
+        Some("hires_starlink_dl") => TraceParams {
             burst_interval: 13333,
             burst_length: 5000,
             sub_burst_interval: 1333,
             sub_burst_length: 700,
             frame_burst_interval: 12,
             frame_burst_length: 1,
-            slot_bytes: 1500,
+            slot_bytes: 1500.0,
         },
-        Some("starlink_ul") => TraceParams {
-            total_lines: DEFAULT_TOTAL_LINES,
+        Some("hires_starlink_ul") => TraceParams {
             burst_interval: 13333,
             burst_length: 5000,
             sub_burst_interval: 1333,
             sub_burst_length: 350,
             frame_burst_interval: 60,
             frame_burst_length: 1,
-            slot_bytes: 1500,
+            slot_bytes: 1500.0,
         },
-        Some("ether1G") => TraceParams {
-            total_lines: DEFAULT_TOTAL_LINES,
+        Some("hires_ether1G") => TraceParams {
             burst_interval: 1,
             burst_length: 1,
             sub_burst_interval: 1,
             sub_burst_length: 1,
             frame_burst_interval: 1,
             frame_burst_length: 1,
-            slot_bytes: 125,
+            slot_bytes: 125.0,
         },
-        Some("ether10M") => TraceParams {
-            total_lines: DEFAULT_TOTAL_LINES,
-            burst_interval: 4,
+        Some("hires_ether100M") => TraceParams {
+            burst_interval: 1,
             burst_length: 1,
             sub_burst_interval: 1,
             sub_burst_length: 1,
             frame_burst_interval: 1,
             frame_burst_length: 1,
-            slot_bytes: 5,
+            slot_bytes: 12.5,
         },
-        Some("ether10M_5M") => TraceParams {
-            total_lines: 5_000_000,
-            burst_interval: 4,
-            burst_length: 1,
-            sub_burst_interval: 1,
-            sub_burst_length: 1,
-            frame_burst_interval: 1,
-            frame_burst_length: 1,
-            slot_bytes: 5,
-        },
-        Some("ether100M_5K") => TraceParams {
-            total_lines: 5000,
+        Some("hires_ether10M") => TraceParams {
             burst_interval: 2,
             burst_length: 1,
             sub_burst_interval: 1,
             sub_burst_length: 1,
             frame_burst_interval: 1,
             frame_burst_length: 1,
-            slot_bytes: 25,
+            slot_bytes: 2.5,
         },
-        Some("ether100M_5M") => TraceParams {
-            total_lines: 5_000_000,
-            burst_interval: 2,
+        Some("hires_test1M") => TraceParams {
+            burst_interval: 40,
             burst_length: 1,
             sub_burst_interval: 1,
             sub_burst_length: 1,
             frame_burst_interval: 1,
             frame_burst_length: 1,
-            slot_bytes: 25,
+            slot_bytes: 5.0,
         },
-        Some("ether100M_40M") => TraceParams {
-            total_lines: 40_000_000,
-            burst_interval: 2,
+        Some("stdres_ether1G") => TraceParams {
+            burst_interval: 1,
             burst_length: 1,
             sub_burst_interval: 1,
             sub_burst_length: 1,
             frame_burst_interval: 1,
             frame_burst_length: 1,
-            slot_bytes: 25,
+            slot_bytes: 125000.0,
         },
-        Some("test1M") => TraceParams {
-            total_lines: DEFAULT_TOTAL_LINES,
-            burst_interval: 200,
+        Some("stdres_ether100M") => TraceParams {
+            burst_interval: 1,
             burst_length: 1,
             sub_burst_interval: 1,
             sub_burst_length: 1,
             frame_burst_interval: 1,
             frame_burst_length: 1,
-            slot_bytes: 25,
+            slot_bytes: 12500.0,
+        },
+        Some("stdres_ether10M") => TraceParams {
+            burst_interval: 1,
+            burst_length: 1,
+            sub_burst_interval: 1,
+            sub_burst_length: 1,
+            frame_burst_interval: 1,
+            frame_burst_length: 1,
+            slot_bytes: 1250.0,
+        },
+        Some("stdres_test100K") => TraceParams {
+            burst_interval: 1,
+            burst_length: 1,
+            sub_burst_interval: 1,
+            sub_burst_length: 1,
+            frame_burst_interval: 1,
+            frame_burst_length: 1,
+            slot_bytes: 12.5,
         },
         None => traceparams,
-        _ => return Err("Invalid preset provided!".to_string()),
+        _ => return Err(format!("Invalid preset provided: {:?}", preset)),
     };
 
     let mut file: Box<dyn Write> = if filename.ends_with(".tr.gz") {
@@ -326,14 +366,33 @@ fn create_synthlinktrace(
         Box::new(File::create(filename).expect("Failed to create file"))
     };
 
-    for line in 0..total_lines {
+    // Slot_bytes are allowed to be either .0 or .5 so we need to handle this by alternating
+    let fract = slot_bytes.fract();
+    if (fract - 0.0).abs() > f64::EPSILON && (fract - 0.5).abs() > f64::EPSILON {
+        panic!("slot_bytes must be either a whole number or a half (.0 or .5)");
+    }
+
+    let is_half = (fract - 0.5).abs() < f64::EPSILON;
+    let mut toggle = false; // Used to alternate if slot_bytes has a .5 fractional part
+
+    for line in 0..linecount {
         let within_burst = line % burst_interval < burst_length;
         let within_sub_burst = (line % burst_interval) % sub_burst_interval < sub_burst_length;
         let frame_position = (line % sub_burst_interval) % frame_burst_interval;
         let on_frame_burst = frame_position < frame_burst_length;
 
         let value = if within_burst && within_sub_burst && on_frame_burst {
-            slot_bytes
+            if is_half {
+                let result = if toggle {
+                    slot_bytes.ceil() as u32
+                } else {
+                    slot_bytes.floor() as u32
+                };
+                toggle = !toggle;
+                result
+            } else {
+                slot_bytes as u32
+            }
         } else {
             0
         };

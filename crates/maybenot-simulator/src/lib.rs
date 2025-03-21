@@ -397,9 +397,9 @@ pub struct SimulatorArgs {
     /// Optional simulated network bandwidth linktrace.
     pub linktrace: Option<Arc<LinkTrace>>,
     /// Optional client bottleneck throughput
-    pub client_tput: Option<usize>,
+    pub client_tput: Option<u64>,
     /// Optional server bottleneck throughput
-    pub server_tput: Option<usize>,
+    pub server_tput: Option<u64>,
 }
 
 impl SimulatorArgs {
@@ -1099,10 +1099,15 @@ pub fn parse_trace_advanced(
     // absolute 0
     //let starting_time = Instant::now();
 
+    // Introduce mitigation as mk_start_instant and network.delay() will fall
+    // on a ms or us boundary, and small initialization timing variations can cause
+    // initial current_time to be placed on either side. If unmitigated, this behavior
+    // can cause some randomness in output results, eg when ethernet burst_interval=2.
+    let boundary_jitter_mitigation = Duration::from_nanos(500500);
     // Use a common starting time for simqueue and linktrace indexing.
     // Adjust it to the subtraction of network delay made below to ensure
     // no negative indexes
-    let starting_time = mk_start_instant() + network.delay;
+    let starting_time = mk_start_instant() + network.delay + boundary_jitter_mitigation;
 
     for l in trace.lines() {
         let parts: Vec<&str> = l.split(',').collect();
