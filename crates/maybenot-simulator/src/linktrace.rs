@@ -420,8 +420,8 @@ pub fn mk_sizebin_lookuptable() -> SizebinLookupTable {
 }
 
 // Save the entire LinkTrace instance to a file, optionally gzipped
-pub fn save_linktrace_to_file(file_path: &str, link_trace: &LinkTrace) -> io::Result<()> {
-    let encoded: Vec<u8> = bincode::serialize(link_trace).unwrap();
+pub fn save_linktrace_to_file(file_path: &str, linktrace: &LinkTrace) -> io::Result<()> {
+    let encoded: Vec<u8> = bincode::serialize(linktrace).unwrap();
 
     if file_path.ends_with(".gz") {
         // Save as gzipped
@@ -453,6 +453,122 @@ pub fn load_linktrace_from_file(file_path: &str) -> io::Result<Arc<LinkTrace>> {
         file.read_to_end(&mut encoded)?;
     }
 
-    let link_trace: LinkTrace = bincode::deserialize(&encoded).unwrap();
-    Ok(Arc::new(link_trace))
+    let linktrace: LinkTrace = bincode::deserialize(&encoded).unwrap();
+    Ok(Arc::new(linktrace))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(
+        expected = "index out of bounds: the len is 50 but the index is 18446744073709551615"
+    )]
+    fn sizebin_lookup_table_panic_below_min() {
+        // Example boundary values
+        let boundaries = [0, 10, 20, 30, 50];
+        let bin_tput_values = [5, 15, 25, 40];
+        let sizebin_lookuptable = SizebinLookupTable::new(&boundaries, &bin_tput_values);
+
+        // This should panic because -1 is below the minimum boundary value (0)
+        sizebin_lookuptable.get_bin_idx(-1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Value 50 is above range [0, 50")]
+    fn sizebin_lookup_table_panic_above_max() {
+        // Example boundary values
+        let boundaries = [0, 10, 20, 30, 50];
+        let bin_tput_values = [5, 15, 25, 40];
+        let sizebin_lookuptable = SizebinLookupTable::new(&boundaries, &bin_tput_values);
+
+        // This should panic because 50 is outside the maximum boundary value (50)
+        sizebin_lookuptable.get_bin_idx(50);
+    }
+
+    #[test]
+    #[should_panic(expected = "Throughput value 30 at index 2 is out of bounds for bin 20-30.")]
+    fn sizebin_lookup_table_panic_above_binboundary() {
+        // Example boundary values
+        let boundaries = [0, 10, 20, 30, 50];
+        let bin_tput_values = [5, 15, 30, 40];
+        let sizebin_lookuptable = SizebinLookupTable::new(&boundaries, &bin_tput_values);
+
+        // This should panic because 50 is outside the maximum boundary value (50)
+        sizebin_lookuptable.get_bin_idx(50);
+    }
+
+    #[test]
+    fn sizebin_lookup_table_within_range() {
+        // Example boundary values
+        let boundaries = [0, 10, 20, 30, 50];
+        let bin_tput_values = [9, 11, 25, 30];
+        let sizebin_lookuptable = SizebinLookupTable::new(&boundaries, &bin_tput_values);
+
+        // Test various values within the range
+        assert_eq!(sizebin_lookuptable.get_bin_idx(5), 0); // 10 -> Bin 0
+        assert_eq!(sizebin_lookuptable.get_bin_idx(10), 1); // 15 -> Bin 1
+        assert_eq!(sizebin_lookuptable.get_bin_idx(15), 1); // 20 -> Bin 1
+        assert_eq!(sizebin_lookuptable.get_bin_idx(25), 2); // 25 -> Bin 2
+        assert_eq!(sizebin_lookuptable.get_bin_idx(30), 3); // 30 -> Bin 3
+        assert_eq!(sizebin_lookuptable.get_bin_idx(35), 3); // 35 -> Bin 3
+        assert_eq!(sizebin_lookuptable.get_bin_idx(49), 3); // 50 -> Bin 3
+    }
+
+    #[test]
+    fn preconfig_sizebin_lookup() {
+        let sizebin_lookuptable = mk_sizebin_lookuptable();
+
+        // These are depenent on the boundaries used in mk_sizebin_lookuptable
+        let expected = vec![64, 240, 576, 1200, 1420];
+        for (i, value) in vec![50, 200, 520, 1200, 1201].into_iter().enumerate() {
+            let bin_result = std::panic::catch_unwind(|| sizebin_lookuptable.get_bin_idx(value));
+            let bin_pktsize = sizebin_lookuptable.get_bin_pktsize(value);
+            match bin_result {
+                Ok(_) => assert_eq!(bin_pktsize, expected[i], "bin_pktsize not as expected"),
+                Err(e) => std::panic::resume_unwind(e),
+            }
+        }
+    }
+
+    #[test]
+    fn save_load_linktrace() {
+        let dl_traceinput = "tests/ether100M_synth5K.tr";
+        let ul_traceinput = "tests/ether100M_synth5K.tr";
+        let sizebin_lookuptable = mk_sizebin_lookuptable();
+        let link_trace = Arc::new(LinkTrace::new_hi_res(
+            dl_traceinput,
+            ul_traceinput,
+            sizebin_lookuptable,
+        ));
+
+        // Save the instance to a file
+        let _ = save_linktrace_to_file("tests/ether100M_synth5K_tst.ltbin.gz", &link_trace)
+            .expect("Failed to save LinkTrace ltbin to file");
+
+        // Load the instance back from the file
+        let loaded_link_trace = load_linktrace_from_file("tests/ether100M_synth5K_tst.ltbin.gz")
+            .expect("Failed to load LinkTrace ltbin from file");
+        assert_eq!(link_trace, loaded_link_trace);
+    }
+
+    #[test]
+    fn linksimtrace_lookup() {
+        // Load the instance back from the test above
+        let linksim_trace = load_linktrace_from_file("tests/ether100M_synth5K.ltbin.gz")
+            .expect("Failed to load LinkTrace ltbin from file");
+        // Confirm that different packet sizes give different busy_to times
+        assert_eq!(linksim_trace.get_dl_busy_to(1000, 1500), 1120);
+        assert_eq!(linksim_trace.get_dl_busy_to(1000, 750), 1068);
+        assert_eq!(linksim_trace.get_dl_busy_to(1000, 56), 1006);
+
+        assert_eq!(linksim_trace.get_dl_busy_to(3245, 1500), 3365);
+
+        // Packets that that would have a busy_to time
+        // after the end of the link trace return 0.
+        assert_eq!(linksim_trace.get_dl_busy_to(4989, 1500), 0);
+        assert_eq!(linksim_trace.get_dl_busy_to(4989, 56), 4995);
+        assert_eq!(linksim_trace.get_dl_busy_to(4999, 1500), 0);
+    }
 }

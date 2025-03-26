@@ -228,15 +228,15 @@ fn check_trace_length(trace: &LinkTrace, scalefactor: usize) {
     if dl_len > 100000 * scalefactor {
         println!(
             "Warning: The traces has a long length > 100 sec. Now it is {:.3} sec",
-            dl_len as f64/ (1e3_f64 * scalefactor as f64)
+            dl_len as f64 / (1e3_f64 * scalefactor as f64)
         );
     }
 }
 
 fn create_tracebin_hi(
     // ul = uplink = client,  dl = downlink = server  directions
-    ul_bw_tracefile: &str,
     dl_bw_tracefile: &str,
+    ul_bw_tracefile: &str,
     save_file: &str,
     sizebins: &str,
     binpktsizes: &str,
@@ -275,8 +275,8 @@ fn create_tracebin_hi(
 
 fn create_tracebin_std(
     // ul = uplink = client,  dl = downlink = server  directions
-    ul_bw_tracefile: &str,
     dl_bw_tracefile: &str,
+    ul_bw_tracefile: &str,
     save_file: &str,
 ) {
     if !ul_bw_tracefile.ends_with(".tr") && !ul_bw_tracefile.ends_with(".tr.gz") {
@@ -324,8 +324,7 @@ fn create_tracebundle(tracedirectory: &str, bundleinfo: &str, save_file: &str) {
             let trace = load_linktrace_from_file(filename)
                 .unwrap_or_else(|_| panic!("Failed to load linktrace from file: {}", filename));
             assert_eq!(Arc::strong_count(&trace), 1);
-            let non_arc_trace = Arc::try_unwrap(trace).unwrap();
-            traces.push(non_arc_trace);
+            traces.push(trace);
             tracefilenames.push(filename.to_string());
         }
     }

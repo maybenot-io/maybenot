@@ -6,16 +6,44 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::File;
 use std::io::{self, Read, Write};
+use std::sync::Arc;
+
+// Inline helper to serialize Vec<Arc<LinkTrace>> by serializing a Vec<&LinkTrace>
+fn serialize_vec_arc<S>(vec: &[Arc<LinkTrace>], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    // Create a temporary vector of references to LinkTrace
+    let vec_inner: Vec<&LinkTrace> = vec.iter().map(|arc| arc.as_ref()).collect();
+    vec_inner.serialize(serializer)
+}
+
+// Inline helper to deserialize Vec<Arc<LinkTrace>> by deserializing a Vec<LinkTrace>
+fn deserialize_vec_arc<'de, D>(deserializer: D) -> Result<Vec<Arc<LinkTrace>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let vec_inner = Vec::<LinkTrace>::deserialize(deserializer)?;
+    Ok(vec_inner.into_iter().map(Arc::new).collect())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkBundle {
     pub bundleinfo: String,
-    pub linktraces: Vec<LinkTrace>,
+    #[serde(
+        serialize_with = "serialize_vec_arc",
+        deserialize_with = "deserialize_vec_arc"
+    )]
+    pub linktraces: Vec<Arc<LinkTrace>>,
     pub tracefilenames: Vec<String>,
 }
 
 impl LinkBundle {
-    pub fn new(bundleinfo: &str, linktraces: Vec<LinkTrace>, tracefilenames: Vec<String>) -> Self {
+    pub fn new(
+        bundleinfo: &str,
+        linktraces: Vec<Arc<LinkTrace>>,
+        tracefilenames: Vec<String>,
+    ) -> Self {
         Self {
             bundleinfo: bundleinfo.to_string(),
             linktraces,
@@ -23,7 +51,7 @@ impl LinkBundle {
         }
     }
 
-    pub fn get_index_trace(&self, index: usize) -> LinkTrace {
+    pub fn get_index_trace(&self, index: usize) -> Arc<LinkTrace> {
         if index >= self.linktraces.len() {
             panic!("Index out of bounds in LinkBundle.");
         }
@@ -64,7 +92,8 @@ impl fmt::Display for LinkBundle {
         writeln!(f, "Bundle Info: {}", self.bundleinfo)?;
         writeln!(f, "Number of traces: {}", self.linktraces.len())?;
         if !self.linktraces.is_empty() {
-            writeln!(f, "Trace at index 0:\n{}", self.linktraces[0])
+            // Dereference the Arc to display the inner LinkTrace.
+            writeln!(f, "Trace at index 0:\n{}", *self.linktraces[0])
         } else {
             writeln!(f, "No traces available.")
         }
@@ -83,14 +112,14 @@ mod tests {
 
     #[test]
     fn test_get_index_trace() {
-        let trace = create_dummy_linktrace();
+        let linktrace = std::sync::Arc::new(create_dummy_linktrace());
         let bundle = LinkBundle::new(
             "Test Bundle",
-            vec![trace.clone()],
-            vec!["1".to_string(), "2".to_string()],
+            vec![linktrace.clone()],
+            vec!["1".to_string()],
         );
         let returned_trace = bundle.get_index_trace(0);
-        assert_eq!(returned_trace, trace);
+        assert_eq!(returned_trace, linktrace);
     }
 
     #[test]
@@ -99,7 +128,7 @@ mod tests {
         let trace2 = create_dummy_linktrace();
         let bundle = LinkBundle::new(
             "Test Bundle",
-            vec![trace1, trace2],
+            vec![trace1.into(), trace2.into()],
             vec!["1".to_string(), "2".to_string()],
         );
         let file_path = "test_bundle.bin";
