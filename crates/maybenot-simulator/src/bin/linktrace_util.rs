@@ -3,12 +3,15 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::fs::File;
 use std::io::Write;
+use std::sync::Arc;
 
 use maybenot_simulator::linktrace::{
     load_linktrace_from_file, save_linktrace_to_file, LinkTrace, SizebinLookupTable,
 };
 
-//use maybenot_simulator::network::{Network, NetworkLinktrace};
+use maybenot_simulator::linkbundle::{
+    load_linkbundle_from_file, save_linkbundle_to_file, LinkBundle,
+};
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -22,10 +25,10 @@ enum Commands {
     /// Creates a high resolution trace binary file (1 us slots)
     CreateTracebinHi {
         #[arg(long)]
-        client_bw_tracefile: String,
+        dl_bw_tracefile: String,
 
         #[arg(long)]
-        server_bw_tracefile: String,
+        ul_bw_tracefile: String,
 
         #[arg(long)]
         save_file: String,
@@ -39,10 +42,10 @@ enum Commands {
     /// Creates a standard resolution trace binary file (1 ms slots)
     CreateTracebinStd {
         #[arg(long)]
-        client_bw_tracefile: String,
+        dl_bw_tracefile: String,
 
         #[arg(long)]
-        server_bw_tracefile: String,
+        ul_bw_tracefile: String,
 
         #[arg(long)]
         save_file: String,
@@ -79,8 +82,27 @@ enum Commands {
         #[arg(long)]
         preset: Option<String>,
     },
+    /// Create a trace bundle from all linktrace files in a directory.
+    CreateTracebundle {
+        #[arg(long)]
+        tracedirectory: String,
+        #[arg(long)]
+        bundleinfo: String,
+        #[arg(long, value_name = "FILE")]
+        save_file: String,
+    },
     /// Print out binary trace information
     TraceInfo {
+        #[arg(long)]
+        filename: String,
+    },
+    /// Print out bundle information
+    BundleInfo {
+        #[arg(long)]
+        filename: String,
+    },
+    /// Print out binary trace information
+    ListBundleTraces {
         #[arg(long)]
         filename: String,
     },
@@ -103,26 +125,26 @@ fn main() {
 
     match &cli.command {
         Commands::CreateTracebinHi {
-            client_bw_tracefile,
-            server_bw_tracefile,
+            dl_bw_tracefile,
+            ul_bw_tracefile,
             save_file,
             sizebins,
             binpktsizes,
         } => {
             create_tracebin_hi(
-                client_bw_tracefile,
-                server_bw_tracefile,
+                dl_bw_tracefile,
+                ul_bw_tracefile,
                 save_file,
                 sizebins,
                 binpktsizes,
             );
         }
         Commands::CreateTracebinStd {
-            client_bw_tracefile,
-            server_bw_tracefile,
+            dl_bw_tracefile,
+            ul_bw_tracefile,
             save_file,
         } => {
-            create_tracebin_std(client_bw_tracefile, server_bw_tracefile, save_file);
+            create_tracebin_std(dl_bw_tracefile, ul_bw_tracefile, save_file);
         }
         Commands::CreateSynthlinktrace {
             save_file,
@@ -155,21 +177,60 @@ fn main() {
                 }
             }
         }
+        Commands::CreateTracebundle {
+            tracedirectory,
+            bundleinfo,
+            save_file,
+        } => {
+            create_tracebundle(tracedirectory, bundleinfo, save_file);
+        }
         Commands::ListPresets => {
             list_presets();
         }
         Commands::TraceInfo { filename } => {
-            trace_info(filename);
+            if !filename.ends_with(".ltbin.gz") {
+                panic!("The binary tracefile must end with .ltbin.gz");
+            }
+            let linktrace =
+                load_linktrace_from_file(filename).expect("Failed to load LinkTrace from file");
+            println!("{}", linktrace);
+        }
+        Commands::BundleInfo { filename } => {
+            let bundle =
+                load_linkbundle_from_file(filename).expect("Failed to load LinkBundle from file");
+            println!("{}", bundle);
+        }
+        Commands::ListBundleTraces { filename } => {
+            let bundle =
+                load_linkbundle_from_file(filename).expect("Failed to load LinkBundle from file");
+            for (i, trace) in bundle.linktraces.iter().enumerate() {
+                println!("Trace {}: {}", i, trace);
+            }
         }
     }
 }
 
-fn trace_info(filename: &str) {
-    if !filename.ends_with(".ltbin.gz") {
-        panic!("The binary tracefile must end with .ltbin.gz");
+fn check_trace_length(trace: &LinkTrace, scalefactor: usize) {
+    let dl_len = trace.dl_bw_trace.len();
+    let ul_len = trace.ul_bw_trace.len();
+    if dl_len != ul_len {
+        panic!(
+            "The number of downlink and uplink slots must be equal. Now dl: {} and ul: {}",
+            dl_len, ul_len
+        );
     }
-    let linktrace = load_linktrace_from_file(filename).unwrap();
-    println!("{}", linktrace);
+    if dl_len < 1_000 * scalefactor {
+        println!(
+            "Warning: The trace has a short length < 1 sec. Now it is : {:.3} sec",
+            dl_len as f64 / (1e3_f64 * scalefactor as f64)
+        );
+    }
+    if dl_len > 100000 * scalefactor {
+        println!(
+            "Warning: The traces has a long length > 100 sec. Now it is {:.3} sec",
+            dl_len as f64/ (1e3_f64 * scalefactor as f64)
+        );
+    }
 }
 
 fn create_tracebin_hi(
@@ -206,6 +267,8 @@ fn create_tracebin_hi(
 
     let linktrace = LinkTrace::new_hi_res(dl_bw_tracefile, ul_bw_tracefile, sizebin_lookuptable);
 
+    check_trace_length(&linktrace, 1000);
+
     save_linktrace_to_file(&format!("{}{}", save_file, ".ltbin.gz"), &linktrace)
         .expect("Failed to save LinkTrace to ltbin file");
 }
@@ -230,8 +293,51 @@ fn create_tracebin_std(
 
     let linktrace = LinkTrace::new_std_res(dl_bw_tracefile, ul_bw_tracefile);
 
+    check_trace_length(&linktrace, 1);
+
     save_linktrace_to_file(&format!("{}{}", save_file, ".ltbin.gz"), &linktrace)
         .expect("Failed to save LinkTrace to ltbin file");
+}
+
+fn create_tracebundle(tracedirectory: &str, bundleinfo: &str, save_file: &str) {
+    use std::fs;
+    use std::path::Path;
+
+    // If the provided bundleinfo string refers to an existing file, read its contents;
+    // otherwise, use the provided string as the bundle info.
+    let info = if Path::new(bundleinfo).exists() {
+        fs::read_to_string(bundleinfo)
+            .unwrap_or_else(|_| panic!("Failed to read bundleinfo file {}", bundleinfo))
+    } else {
+        bundleinfo.to_string()
+    };
+
+    let mut traces = Vec::new();
+    let mut tracefilenames = Vec::new();
+    let entries = fs::read_dir(tracedirectory).expect("Failed to read tracedirectory");
+    for entry in entries {
+        let entry = entry.expect("Failed to read directory entry");
+        let path = entry.path();
+        if path.is_file() {
+            let filename = path.to_str().expect("Failed to convert path to string");
+            println!("Loading linktrace file: {}", filename);
+            let trace = load_linktrace_from_file(filename)
+                .unwrap_or_else(|_| panic!("Failed to load linktrace from file: {}", filename));
+            assert_eq!(Arc::strong_count(&trace), 1);
+            let non_arc_trace = Arc::try_unwrap(trace).unwrap();
+            traces.push(non_arc_trace);
+            tracefilenames.push(filename.to_string());
+        }
+    }
+
+    println!(
+        "Loaded {} linktrace file(s) from {}.",
+        traces.len(),
+        tracedirectory
+    );
+
+    let bundle = LinkBundle::new(info.as_str(), traces, tracefilenames);
+    save_linkbundle_to_file(save_file, &bundle).expect("Failed to save LinkBundle to file");
 }
 
 fn list_presets() {

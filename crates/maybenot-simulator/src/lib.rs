@@ -110,6 +110,7 @@ pub mod queue;
 pub mod queue_event;
 pub mod queue_peek;
 
+pub mod linkbundle;
 pub mod linktrace;
 
 use std::{
