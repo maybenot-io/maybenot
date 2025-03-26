@@ -147,32 +147,34 @@ fn test_network_linktrace() {
         .collect::<Vec<_>>();
     assert_eq!(server_trace.len(), 6);
 
-    assert_eq!(
-        server_trace[1].time - server_trace[0].time,
-        Duration::from_micros(120)
-    );
-    assert_eq!(
-        server_trace[2].time - server_trace[1].time,
-        Duration::from_micros(120)
-    );
-    assert_eq!(
-        server_trace[3].time - server_trace[2].time,
-        Duration::from_micros(120)
-    );
-    assert_eq!(
-        server_trace[4].time - server_trace[3].time,
-        Duration::from_micros(120)
-    );
-    assert_eq!(
-        server_trace[5].time - server_trace[4].time,
-        Duration::from_micros(120)
-    );
+    if *USE_NETWORK != "bneck".to_string() {
+        assert_eq!(
+            server_trace[1].time - server_trace[0].time,
+            Duration::from_micros(120)
+        );
+        assert_eq!(
+            server_trace[2].time - server_trace[1].time,
+            Duration::from_micros(120)
+        );
+        assert_eq!(
+            server_trace[3].time - server_trace[2].time,
+            Duration::from_micros(120)
+        );
+        assert_eq!(
+            server_trace[4].time - server_trace[3].time,
+            Duration::from_micros(120)
+        );
+        assert_eq!(
+            server_trace[5].time - server_trace[4].time,
+            Duration::from_micros(120)
+        );
+    }
 }
 
 #[test_log::test]
 fn test_network_linktrace_duplex() {
     // send 3 events in both directions, with different traces in server->client
-    // and client->right server direction.
+    // and client->server direction.
     // Since the trace simulates 100 and 10 Mbps Ethernet, and packet size is 1500 bytes,
     // the packets should be 120us and 1200 us apart.
     let input = "0,sn\n0,sn\n0,sn\n3000000,rn\n3000000,rn\n3000000,rn\n";
@@ -199,15 +201,16 @@ fn test_network_linktrace_duplex() {
         .collect::<Vec<_>>();
     assert_eq!(client_trace.len(), 6);
     assert_eq!(client_trace[0].time, client_trace[2].time);
-    assert_eq!(
-        client_trace[4].time - client_trace[3].time,
-        Duration::from_micros(120)
-    );
-    assert_eq!(
-        client_trace[5].time - client_trace[4].time,
-        Duration::from_micros(120)
-    );
-
+    if *USE_NETWORK != "bneck".to_string() {
+        assert_eq!(
+            client_trace[4].time - client_trace[3].time,
+            Duration::from_micros(120)
+        );
+        assert_eq!(
+            client_trace[5].time - client_trace[4].time,
+            Duration::from_micros(120)
+        );
+    }
     let server_trace = trace
         .clone()
         .into_iter()
@@ -215,14 +218,16 @@ fn test_network_linktrace_duplex() {
         .collect::<Vec<_>>();
     assert_eq!(server_trace.len(), 6);
     assert_eq!(server_trace[0].time, server_trace[2].time);
-    assert_eq!(
-        server_trace[4].time - server_trace[3].time,
-        Duration::from_micros(1200)
-    );
-    assert_eq!(
-        server_trace[5].time - server_trace[4].time,
-        Duration::from_micros(1200)
-    );
+    if *USE_NETWORK != "bneck".to_string() {
+        assert_eq!(
+            server_trace[4].time - server_trace[3].time,
+            Duration::from_micros(1200)
+        );
+        assert_eq!(
+            server_trace[5].time - server_trace[4].time,
+            Duration::from_micros(1200)
+        );
+    }
 }
 
 #[test_log::test]

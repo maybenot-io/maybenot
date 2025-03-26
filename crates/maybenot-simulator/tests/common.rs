@@ -126,38 +126,8 @@ pub fn run_test_sim_trace(
     let network = Network::new(delay, None);
     let base_args = SimulatorArgs::new(network, max_trace_length, only_packets);
 
-    let mut args = match use_network {
-        "hires" => {
-            let linktrace = load_linktrace_from_file("tests/ether100M_synth5M.ltbin.gz")
-                .expect("Failed to load LinkTrace ltbin from file");
-            SimulatorArgs {
-                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
-                linktrace: Some(linktrace),
-                ..base_args
-            }
-        }
-        "stdres" => {
-            let linktrace = load_linktrace_from_file("tests/ether100M_synth10K_std.ltbin.gz")
-                .expect("Failed to load LinkTrace ltbin from file");
-            SimulatorArgs {
-                simulated_network_type: Some(ExtendedNetworkLabels::Linktrace),
-                linktrace: Some(linktrace),
-                ..base_args
-            }
-        }
-        "fixed" => SimulatorArgs {
-            simulated_network_type: Some(ExtendedNetworkLabels::FixedTput),
-            client_tput: Some(100_000_000),
-            server_tput: Some(100_000_000),
-            ..base_args
-        },
-        "bneck" => base_args,
-        other => panic!(
-            "Invalid USE_NETWORK value: {}. Expected either 'fixed' or 'bneck'.",
-            other
-        ),
-    };
-
+    let mut args= get_test_simargs(base_args, use_network.to_string(), TraceSpec::ether100M);
+    
     let tracefilename = format!("{}__{}.simtrace", description, use_network);
 
     args.continue_after_all_normal_packets_processed = true;
