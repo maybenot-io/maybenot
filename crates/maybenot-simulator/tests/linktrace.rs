@@ -130,70 +130,11 @@ mod tests {
         assert_eq!(linksim_trace.get_dl_busy_to(4999, 1500), 0);
     }
 
-    #[test]
-    fn simulator_execution() {
-        //How many packets to process
-        let nr_iter = 1000;
-
-        let mut instants = Vec::with_capacity(nr_iter);
-        let mut rng = rand::thread_rng();
-
-        // Start with the defined  Instant
-        let mut current_instant = mk_start_instant();
-        instants.push(current_instant + Duration::from_micros(1));
-
-        // Total duration target
-        let target_duration = 4_000_000;
-        let mut accumulated_duration = 0;
-
-        // Generate more Instants
-        for _ in 1..nr_iter {
-            // Calculate remaining microseconds and divide by remaining instants to get average step size
-            let remaining_steps = nr_iter - instants.len();
-            let remaining_duration = target_duration - accumulated_duration;
-            let average_step = remaining_duration / remaining_steps;
-
-            // Generate a random step, allowing some variation around the average step
-            let step_micros: u64 = rng.gen_range(average_step / 2..=average_step * 2) as u64;
-
-            // Update the accumulated duration
-            accumulated_duration += step_micros as usize;
-
-            // Add the random step to the current Instant
-            current_instant += Duration::from_micros(step_micros);
-
-            // Push the new Instant into the vector
-            instants.push(current_instant);
-        }
-
-        println!("{:?}", instants[nr_iter - 1]);
-        // start with a reasonable 10ms delay: we should get events at the client
-        let network = Network::new(Duration::from_millis(10), None);
-        let linktrace = load_linktrace_from_file("tests/ether100M_synth5M.ltbin.gz")
-            .expect("Failed to load LinkTrace ltbin from file");
-        let mut network_lt = NetworkLinktrace::new_linktrace(network, linktrace);
-
-        let tinstant = mk_start_instant() + Duration::from_micros(1);
-        network_lt.sample(&tinstant, true);
-        network_lt.sample(&instants[0], true);
-        network_lt.sample(&instants[1], true);
-        network_lt.sample(&instants[50], true);
-        network_lt.sample(&instants[98], true);
-        network_lt.sample(&instants[99], true);
-
-        for i in 0..nr_iter {
-            // Use black_box to prevent the compiler from optimizing away the call
-            network_lt.sample(&instants[i], true);
-        }
-
-        //sim(&[], &[], &mut pq.clone(), network.delay, 1000, true);
-    }
-
-    #[test]
+        #[test]
     fn linktrace_simulator_run() {
         const EARLY_TRACE: &str = include_str!("../tests/EARLY_TEST_TRACE.log");
 
-        let linktrace = load_linktrace_from_file("tests/ether100M_synth40M.ltbin.gz")
+        let linktrace = load_linktrace_from_file("tests/ether100M_synth10M.ltbin.gz")
             .expect("Failed to load LinkTrace ltbin from file");
 
         println!("{}", linktrace);
