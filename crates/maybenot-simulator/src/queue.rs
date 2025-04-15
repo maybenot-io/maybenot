@@ -51,6 +51,10 @@ impl SimQueue {
         self.client.no_normal_packets() && self.server.no_normal_packets()
     }
 
+    pub fn get_max_pps(&self) -> Option<usize> {
+        self.max_pps
+    }
+
     pub fn push(
         &mut self,
         event: TriggerEvent,
