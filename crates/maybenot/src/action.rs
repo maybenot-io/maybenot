@@ -195,6 +195,11 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// event should be triggered, with a matching MachineId.
     /// (If a non-padding packet replaces the padding, then `NormalSent`
     /// should be triggered instead.)
+    ///
+    /// Note that, since only one action timer per machine can be pending at a time,
+    /// this `SendPadding` action should replace any currently pending
+    /// `SendPadding` or `BlockOutgoing` action timer for this machine
+    /// that has not yet expired.
     SendPadding {
         timeout: T::Duration,
         bypass: bool,
@@ -210,6 +215,11 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// The replace flag indicates if the duration MUST replace any other
     /// currently ongoing blocking of outgoing traffic. If the flag is false,
     /// the longest of the two durations MUST be used.
+    ///
+    /// Note that, since only one action timer per machine can be pending at a time,
+    /// this `SendPadding` action should replace any currently pending
+    /// `SendPadding` or `BlockOutgoing` action timer for this machine
+    /// that has not yet expired.
     BlockOutgoing {
         timeout: T::Duration,
         duration: T::Duration,
