@@ -42,9 +42,7 @@ mod tests {
         };
         let probability = f64::from_le_bytes(probability);
 
-        println!(
-            "trials: {trials}, probability: {probability}, seed: {seed}"
-        );
+        println!("trials: {trials}, probability: {probability}, seed: {seed}");
         let d = Dist {
             dist: DistType::Binomial {
                 trials,

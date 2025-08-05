@@ -165,17 +165,13 @@ impl NetworkBottleneck {
             }
         };
 
-        debug!(
-            "\tpushing aggregate delay {block_duration:?} in {client:?} at the client"
-        );
+        debug!("\tpushing aggregate delay {block_duration:?} in {client:?} at the client");
         self.aggregate_delay_queue.push(PendingAggregateDelay {
             time: *current_time + client,
             delay: block_duration,
             client: true,
         });
-        debug!(
-            "\tpushing aggregate delay {block_duration:?} in {server:?} at the server"
-        );
+        debug!("\tpushing aggregate delay {block_duration:?} in {server:?} at the server");
         self.aggregate_delay_queue.push(PendingAggregateDelay {
             time: *current_time + server,
             delay: block_duration,
@@ -313,9 +309,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                         // 2. the bypass flag is not set, which is also the case
                         //    for normal packets, so we do nothing
                         if !next.bypass {
-                            debug!(
-                                "\treplaced padding sent with blocked queued normal @{side}"
-                            );
+                            debug!("\treplaced padding sent with blocked queued normal @{side}");
                             return false;
                         }
 

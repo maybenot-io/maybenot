@@ -712,9 +712,7 @@ fn pick_next<M: AsRef<[Machine]>>(
     // the framework than inside it. On overload, the user of the framework will
     // bulk trigger events in the framework.
     if q <= s && q <= i {
-        debug!(
-            "\tpick_next(): picked queue, is_client {q_is_client}, queue {qid:?}"
-        );
+        debug!("\tpick_next(): picked queue, is_client {q_is_client}, queue {qid:?}");
         let mut tmp = sq
             .pop(
                 qid,
@@ -942,9 +940,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
     {
         match action {
             TriggerAction::Cancel { machine, timer } => {
-                debug!(
-                    "\ttrigger_update(): cancel action {machine:?} {timer:?}"
-                );
+                debug!("\ttrigger_update(): cancel action {machine:?} {timer:?}");
                 // here we make a simplifying assumption of no trigger delay for
                 // cancel actions
                 match timer {
@@ -966,9 +962,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 replace: _,
                 machine,
             } => {
-                debug!(
-                    "\ttrigger_update(): send padding action {timeout:?} {machine:?}"
-                );
+                debug!("\ttrigger_update(): send padding action {timeout:?} {machine:?}");
                 state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
                     action: action.clone(),
                     time: *current_time + *timeout + trigger_delay,
@@ -981,9 +975,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 replace: _,
                 machine,
             } => {
-                debug!(
-                    "\ttrigger_update(): block outgoing action {timeout:?} {machine:?}"
-                );
+                debug!("\ttrigger_update(): block outgoing action {timeout:?} {machine:?}");
                 state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
                     action: action.clone(),
                     time: *current_time + *timeout + trigger_delay,
@@ -994,9 +986,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 replace,
                 machine,
             } => {
-                debug!(
-                    "\ttrigger_update(): update timer action {duration:?} {machine:?}"
-                );
+                debug!("\ttrigger_update(): update timer action {duration:?} {machine:?}");
                 // get current internal timer duration, if any
                 let current =
                     state.scheduled_internal_timer[machine.into_raw()].unwrap_or(*current_time);

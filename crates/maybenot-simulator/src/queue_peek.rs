@@ -90,9 +90,7 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
         server_network_delay_sum,
         false,
     );
-    debug!(
-        "peek_queue: c_d={c_d:?}, c_q={c_q:?}, c_b={c_b}, s_d={s_d:?}, s_q={s_q:?}, s_b={s_b}"
-    );
+    debug!("peek_queue: c_d={c_d:?}, c_q={c_q:?}, c_b={c_b}, s_d={s_d:?}, s_q={s_q:?}, s_b={s_b}");
     // pick earliest
     if c_d <= s_d {
         (c_d, c_q, c_b)
@@ -182,9 +180,7 @@ fn peek_queue_earliest_side(
         // blocking only if the queue is not the base queue
         std::cmp::Ordering::Equal => non_blocking_queue != Queue::Base,
     };
-    debug!(
-        "\tpeek_queue_earliest_side: blocking_first={blocking_first}"
-    );
+    debug!("\tpeek_queue_earliest_side: blocking_first={blocking_first}");
     if blocking_first {
         (
             peek_blocking
