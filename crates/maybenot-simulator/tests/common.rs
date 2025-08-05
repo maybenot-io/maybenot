@@ -27,7 +27,7 @@ pub fn run_test_sim(
     if fmt.len() > output.len() {
         fmt = fmt.get(0..output.len()).unwrap().to_string();
     }
-    debug!("input: {}", input);
+    debug!("input: {input}");
     assert_eq!(output, fmt);
 }
 

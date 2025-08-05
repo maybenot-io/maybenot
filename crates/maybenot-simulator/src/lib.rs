@@ -462,7 +462,7 @@ pub fn sim_advanced(
         // move time forward?
         match next.time.cmp(&current_time) {
             Ordering::Less => {
-                debug!("sim(): {:#?}", current_time);
+                debug!("sim(): {current_time:#?}");
                 debug!("sim(): {:#?}", next.time);
                 panic!("BUG: next event moves time backwards");
             }
@@ -481,9 +481,9 @@ pub fn sim_advanced(
             network.server_aggregate_base_delay,
         );
         if next.client {
-            debug!("sim(): @client next\n{:#?}", next);
+            debug!("sim(): @client next\n{next:#?}");
         } else {
-            debug!("sim(): @server next\n{:#?}", next);
+            debug!("sim(): @server next\n{next:#?}");
         }
         if let Some(blocking_until) = client.blocking_until {
             debug!(
@@ -606,21 +606,21 @@ fn pick_next<M: AsRef<[Machine]>>(
         &server.scheduled_action,
         current_time,
     );
-    debug!("\tpick_next(): peek_scheduled_action = {:?}", s);
+    debug!("\tpick_next(): peek_scheduled_action = {s:?}");
 
     let i = peek_scheduled_internal_timer(
         &client.scheduled_internal_timer,
         &server.scheduled_internal_timer,
         current_time,
     );
-    debug!("\tpick_next(): peek_scheduled_internal_timer = {:?}", i);
+    debug!("\tpick_next(): peek_scheduled_internal_timer = {i:?}");
 
     let (b, b_is_client) =
         peek_blocked_exp(client.blocking_until, server.blocking_until, current_time);
-    debug!("\tpick_next(): peek_blocked_exp = {:?}", b);
+    debug!("\tpick_next(): peek_blocked_exp = {b:?}");
 
     let n = network.peek_aggregate_delay(current_time);
-    debug!("\tpick_next(): peek_aggregate_delay = {:?}", n);
+    debug!("\tpick_next(): peek_aggregate_delay = {n:?}");
 
     let (q, qid, q_is_client) = peek_queue(
         sq,
@@ -631,7 +631,7 @@ fn pick_next<M: AsRef<[Machine]>>(
         s.min(i).min(b).min(n),
         current_time,
     );
-    debug!("\tpick_next(): peek_queue = {:?}", q);
+    debug!("\tpick_next(): peek_queue = {q:?}");
 
     // no next?
     if s == Duration::MAX
@@ -713,8 +713,7 @@ fn pick_next<M: AsRef<[Machine]>>(
     // bulk trigger events in the framework.
     if q <= s && q <= i {
         debug!(
-            "\tpick_next(): picked queue, is_client {}, queue {:?}",
-            q_is_client, qid
+            "\tpick_next(): picked queue, is_client {q_is_client}, queue {qid:?}"
         );
         let mut tmp = sq
             .pop(
@@ -727,7 +726,7 @@ fn pick_next<M: AsRef<[Machine]>>(
                 },
             )
             .unwrap();
-        debug!("\tpick_next(): popped from queue {:?}", tmp);
+        debug!("\tpick_next(): popped from queue {tmp:?}");
         // check if blocking moves the event forward in time
         if current_time + q > tmp.time {
             // move the event forward in time
@@ -944,8 +943,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
         match action {
             TriggerAction::Cancel { machine, timer } => {
                 debug!(
-                    "\ttrigger_update(): cancel action {:?} {:?}",
-                    machine, timer
+                    "\ttrigger_update(): cancel action {machine:?} {timer:?}"
                 );
                 // here we make a simplifying assumption of no trigger delay for
                 // cancel actions
@@ -969,8 +967,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 machine,
             } => {
                 debug!(
-                    "\ttrigger_update(): send padding action {:?} {:?}",
-                    timeout, machine
+                    "\ttrigger_update(): send padding action {timeout:?} {machine:?}"
                 );
                 state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
                     action: action.clone(),
@@ -985,8 +982,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 machine,
             } => {
                 debug!(
-                    "\ttrigger_update(): block outgoing action {:?} {:?}",
-                    timeout, machine
+                    "\ttrigger_update(): block outgoing action {timeout:?} {machine:?}"
                 );
                 state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
                     action: action.clone(),
@@ -999,8 +995,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                 machine,
             } => {
                 debug!(
-                    "\ttrigger_update(): update timer action {:?} {:?}",
-                    duration, machine
+                    "\ttrigger_update(): update timer action {duration:?} {machine:?}"
                 );
                 // get current internal timer duration, if any
                 let current =

@@ -18,7 +18,7 @@ impl fmt::Display for Error {
         match *self {
             Error::PaddingLimit => write!(f, "max_padding_frac has to be between [0.0, 1.0]"),
             Error::BlockingLimit => write!(f, "max_blocking_frac has to be between [0.0, 1.0]"),
-            Error::Machine(ref msg) => write!(f, "invalid machine: {}", msg),
+            Error::Machine(ref msg) => write!(f, "invalid machine: {msg}"),
         }
     }
 }

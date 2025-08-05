@@ -70,7 +70,7 @@ impl Machine {
         e.write_all(encoded.as_slice()).unwrap();
         let s = BASE64_STANDARD.encode(e.finish().unwrap());
         // version as first 2 characters, then base64 compressed bincoded
-        format!("{:02}{}", VERSION, s)
+        format!("{VERSION:02}{s}")
     }
 
     /// Validates that the machine is in a valid state (machines that are
@@ -100,8 +100,7 @@ impl Machine {
         }
         if num_states > STATE_MAX {
             Err(Error::Machine(format!(
-                "too many states, max is {}, found {}",
-                STATE_MAX, num_states
+                "too many states, max is {STATE_MAX}, found {num_states}"
             )))?;
         }
 
@@ -129,10 +128,9 @@ impl FromStr for Machine {
             Err(Error::Machine("string is not ascii".to_string()))?;
         }
         let version = &s[0..2];
-        if version != format!("{:02}", VERSION) {
+        if version != format!("{VERSION:02}") {
             Err(Error::Machine(format!(
-                "version mismatch, expected {}, got {}",
-                VERSION, version
+                "version mismatch, expected {VERSION}, got {version}"
             )))?;
         }
         let s = &s[2..];
@@ -181,7 +179,7 @@ impl fmt::Display for Machine {
             self.max_blocking_frac,
             self.states
                 .iter()
-                .map(|s| format!("{}", s))
+                .map(|s| format!("{s}"))
                 .collect::<Vec<String>>()
                 .join("\n")
         )

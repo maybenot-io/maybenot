@@ -38,7 +38,7 @@ mod tests {
         };
         let probability = f64::from_le_bytes(probability);
 
-        println!("probability: {}, seed: {}", probability, seed);
+        println!("probability: {probability}, seed: {seed}");
         let d = Dist {
             dist: DistType::Geometric { probability },
             start: 0.0,

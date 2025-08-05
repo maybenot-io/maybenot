@@ -53,7 +53,7 @@ mod tests {
             Err(_) => return,
         };
         let lambda = f64::from_le_bytes(lambda);
-        println!("lambda: {}", lambda);
+        println!("lambda: {lambda}");
         //assert!(false);
 
         let d = Dist {

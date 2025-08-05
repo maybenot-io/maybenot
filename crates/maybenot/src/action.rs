@@ -76,7 +76,7 @@ pub enum Action {
 
 impl fmt::Display for Action {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:#?}", self)
+        write!(f, "{self:#?}")
     }
 }
 
@@ -219,7 +219,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
 
 impl fmt::Display for TriggerAction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:#?}", self)
+        write!(f, "{self:#?}")
     }
 }
 

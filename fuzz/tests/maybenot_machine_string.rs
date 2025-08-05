@@ -20,7 +20,7 @@ mod tests {
 
         for data in artifacts {
             let s = String::from_utf8_lossy(&data);
-            println!("{:?}", s);
+            println!("{s:?}");
 
             if Machine::from_str(&s).is_err() {
                 return;

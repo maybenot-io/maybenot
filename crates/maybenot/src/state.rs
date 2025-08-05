@@ -181,20 +181,20 @@ impl State {
 impl fmt::Display for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(action) = self.action {
-            writeln!(f, "action: {}", action)?;
+            writeln!(f, "action: {action}")?;
         } else {
             writeln!(f, "action: None")?;
         }
         match self.counter {
             (Some(counter_a), Some(counter_b)) => {
-                writeln!(f, "counter A: {}", counter_a)?;
-                writeln!(f, "counter B: {}", counter_b)?;
+                writeln!(f, "counter A: {counter_a}")?;
+                writeln!(f, "counter B: {counter_b}")?;
             }
             (Some(counter), None) => {
-                writeln!(f, "counter A: {}", counter)?;
+                writeln!(f, "counter A: {counter}")?;
             }
             (None, Some(counter)) => {
-                writeln!(f, "counter B: {}", counter)?;
+                writeln!(f, "counter B: {counter}")?;
             }
             _ => {
                 writeln!(f, "counter: None")?;
@@ -207,9 +207,9 @@ impl fmt::Display for State {
                 if vector.is_empty() {
                     continue;
                 }
-                write!(f, "\t{}:", event)?;
+                write!(f, "\t{event}:")?;
                 for trans in vector {
-                    write!(f, " {}", trans)?;
+                    write!(f, " {trans}")?;
                     if trans != vector.last().unwrap() {
                         write!(f, ",")?;
                     }
