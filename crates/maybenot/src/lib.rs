@@ -223,6 +223,29 @@
 //! In the outgoing direction, when we generate a packet,
 //! it is first queued on the tunnel, and then eventually encrypted,
 //! and eventually transmitted on the network.
+//!
+//! ### Framework state, and per-machine state.
+//!
+//! For each [`Machine`] in a [`Framework`],
+//! you will need to maintain a certain amount of state.
+//! Specifically, you will need to track:
+//!
+//! - A single "internal" timer,
+//!   which the machine will manage
+//!   via [`TriggerAction::UpdateTimer`] and [`TriggerAction::Cancel`].
+//!   If it expires, you will need to trigger [`TriggerEvent::TimerEnd`].
+//! - A single "action" timer,
+//!   which the machine will manage via [`TriggerAction::SendPadding`],
+//!   [`TriggerAction::BlockOutgoing`], and [`TriggerAction::Cancel`].
+//!   - An action to be taken if and when the "action" timer expires.
+//!     This action may be "being blocking for a certain Duration" or
+//!     "Send a padding packet".
+//!     (There are additional flags associated with these actions.)
+//!
+//! Additionally, for the [`Framework`] itself, you will need to track:
+//! - Whether traffic blocking has been enabled, and when it will expire.
+//! - Whether the enabled traffic blocking is "bypassable" (q.v.).
+
 pub mod action;
 pub mod constants;
 pub mod counter;

@@ -168,7 +168,14 @@ impl Action {
 /// The action to be taken by the framework user.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
-    /// Cancel the timer for a machine.
+    /// Cancel one or more timers for a machine.
+    ///
+    /// Depending on the value of `timer`,
+    /// either the internal timer should be cancelled,
+    /// the external timer should be cancelled,
+    /// or both.
+    ///
+    /// Cancelling a timer does not cause a [`TriggerEvent::TimerEnd`] event.
     Cancel { machine: MachineId, timer: Timer },
     /// Schedule padding to be injected after the given timeout for a machine.
     ///
@@ -210,11 +217,20 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
         replace: bool,
         machine: MachineId,
     },
-    /// Update the timer duration for a machine.
+    /// Update the duration of the internal timer for a machine.
     ///
     /// The replace flag specifies if the duration should replace the current
     /// timer duration. If the flag is false, the longest of the two durations
     /// MUST be used.
+    ///
+    /// Whenever an internal timer is created,
+    /// and whenever the timer's duration is changed,
+    /// a corresponding [`TriggerEvent::TimerBegin`] event should be triggered,
+    /// with a matching [`MachineId`].
+    ///
+    /// Whenever an internal expires, a corresponding [`TriggerEvent::TimerEnd`]
+    /// event should be triggered.
+    /// with a matching [`MachineId`].
     UpdateTimer {
         duration: T::Duration,
         replace: bool,

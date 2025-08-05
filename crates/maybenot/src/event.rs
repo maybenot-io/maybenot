@@ -115,9 +115,14 @@ pub enum TriggerEvent {
     BlockingBegin { machine: MachineId },
     /// Blocking of outgoing traffic stopped.
     BlockingEnd,
-    /// A machine's timer started.
+    /// A machine's internal timer started, or was changed.
+    ///
+    /// This event should be triggered any time a new internal timer is started,
+    /// or whenever the expiration time of an machine's internal timer changes.
     TimerBegin { machine: MachineId },
-    /// A machine's timer expired.
+    /// A machine's internal timer expired.
+    ///
+    /// (This event _should not_ be sent in response to a timer being cancelled.)
     TimerEnd { machine: MachineId },
 }
 
