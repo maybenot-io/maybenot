@@ -203,6 +203,26 @@
 //!     break;
 //! }
 //! ```
+//!
+//! ## Key concepts
+//!
+//! ### Packets
+//!
+//! We assume that all traffic is sent in "packets" of uniform size,
+//! which may either be padding or non-padding.
+//!
+//! ### Tunnels
+//!
+//! We assume that incoming and outgoing traffic is queued in a "tunnel" on its way
+//! to or from the network.
+//!
+//! In the incoming direction, when we receive a packet,
+//! it is first queued on the tunnel, and then eventually processed
+//! to find out whether it is padding or not.
+//!
+//! In the outgoing direction, when we generate a packet,
+//! it is first queued on the tunnel, and then eventually encrypted,
+//! and eventually transmitted on the network.
 pub mod action;
 pub mod constants;
 pub mod counter;

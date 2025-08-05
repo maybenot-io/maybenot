@@ -183,6 +183,11 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// If the bypass and replace flags are both set to true AND the active
     /// blocking may be bypassed, then non-padding packets MAY replace the
     /// padding packet AND bypass the active blocking.
+    ///
+    /// When the padding is queued, a corresponding [`TriggerEvent::PaddingSent`]
+    /// event should be triggered, with a matching MachineId.
+    /// (If a non-padding packet replaces the padding, then `NormalSent`
+    /// should be triggered instead.)
     SendPadding {
         timeout: T::Duration,
         bypass: bool,
