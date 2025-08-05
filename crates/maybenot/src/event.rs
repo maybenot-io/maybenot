@@ -112,8 +112,17 @@ pub enum TriggerEvent {
     /// as close as possible to the time when it is actually written to the network.
     TunnelSent,
     /// Blocking of outgoing traffic started by the action from a machine.
+    ///
+    /// This event should be triggered whenever the action timer
+    /// for a [`TriggerAction::BlockOutgoing`] action expires,
+    /// whether the blocking timer is adjusted or not.
+    ///
+    /// [`TriggerAction::BlockOutgoing`]: crate::TriggerAction::BlockOutgoing
     BlockingBegin { machine: MachineId },
-    /// Blocking of outgoing traffic stopped.
+    /// Blocking of outgoing traffic has stopped.
+    ///
+    /// This event should be triggered when the framework-scoped
+    /// blocking timer expires.
     BlockingEnd,
     /// A machine's internal timer started, or was changed.
     ///

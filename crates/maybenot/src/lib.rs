@@ -245,6 +245,19 @@
 //! Additionally, for the [`Framework`] itself, you will need to track:
 //! - Whether traffic blocking has been enabled, and when it will expire.
 //! - Whether the enabled traffic blocking is "bypassable" (q.v.).
+//!
+//! ### Blocking
+//!
+//! In addition to sending padding, a Maybenot [`Machine`]
+//! can tell the application to temporarily _block_ traffic.
+//!
+//! While traffic is blocked on a connection,
+//! no packets should ordinarily be sent to the network
+//! until traffic becomes unblocked.
+//!
+//! Traffic blocking may be "bypassable" or "non-bypassable".
+//! This difference affects whether padding packets marked with
+//! the "bypass" flag can still be sent while the blocking is in effect.
 
 pub mod action;
 pub mod constants;

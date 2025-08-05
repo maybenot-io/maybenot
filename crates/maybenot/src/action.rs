@@ -209,12 +209,20 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// Schedule blocking of outgoing traffic after the given timeout for a
     /// machine. The duration of the blocking is specified.
     ///
+    /// Whenever the given action timeout expires,
+    /// a corresponding [`TriggerEvent::BlockingBegin`] event should be triggered
+    /// with the same MachineId,
+    /// regardless of whether the current blocking was adjusted.
+    ///
     /// The bypass flag indicates if the blocking of outgoing traffic can be
     /// bypassed by padding packets with the bypass flag set to true.
     ///
     /// The replace flag indicates if the duration MUST replace any other
     /// currently ongoing blocking of outgoing traffic. If the flag is false,
     /// the longest of the two durations MUST be used.
+    ///
+    /// Whenever the blocking timer of outgoing traffic is replaced or adjusted,
+    /// the "bypassable" status of the blocking is also replaced.
     ///
     /// Note that, since only one action timer per machine can be pending at a time,
     /// this `SendPadding` action should replace any currently pending
