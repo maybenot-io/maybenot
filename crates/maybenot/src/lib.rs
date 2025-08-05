@@ -254,10 +254,24 @@
 //! While traffic is blocked on a connection,
 //! no packets should ordinarily be sent to the network
 //! until traffic becomes unblocked.
+//! Instead, normal traffic should be queued.
 //!
 //! Traffic blocking may be "bypassable" or "non-bypassable".
 //! This difference affects whether padding packets marked with
 //! the "bypass" flag can still be sent while the blocking is in effect.
+//!
+//! By cases:
+//!
+//! | Blocking       | Padding         | Action         |
+//! | -------------- | --------------- | -------------- |
+//! | non-bypassable | none            | queue padding  |
+//! |                | bypass          | queue padding  |
+//! |                | replace         | queue padding if queue is empty |
+//! |                | bypass, replace | queue padding if queue is empty
+//! | bypassable     | none            | queue padding  |
+//! |                | bypass          | send padding immediately |
+//! |                | replace         | queue padding if queue is empty |
+//! |                | bypass, replace | send packet from queue immediately, or padding if queue is emtpy |
 
 pub mod action;
 pub mod constants;
