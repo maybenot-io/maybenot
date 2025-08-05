@@ -90,10 +90,7 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
         server_network_delay_sum,
         false,
     );
-    debug!(
-        "peek_queue: c_d={:?}, c_q={:?}, c_b={}, s_d={:?}, s_q={:?}, s_b={}",
-        c_d, c_q, c_b, s_d, s_q, s_b
-    );
+    debug!("peek_queue: c_d={c_d:?}, c_q={c_q:?}, c_b={c_b}, s_d={s_d:?}, s_q={s_q:?}, s_b={s_b}");
     // pick earliest
     if c_d <= s_d {
         (c_d, c_q, c_b)
@@ -112,7 +109,7 @@ fn peek_queue_earliest_side(
     network_delay_sum: Duration,
     is_client: bool,
 ) -> (Duration, Queue, bool) {
-    debug!("peek_queue_earliest_side: is_client={}", is_client);
+    debug!("peek_queue_earliest_side: is_client={is_client}");
     // OK, bummer, we have to peek for the next blocking and non-blocking: note
     // that this takes into account if blocking is bypassable or not, picking
     // the earliest next event from the queue.
@@ -159,12 +156,10 @@ fn peek_queue_earliest_side(
     let peek_non_blocking = peek_non_blocking.unwrap();
 
     debug!(
-        "\tpeek_queue_earliest_side: peek_blocking={:?}, blocking_queue={:?}",
-        peek_blocking, blocking_queue
+        "\tpeek_queue_earliest_side: peek_blocking={peek_blocking:?}, blocking_queue={blocking_queue:?}"
     );
     debug!(
-        "\tpeek_queue_earliest_side: peek_non_blocking={:?}, non_blocking_queue={:?}",
-        peek_non_blocking, non_blocking_queue
+        "\tpeek_queue_earliest_side: peek_non_blocking={peek_non_blocking:?}, non_blocking_queue={non_blocking_queue:?}"
     );
 
     // take network delay into account for non-blocking events
@@ -185,10 +180,7 @@ fn peek_queue_earliest_side(
         // blocking only if the queue is not the base queue
         std::cmp::Ordering::Equal => non_blocking_queue != Queue::Base,
     };
-    debug!(
-        "\tpeek_queue_earliest_side: blocking_first={}",
-        blocking_first
-    );
+    debug!("\tpeek_queue_earliest_side: blocking_first={blocking_first}");
     if blocking_first {
         (
             peek_blocking

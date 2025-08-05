@@ -106,7 +106,7 @@ pub enum DistType {
 
 impl fmt::Display for DistType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -203,14 +203,12 @@ impl Dist {
             } => {
                 if probability != 0.0 && probability < DIST_MIN_PROBABILITY {
                     Err(Error::Machine(format!(
-                        "for Binomial dist, probability 0.0 > {:?} < DIST_MIN_PROBABILITY (1e-9), error due to too slow sampling",
-                        probability
+                        "for Binomial dist, probability 0.0 > {probability:?} < DIST_MIN_PROBABILITY (1e-9), error due to too slow sampling"
                     )))?;
                 }
                 if trials > 1_000_000_000 {
                     Err(Error::Machine(format!(
-                        "for Binomial dist, {} trials > 1e9, error due to too slow sampling",
-                        trials
+                        "for Binomial dist, {trials} trials > 1e9, error due to too slow sampling"
                     )))?;
                 }
                 Binomial::new(trials, probability).map_err(|e| Error::Machine(e.to_string()))?;
@@ -218,7 +216,7 @@ impl Dist {
             DistType::Geometric { probability } => {
                 if probability != 0.0 && probability < DIST_MIN_PROBABILITY {
                     Err(Error::Machine(
-                        format!("for Geometric dist, probability 0.0 > {:?} < DIST_MIN_PROBABILITY (1e-9), error due to too slow sampling", probability),
+                        format!("for Geometric dist, probability 0.0 > {probability:?} < DIST_MIN_PROBABILITY (1e-9), error due to too slow sampling"),
                     ))?;
                 }
                 Geometric::new(probability).map_err(|e| Error::Machine(e.to_string()))?;
@@ -229,8 +227,7 @@ impl Dist {
             DistType::Poisson { lambda } => {
                 if lambda > 1_000_000_000_000_000_000_000_000_000_000_000_000_000_000.0 {
                     Err(Error::Machine(format!(
-                        "for Poisson dist, lambda {} > 1e42, error due to too slow sampling",
-                        lambda
+                        "for Poisson dist, lambda {lambda} > 1e42, error due to too slow sampling"
                     )))?;
                 }
                 Poisson::new(lambda).map_err(|e| Error::Machine(e.to_string()))?;

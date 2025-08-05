@@ -69,7 +69,7 @@ fn run_sim(
         .into_iter()
         .filter(|e| e.client == only_client)
         .collect();
-    println!("trace: {:?}", trace);
+    println!("trace: {trace:?}");
     trace
 }
 

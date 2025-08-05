@@ -52,7 +52,7 @@ mod tests {
         if d.validate().is_err() {
             return;
         }
-        println!("seed: {}, low: {}, high: {}", seed, low, high);
+        println!("seed: {seed}, low: {low}, high: {high}");
         let _ = d.sample(&mut rng);
     }
 }
