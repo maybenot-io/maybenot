@@ -2,6 +2,10 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 2.2.0 - XXXX-XX-XX
+
+- Doc improvements focused on integration aspects, thanks Nick Mathewson.
+
 ## 2.1.0 - 2025-02-02
 
 - Bug fix: restricted parameter values for several distributions that caused
