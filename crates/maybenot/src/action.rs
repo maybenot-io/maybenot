@@ -168,7 +168,14 @@ impl Action {
 /// The action to be taken by the framework user.
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
-    /// Cancel the timer for a machine.
+    /// Cancel one or more timers for a machine.
+    ///
+    /// Depending on the value of `timer`,
+    /// either the internal timer should be cancelled,
+    /// the external timer should be cancelled,
+    /// or both.
+    ///
+    /// Cancelling a timer does not cause a [`TriggerEvent::TimerEnd`] event.
     Cancel { machine: MachineId, timer: Timer },
     /// Schedule padding to be injected after the given timeout for a machine.
     ///
@@ -183,6 +190,16 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// If the bypass and replace flags are both set to true AND the active
     /// blocking may be bypassed, then non-padding packets MAY replace the
     /// padding packet AND bypass the active blocking.
+    ///
+    /// When the padding is queued, a corresponding [`TriggerEvent::PaddingSent`]
+    /// event should be triggered, with a matching MachineId.
+    /// (If a non-padding packet replaces the padding, then `NormalSent`
+    /// should be triggered instead.)
+    ///
+    /// Note that, since only one action timer per machine can be pending at a time,
+    /// this `SendPadding` action should replace any currently pending
+    /// `SendPadding` or `BlockOutgoing` action timer for this machine
+    /// that has not yet expired.
     SendPadding {
         timeout: T::Duration,
         bypass: bool,
@@ -192,12 +209,25 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// Schedule blocking of outgoing traffic after the given timeout for a
     /// machine. The duration of the blocking is specified.
     ///
+    /// Whenever the given action timeout expires,
+    /// a corresponding [`TriggerEvent::BlockingBegin`] event should be triggered
+    /// with the same MachineId,
+    /// regardless of whether the current blocking was adjusted.
+    ///
     /// The bypass flag indicates if the blocking of outgoing traffic can be
     /// bypassed by padding packets with the bypass flag set to true.
     ///
     /// The replace flag indicates if the duration MUST replace any other
     /// currently ongoing blocking of outgoing traffic. If the flag is false,
     /// the longest of the two durations MUST be used.
+    ///
+    /// Whenever the blocking timer of outgoing traffic is replaced or adjusted,
+    /// the "bypassable" status of the blocking is also replaced.
+    ///
+    /// Note that, since only one action timer per machine can be pending at a time,
+    /// this `SendPadding` action should replace any currently pending
+    /// `SendPadding` or `BlockOutgoing` action timer for this machine
+    /// that has not yet expired.
     BlockOutgoing {
         timeout: T::Duration,
         duration: T::Duration,
@@ -205,11 +235,20 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
         replace: bool,
         machine: MachineId,
     },
-    /// Update the timer duration for a machine.
+    /// Update the duration of the internal timer for a machine.
     ///
     /// The replace flag specifies if the duration should replace the current
     /// timer duration. If the flag is false, the longest of the two durations
     /// MUST be used.
+    ///
+    /// Whenever an internal timer is created,
+    /// and whenever the timer's duration is changed,
+    /// a corresponding [`TriggerEvent::TimerBegin`] event should be triggered,
+    /// with a matching [`MachineId`].
+    ///
+    /// Whenever an internal expires, a corresponding [`TriggerEvent::TimerEnd`]
+    /// event should be triggered.
+    /// with a matching [`MachineId`].
     UpdateTimer {
         duration: T::Duration,
         replace: bool,
