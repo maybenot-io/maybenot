@@ -12,6 +12,12 @@ use self::event::Event;
 use crate::time::Duration as _;
 
 /// An opaque token representing one machine running inside the framework.
+/// Values are guaranteed to be in the range 0..[Framework::num_machines], so
+/// raw values using [`MachineId::into_raw`] are suitable for indexing a slice
+/// of of at least [`Framework::num_machines`] elements. This is handy for
+/// framework integration and keeping associated state with a performance focus,
+/// but care must be taken to avoid out-of-bounds accesses (i.e., not very Rust
+/// idiomatic).
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct MachineId(usize);
 
