@@ -111,6 +111,7 @@ pub mod queue_peek;
 
 use std::{
     cmp::Ordering,
+    slice,
     time::{Duration, Instant},
 };
 
@@ -936,7 +937,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
     // parse actions and update
     for action in state
         .framework
-        .trigger_events(&[next.event.clone()], *current_time)
+        .trigger_events(slice::from_ref(&next.event), *current_time)
     {
         match action {
             TriggerAction::Cancel { machine, timer } => {

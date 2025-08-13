@@ -1,6 +1,6 @@
 pub mod common;
 
-use std::time::Duration;
+use std::{slice, time::Duration};
 
 use common::run_test_sim;
 use maybenot::{
@@ -377,7 +377,7 @@ fn test_network_aggregate_blocking_one_packet() {
         base,
         result,
         delay,
-        &[m.clone()],
+        slice::from_ref(&m),
         &[],
         true, // client trace
         50,
@@ -398,8 +398,8 @@ fn test_network_aggregate_blocking_one_packet() {
         base,
         result,
         delay,
-        &[m.clone()],
-        &[m],
+        slice::from_ref(&m),
+        slice::from_ref(&m),
         true,
         50,
         true,
@@ -428,7 +428,17 @@ fn test_network_aggregate_blocking_many_packets() {
     // - delay goes into effect at 42 at client
     // - delay goes into effect at 32 at server
     let result = "0,st 5,st 5,st 5,st 5,st 40,st 40,rt 45,st 45,rt";
-    run_test_sim(base, result, delay, &[m.clone()], &[], true, 50, true, true);
+    run_test_sim(
+        base,
+        result,
+        delay,
+        slice::from_ref(&m),
+        &[],
+        true,
+        50,
+        true,
+        true,
+    );
 
     // machine at client and server
     let base = "0,sn 1,sn 2,sn 2,sn 3,sn 29,rn 30,rn 31,rn 42,sn 80,rn";
@@ -443,8 +453,8 @@ fn test_network_aggregate_blocking_many_packets() {
         base,
         result,
         delay,
-        &[m.clone()],
-        &[m],
+        slice::from_ref(&m),
+        slice::from_ref(&m),
         true,
         50,
         true,
@@ -471,7 +481,17 @@ fn test_network_aggregate_blocking_many_packets_normal_no_delay() {
     let base = "0,sn 4,sn 5,sn 45,sn 45,rn 47,sn 47,rn";
     // blocking at 0, delaying 4 BUT also 5 normal so no delay:
     let result = "0,st 5,st 5,st 45,st 45,rt 47,st 47,rt";
-    run_test_sim(base, result, delay, &[m.clone()], &[], true, 50, true, true);
+    run_test_sim(
+        base,
+        result,
+        delay,
+        slice::from_ref(&m),
+        &[],
+        true,
+        50,
+        true,
+        true,
+    );
 
     // machine at client and server
     let base = "0,sn 4,sn 5,sn 45,sn 45,rn 47,sn 49,rn 50,rn";
@@ -480,8 +500,8 @@ fn test_network_aggregate_blocking_many_packets_normal_no_delay() {
         base,
         result,
         delay,
-        &[m.clone()],
-        &[m],
+        slice::from_ref(&m),
+        slice::from_ref(&m),
         true,
         50,
         true,
@@ -510,7 +530,17 @@ fn test_network_aggregate_padding_bypass_replace_one_packet() {
     // - delay goes into effect at 41 at client
     // - delay goes into effect at 31 at server
     let result = "0,st 5,st 40,rt 45,rt 100,st 100,st";
-    run_test_sim(base, result, delay, &[m.clone()], &[], true, 50, true, true);
+    run_test_sim(
+        base,
+        result,
+        delay,
+        slice::from_ref(&m),
+        &[],
+        true,
+        50,
+        true,
+        true,
+    );
 
     // machine at client and server
     let base = "0,sn 1,sn 40,sn 40,rn 41,sn 41,rn 100,rn 100,sn";
@@ -525,8 +555,8 @@ fn test_network_aggregate_padding_bypass_replace_one_packet() {
         base,
         result,
         delay,
-        &[m.clone()],
-        &[m],
+        slice::from_ref(&m),
+        slice::from_ref(&m),
         true,
         50,
         true,
@@ -558,7 +588,7 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
         base,
         result,
         delay,
-        &[m.clone()],
+        slice::from_ref(&m),
         &[],
         true,
         50,
@@ -576,8 +606,8 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
         base,
         result,
         delay,
-        &[m.clone()],
-        &[m],
+        slice::from_ref(&m),
+        slice::from_ref(&m),
         true,
         50,
         true,
@@ -604,7 +634,17 @@ fn test_network_aggregate_padding_bypass_replace_many_packets() {
     let base = "0,sn 1,sn 40,sn 40,rn 41,sn 41,rn";
     // causes 4 delay by blocking 1 until 5, in effect at server at 31
     let result = "0,st 5,st 40,rt 45,rt 100,st 100,st";
-    run_test_sim(base, result, delay, &[m.clone()], &[], true, 50, true, true);
+    run_test_sim(
+        base,
+        result,
+        delay,
+        slice::from_ref(&m),
+        &[],
+        true,
+        50,
+        true,
+        true,
+    );
 
     // machine at client and server
     let base = "0,sn 1,sn 40,sn 41,rn 42,sn 42,rn 50,rn 70,sn";
@@ -613,8 +653,8 @@ fn test_network_aggregate_padding_bypass_replace_many_packets() {
         base,
         result,
         delay,
-        &[m.clone()],
-        &[m],
+        slice::from_ref(&m),
+        slice::from_ref(&m),
         true,
         50,
         true,
@@ -640,7 +680,17 @@ fn test_network_aggregate_padding_bypass_replace_many_packets_window() {
     // machine only at client
     let base = "0,sn 1,sn 2,sn 40,sn 40,rn 41,sn 41,rn";
     let result = "0,st 5,st 40,rt 41,rt 100,st 100,st 100,st";
-    run_test_sim(base, result, delay, &[m.clone()], &[], true, 50, true, true);
+    run_test_sim(
+        base,
+        result,
+        delay,
+        slice::from_ref(&m),
+        &[],
+        true,
+        50,
+        true,
+        true,
+    );
 
     // machine at client and server
     let base = "0,sn 1,sn 2,sn 40,sn 40,rn 41,sn 41,rn 42,rn";
@@ -649,8 +699,8 @@ fn test_network_aggregate_padding_bypass_replace_many_packets_window() {
         base,
         result,
         delay,
-        &[m.clone()],
-        &[m],
+        slice::from_ref(&m),
+        slice::from_ref(&m),
         true,
         50,
         true,
