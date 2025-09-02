@@ -33,6 +33,9 @@ pub enum Action {
     Cancel { timer: Timer },
     /// Schedule padding to be sent after a timeout.
     ///
+    /// Replaces any previously pending scheduled action timer (set via
+    /// SendPadding or BlockOutgoing) for this machine.
+    ///
     /// The bypass flag determines if the padding packet MUST bypass any
     /// existing blocking that was triggered with the bypass flag set.
     ///
@@ -54,6 +57,9 @@ pub enum Action {
         limit: Option<Dist>,
     },
     /// Schedule blocking of outgoing traffic after a timeout.
+    ///
+    /// Replaces any previously pending scheduled action timer (set via
+    /// SendPadding or BlockOutgoing) for this machine.
     ///
     /// The bypass flag determines if padding actions are allowed to bypass this
     /// blocking action. This allows for machines that can fail closed (never
