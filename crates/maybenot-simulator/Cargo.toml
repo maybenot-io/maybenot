@@ -1,6 +1,6 @@
 [package]
 name = "maybenot-simulator"
-version = "2.1.1"
+version = "2.2.0"
 description = "A simulator for the Maybenot framework"
 authors = ["Tobias Pulls <tobias@pulls.name>"]
 edition.workspace = true
