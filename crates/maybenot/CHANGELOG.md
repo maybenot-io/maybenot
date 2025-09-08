@@ -2,7 +2,7 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
-## 2.2.0 - XXXX-XX-XX
+## 2.2.0 - 2025-09-08
 
 - Doc improvements focused on integration aspects, thanks Nick Mathewson.
 - Set STATE_MAX to 100,000 to prevent resource exhaustion on Machine::from_str

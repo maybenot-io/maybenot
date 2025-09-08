@@ -17,7 +17,7 @@ workspace = true
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-maybenot = { version = "2.1.0", path = "../maybenot/" }
+maybenot = { version = "2.2.0", path = "../maybenot/" }
 enum-map = "2.7"
 rand = "0.9"
 rand_core = "0.9"

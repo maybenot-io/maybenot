@@ -17,7 +17,7 @@ workspace = true
 anyhow = "1.0"
 enum-map = "2.7"
 log = "0.4"
-maybenot = { version = "2.1.0", path = "../maybenot/" }
+maybenot = { version = "2.2.0", path = "../maybenot/" }
 maybenot-simulator = { version = "2.1.0", path = "../maybenot-simulator" }
 num-bigint = "0.4"
 num-integer = "0.1"
