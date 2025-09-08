@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use log::debug;
 
-use crate::{queue::SimQueue, SimEvent};
+use crate::{SimEvent, queue::SimQueue};
 
 /// on blocking expiration, this function determines the duration, if any, that
 /// should be added as aggregated delay as a consequence of packets being

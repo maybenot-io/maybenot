@@ -3,9 +3,9 @@
 use std::time::{Duration, Instant};
 
 use log::debug;
-use maybenot::{event::Event, Machine};
+use maybenot::{Machine, event::Event};
 
-use crate::{queue::SimQueue, queue_event::Queue, RngSource, ScheduledAction, SimState};
+use crate::{RngSource, ScheduledAction, SimState, queue::SimQueue, queue_event::Queue};
 
 pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
     sq: &SimQueue,

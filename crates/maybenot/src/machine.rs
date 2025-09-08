@@ -1,13 +1,13 @@
 //! A machine determines when to inject and/or block outgoing traffic. Consists
 //! of one or more [`State`] structs.
 
-use crate::constants::*;
-use crate::*;
+use crate::constants::{MAX_DECOMPRESSED_SIZE, STATE_MAX, VERSION};
+use crate::{Error, state};
 use base64::prelude::*;
 use bincode::Options;
+use flate2::Compression;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
-use flate2::Compression;
 use serde::{Deserialize, Serialize};
 use sha256::digest;
 use std::fmt;

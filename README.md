@@ -7,36 +7,50 @@ attackers, hence its logo 🤔 - the thinking face emoji (U+1F914).
 Consider encrypted communication protocols such as TLS, QUIC, WireGuard, or Tor.
 While the connections are encrypted, *patterns* in the encrypted communication
 may still leak information about the communicated plaintext. Maybenot is a
-framework for creating defenses that hide such patterns.
+framework for running defenses that hide such patterns.
 
 ## Workspace structure
 
 The Maybenot workspace consists of the following crates:
 
-- [maybenot](crates/maybenot): The core framework for creating defenses.
-- [maybenot-ffi](crates/maybenot-ffi): A wrapper library around maybenot with a C FFI.
+- [maybenot](crates/maybenot): The core framework for running defenses.
+- [maybenot-ffi](crates/maybenot-ffi): A wrapper library around maybenot with a
+  C FFI.
 - [maybenot-simulator](crates/maybenot-simulator): A simulator for testing
   defenses.
+- [maybenot-machines](crates/maybenot-machines): A library of maybenot machines
+  for defenses.
+- [maybenot-gen](crates/maybenot-gen): A library for generating maybenot defenses.
+- [maybenot-cli](crates/maybenot-cli): A binary CLI for creating maybenot
+  defenses.
 
-More crates are being added to the workspace. First up should be an FFI crate
-for the framework.
+## The big picture
 
-## More details
+The `maybenot` framework is integrated with some encrypted protocol, either
+directly or using something like `maybenot-ffi`. State machines are run within
+the framework, triggering cover traffic and delays to hide patterns. Machines
+can be rapidly evaluated using `maybenot-sim`. We have implemented a bunch of
+machines by hand, available in `maybenot-machines`. Many are based on related
+work in the [academic literature around website
+fingerprinting](https://www-users.cse.umn.edu/~hoppernj/sok_wf_def_sp23.pdf). It
+is also possible to generate (many) machines using `maybenot-gen`, either used
+directly as a library, or using a binary CLI like `maybenot-cli`.
 
-This is v2 of the framework and associated crates. The goal is to keep the
-framework as simple as possible, while still being expressive enough to
-implement a wide range of defenses and useful to integrators.
+## Further details
 
-See the [WPES 2023 paper](https://doi.org/10.1145/3603216.3624953) for
-background on v1 of the framework. The
-[documentation](https://docs.rs/maybenot/latest/maybenot) is updated for v2. The
-[arXiv design document](https://arxiv.org/abs/2304.09510) is in the process of
-being updated for version 2.
+See the README-files of each respective crate and their
+[docs.rs](https://docs.rs/maybenot/latest/maybenot).
 
-Development of defenses using Maybenot is under active development. For some
-early results targeting v1 of the framework, see
-[https://github.com/ewitwer/maybenot-defenses](https://github.com/ewitwer/maybenot-defenses).
-Defenses and tooling targeting v2 of the framework will soon be available.
+Papers related to Maybenot:
+
+- Defense generation a [PETS 2026 (camera-ready available during fall)](FIXME).
+- Version 2 of the framework on [arXiv](https://arxiv.org/abs/2304.09510).
+- Version 1 of the framework at [WPES
+  2023](https://doi.org/10.1145/3603216.3624953).
+
+Maybenot is used by [Mullvad VPN](https://mullvad.net) in
+[DAITA](https://mullvad.net/en/vpn/daita). [Their WireGuard Go
+integration](https://github.com/mullvad/wireguard-go/).
 
 ## Contributing
 

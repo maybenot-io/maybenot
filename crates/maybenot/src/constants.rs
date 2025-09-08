@@ -34,5 +34,6 @@ pub const STATE_END: usize = u32::MAX as usize;
 /// running machines.
 pub const STATE_SIGNAL: usize = STATE_END - 1;
 /// The maximum number of [`State`](crate::state)s a [`Machine`](crate::Machine)
-/// can have.
-pub const STATE_MAX: usize = STATE_SIGNAL - 1;
+/// can have. Set to 100,000 as a safety measure to prevent resource exhaustion.
+/// Likely much higher than `MAX_DECOMPRESSED_SIZE` allows for as-is.
+pub const STATE_MAX: usize = 100_000;

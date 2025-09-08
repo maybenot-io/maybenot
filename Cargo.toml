@@ -1,5 +1,5 @@
 [workspace.package]
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 homepage = "https://maybenot.io"
 keywords = [ "anonymity", "correlation", "fingerprinting", "privacy", "security" ]
@@ -19,25 +19,46 @@ members = [
     "crates/maybenot-ffi",
     # simulator for the Maybenot framework
     "crates/maybenot-simulator",
+    # lib of implemented Maybenot machines
+    "crates/maybenot-machines",
+    # lib to help generate and evaluate Maybenot defenses
+    "crates/maybenot-gen",
+    # CLI tool for defense generation using Maybenot
+    "crates/maybenot-cli",
     # benchmarks
     "benches",
     # fuzzing
     "fuzz",
 ]
 
-# Keep all lints in sync with `test/Cargo.toml`
 [workspace.lints.rust]
+warnings = { level = "deny", priority = -1 }
 # Security
 non_ascii_idents = "forbid"
-
+unsafe_code = "warn"
 # Deny old style Rust
 rust_2018_idioms = { level = "deny", priority = -1 }
 macro_use_extern_crate = "deny"
 absolute_paths_not_starting_with_crate = "deny"
-
 # Easy to read style and opinionated best practices
 explicit_outlives_requirements = "warn"
 missing_abi = "deny"
+single_use_lifetimes = "warn"
 unused_lifetimes = "warn"
 unused_macro_rules = "warn"
-single_use_lifetimes = "warn"
+
+[workspace.lints.clippy]
+cargo = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+implicit_clone = "warn"
+manual_let_else = "warn"
+redundant_closure_for_method_calls = "warn"
+unused_async = "deny"
+undocumented_unsafe_blocks = "warn"
+unnecessary_semicolon = "warn"
+wildcard_imports = "warn"
+
+
+[profile.release]
+lto = true
+codegen-units = 1

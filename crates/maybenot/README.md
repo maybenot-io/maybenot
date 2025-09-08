@@ -23,9 +23,6 @@ WireGuard. While the connections are encrypted, *patterns* in the encrypted
 communication may still leak information about the communicated plaintext.
 Maybenot is a framework for creating defenses that hide such patterns.
 
-To simulate defenses based on Maybenot, see the [Maybenot
-simulator](https://github.com/maybenot-io/maybenot/tree/main/crates/maybenot-simulator/).
-
 ## Design
 
 An instance of Maybenot repeatedly takes as *input* one or more *events*
@@ -57,7 +54,7 @@ let s = "02eNpjYEAHjOgCAAA0AAI=";
 let m = vec![Machine::from_str(s).unwrap()];
 
 // create framework instance
-let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::thread_rng()).unwrap();
+let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::rng()).unwrap();
 
 loop {
     // collect one or more events
@@ -104,18 +101,9 @@ loop {
 
 ## More details
 
-See the [WPES 2023 paper](https://doi.org/10.1145/3603216.3624953) and
-[documentation](https://docs.rs/maybenot/latest/maybenot) for further details on
-the framework.
-
-The current version of the framework includes a number of improvements over v1,
-some of which are discussed in the paper. Refer to the [arXiv design
-document](https://arxiv.org/abs/2304.09510) for an in-depth explanation of the
-new capabilities.
-
-Development of defenses using Maybenot is under active development. For some
-early results, see
-[https://github.com/ewitwer/maybenot-defenses](https://github.com/ewitwer/maybenot-defenses).
+Please see [the Maybenot workspace root on
+GitHub](https://github.com/maybenot-io/maybenot) for further details and
+associated tooling.
 
 ## Contributing
 

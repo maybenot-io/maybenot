@@ -2,7 +2,7 @@ use std::collections::BinaryHeap;
 
 use maybenot::TriggerEvent;
 
-use crate::{event_to_usize, SimEvent};
+use crate::{SimEvent, event_to_usize};
 
 use std::time::{Duration, Instant};
 
@@ -80,12 +80,10 @@ impl EventQueue {
 
     pub fn push(&mut self, item: SimEvent) {
         match item.event {
-            TriggerEvent::TunnelSent => {
-                match item.bypass {
-                    true => self.bypassable.push(item),
-                    false => self.blocking.push(item),
-                };
-            }
+            TriggerEvent::TunnelSent => match item.bypass {
+                true => self.bypassable.push(item),
+                false => self.blocking.push(item),
+            },
             // from parse_trace_advanced(), the only place where we push
             // TriggerEvent::NormalSent from a base trace
             TriggerEvent::NormalSent => {

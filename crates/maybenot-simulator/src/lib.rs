@@ -122,9 +122,9 @@ use network::{Network, NetworkBottleneck, WindowCount};
 use queue::SimQueue;
 
 use maybenot::{Framework, Machine, MachineId, Timer, TriggerAction, TriggerEvent};
-use rand::{rngs::ThreadRng, RngCore};
-use rand_xoshiro::rand_core::SeedableRng;
+use rand::{RngCore, rngs::ThreadRng};
 use rand_xoshiro::Xoshiro256StarStar;
+use rand_xoshiro::rand_core::SeedableRng;
 
 use crate::{
     network::sim_network_stack,
@@ -162,13 +162,6 @@ impl RngCore for RngSource {
         match self {
             RngSource::Thread(rng) => rng.fill_bytes(dest),
             RngSource::Xoshiro(rng) => rng.fill_bytes(dest),
-        }
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
-        match self {
-            RngSource::Thread(rng) => rng.try_fill_bytes(dest),
-            RngSource::Xoshiro(rng) => rng.try_fill_bytes(dest),
         }
     }
 }
@@ -272,7 +265,7 @@ where
             // deterministic, insecure RNG
             Some(seed) => RngSource::Xoshiro(Xoshiro256StarStar::seed_from_u64(seed)),
             // secure RNG, default
-            None => RngSource::Thread(rand::thread_rng()),
+            None => RngSource::Thread(rand::rng()),
         };
 
         let num_machines = machines.as_ref().len();
@@ -297,21 +290,21 @@ where
     pub fn reporting_delay(&self) -> Duration {
         self.integration
             .as_ref()
-            .map(|i| i.reporting_delay())
+            .map(Integration::reporting_delay)
             .unwrap_or(Duration::from_micros(0))
     }
 
     pub fn action_delay(&self) -> Duration {
         self.integration
             .as_ref()
-            .map(|i| i.action_delay())
+            .map(Integration::action_delay)
             .unwrap_or(Duration::from_micros(0))
     }
 
     pub fn trigger_delay(&self) -> Duration {
         self.integration
             .as_ref()
-            .map(|i| i.trigger_delay())
+            .map(Integration::trigger_delay)
             .unwrap_or(Duration::from_micros(0))
     }
 }
@@ -465,7 +458,7 @@ pub fn sim_advanced(
             Ordering::Less => {
                 debug!("sim(): {current_time:#?}");
                 debug!("sim(): {:#?}", next.time);
-                panic!("BUG: next event moves time backwards");
+                panic!("bug: next event moves time backwards");
             }
             Ordering::Greater => {
                 debug!("sim(): time moved forward {:#?}", next.time - current_time);
@@ -767,30 +760,30 @@ fn do_internal_timer<M: AsRef<[Machine]>>(
     let mut is_client = false;
 
     for (id, opt) in client.scheduled_internal_timer.iter_mut().enumerate() {
-        if let Some(a) = opt {
-            if *a == target {
+        if let Some(a) = opt
+            && *a == target
+        {
+            machine = Some(MachineId::from_raw(id));
+            is_client = true;
+            *opt = None;
+            break;
+        }
+    }
+
+    if machine.is_none() {
+        for (id, opt) in server.scheduled_internal_timer.iter_mut().enumerate() {
+            if let Some(a) = opt
+                && *a == target
+            {
                 machine = Some(MachineId::from_raw(id));
-                is_client = true;
+                is_client = false;
                 *opt = None;
                 break;
             }
         }
     }
 
-    if machine.is_none() {
-        for (id, opt) in server.scheduled_internal_timer.iter_mut().enumerate() {
-            if let Some(a) = opt {
-                if *a == target {
-                    machine = Some(MachineId::from_raw(id));
-                    is_client = false;
-                    *opt = None;
-                    break;
-                }
-            }
-        }
-    }
-
-    assert!(machine.is_some(), "BUG: no internal action found");
+    assert!(machine.is_some(), "bug: no internal action found");
 
     // create SimEvent with TimerEnd
     Some(SimEvent {
@@ -817,43 +810,43 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
     let mut is_client = false;
 
     for opt in client.scheduled_action.iter_mut() {
-        if let Some(sa) = opt {
-            if sa.time == target {
-                a = Some(sa.clone());
-                is_client = true;
-                *opt = None;
-                break;
-            }
+        if let Some(sa) = opt
+            && sa.time == target
+        {
+            a = Some(sa.clone());
+            is_client = true;
+            *opt = None;
+            break;
         }
     }
 
     // cannot schedule a None action, so if we found one, done
     if a.is_none() {
         for opt in server.scheduled_action.iter_mut() {
-            if let Some(sa) = opt {
-                if sa.time == target {
-                    a = Some(sa.clone());
-                    is_client = false;
-                    *opt = None;
-                    break;
-                }
+            if let Some(sa) = opt
+                && sa.time == target
+            {
+                a = Some(sa.clone());
+                is_client = false;
+                *opt = None;
+                break;
             }
         }
     }
 
     // no action found
-    assert!(a.is_some(), "BUG: no action found");
+    assert!(a.is_some(), "bug: no action found");
     let a = a.unwrap();
 
     // do the action
     match a.action {
         TriggerAction::Cancel { .. } => {
             // this should never happen, bug
-            panic!("BUG: cancel action in scheduled action");
+            panic!("bug: cancel action in scheduled action");
         }
         TriggerAction::UpdateTimer { .. } => {
             // this should never happen, bug
-            panic!("BUG: update timer action in scheduled action");
+            panic!("bug: update timer action in scheduled action");
         }
         TriggerAction::SendPadding {
             timeout: _,
@@ -1009,7 +1002,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                     });
                 }
             }
-        };
+        }
     }
 }
 
@@ -1058,7 +1051,7 @@ pub fn parse_trace_advanced(
                 "s" | "sn" => {
                     // client sent at the given time
                     let reporting_delay = client
-                        .map(|i| i.reporting_delay())
+                        .map(Integration::reporting_delay)
                         .unwrap_or(Duration::from_micros(0));
                     let reported = timestamp + reporting_delay;
                     sq.push(
@@ -1079,7 +1072,7 @@ pub fn parse_trace_advanced(
                     let sent = timestamp - network.delay;
                     // but reported to the Maybenot framework at the server with delay
                     let reporting_delay = server
-                        .map(|i| i.reporting_delay())
+                        .map(Integration::reporting_delay)
                         .unwrap_or(Duration::from_micros(0));
                     let reported = sent + reporting_delay;
                     sq.push(

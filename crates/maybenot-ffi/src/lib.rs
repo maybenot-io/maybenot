@@ -8,10 +8,7 @@ pub use error::MaybenotResult;
 
 mod ffi;
 pub use ffi::*;
-use rand::{
-    rngs::{adapter::ReseedingRng, OsRng},
-    SeedableRng,
-};
+use rand::rngs::{OsRng, ReseedingRng};
 
 /// A running Maybenot instance.
 ///
@@ -151,8 +148,7 @@ impl MaybenotFramework {
 
         let machines_count = machines.len();
 
-        let rng_core = rand_chacha::ChaCha12Core::from_entropy();
-        let rng = Rng::new(rng_core, RNG_RESEED_THRESHOLD, OsRng);
+        let rng = Rng::new(RNG_RESEED_THRESHOLD, OsRng).unwrap();
 
         let framework = Framework::new(
             machines,
@@ -182,8 +178,7 @@ impl MaybenotFramework {
             self.events_buf.push(convert_event(event));
         }
 
-        let num_actions = self
-            .framework
+        self.framework
             .trigger_events(&self.events_buf, now)
             // convert maybenot actions to repr(C) equivalents
             .map(convert_action)
@@ -191,9 +186,7 @@ impl MaybenotFramework {
             // NOTE: trigger_events will not emit more than one action per machine.
             .zip(actions.iter_mut())
             .map(|(action, out)| out.write(action))
-            .count();
-
-        num_actions
+            .count()
     }
 }
 

@@ -5,12 +5,12 @@ use common::{run_test_sim, set_bypass, set_replace};
 use std::{slice, time::Duration};
 
 use maybenot::{
+    Machine, Timer,
     action::Action,
     counter::{Counter, Operation},
     dist::{Dist, DistType},
     event::Event,
     state::{State, Trans},
-    Machine, Timer,
 };
 
 use enum_map::enum_map;
@@ -683,7 +683,7 @@ fn test_bypass_replace_machine() {
             start: 0.0,
             max: 0.0,
         });
-    };
+    }
     run_test_sim(
         "0,sn 2,sn 2,sn 2,sn 2,sn 6,rn 6,rn 7,sn",
         "0,st 3,st 5,st 6,rt 6,rt 7,st 9,st 11,st",

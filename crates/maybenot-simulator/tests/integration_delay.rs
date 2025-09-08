@@ -1,16 +1,17 @@
 use std::time::Duration;
 
 use maybenot::{
+    Machine,
     action::Action,
     dist::{Dist, DistType},
     event::Event,
     state::{State, Trans},
-    Machine,
 };
 use maybenot_simulator::{
+    SimEvent, SimulatorArgs,
     integration::{BinDist, Integration},
     network::Network,
-    parse_trace_advanced, sim_advanced, SimEvent, SimulatorArgs,
+    parse_trace_advanced, sim_advanced,
 };
 
 use enum_map::enum_map;

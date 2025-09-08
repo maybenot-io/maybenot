@@ -1,0 +1,84 @@
+# an example config based on the ephemeral padding-only defenses
+# in the "Ephemeral Network-Layer Fingerprinting Defenses" paper,
+# PETS 2026
+
+[derive]
+max_attempts = 50
+
+[derive.constraints]
+client_load = [0.6, 2.6]
+server_load = [0.4, 2.4]
+delay = [0.0, 0.0]
+client_min_normal_packets = 30
+server_min_normal_packets = 100
+include_after_last_normal = false
+
+[derive.env]
+traces = ["DeepFingerprinting", "GongSurakav"]
+num_traces = [15, 16]
+sim_steps = [5_000, 5_000]
+implied_framework_limits = false
+
+[derive.env.network]
+rtt_in_ms = [50, 500]
+packets_per_sec = [100_000, 100_000]
+
+[derive.machine]
+num_states = [3,4]
+allow_blocking_client = false
+allow_blocking_server = false
+allow_expressive = false
+allow_fixed_budget = true
+allow_frac_limits = false
+duration_point = [672_000.0, 950_000.0]
+
+[search]
+n = 100
+#seed = "0"
+
+[combo]
+n = 19_000
+height = 2
+#seed = "0"
+
+[combo.constraints]
+client_load = [0.6, 2.6]
+server_load = [0.4, 2.4]
+delay = [0.0, 0.0]
+client_min_normal_packets = 30
+server_min_normal_packets = 100
+include_after_last_normal = false
+
+[combo.env]
+traces = ["DeepFingerprinting", "GongSurakav"]
+num_traces = [15, 16]
+sim_steps = [5_000, 5_000]
+implied_framework_limits = false
+
+[combo.env.network]
+rtt_in_ms = [50, 500]
+packets_per_sec = [100_000, 100_000]
+
+[sim]
+base_dataset = "/mnt/ramdisk/bigenough-95x10x20-standard-rngsubpages/"
+trace_length = 60_000
+events_multiplier = 100
+network.rtt_in_ms = [50, 500]
+network.packets_per_sec = [100_000, 100_1000]
+#seed = "0"
+
+[sim.client]
+padding_budget = [1_000, 2_000]
+padding_frac = [0.95, 0.95]
+
+[sim.server]
+padding_budget = [1_000, 3_000]
+padding_frac = [0.95, 0.95]
+
+[eval]
+base_dataset = "/mnt/ramdisk/bigenough-95x10x20-standard-rngsubpages/"
+classifiers = [
+"scripts/rf.py --train -c 95 -s 20 -d",
+"scripts/df.py --train -c 95 -s 20 -d"
+]
+output = "results.json"

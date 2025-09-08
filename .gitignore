@@ -3,3 +3,4 @@
 *.a
 fuzz/out/
 fuzz/seeds/
+local/

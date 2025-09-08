@@ -30,7 +30,7 @@ mod tests {
             Err(_) => return,
         };
         let seed = u64::from_le_bytes(seed);
-        let mut rng = &mut Xoshiro256StarStar::seed_from_u64(seed);
+        let mut rng = Xoshiro256StarStar::seed_from_u64(seed);
 
         let probability: [u8; 8] = match data[8..16].try_into() {
             Ok(arr) => arr,

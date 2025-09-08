@@ -4,14 +4,14 @@ use std::{slice, time::Duration};
 
 use common::run_test_sim;
 use maybenot::{
+    Machine,
     action::Action,
     constants::MAX_SAMPLED_BLOCK_DURATION,
     dist::{Dist, DistType},
     event::Event,
     state::{State, Trans},
-    Machine,
 };
-use maybenot_simulator::{network::Network, parse_trace, sim, sim_advanced, SimulatorArgs};
+use maybenot_simulator::{SimulatorArgs, network::Network, parse_trace, sim, sim_advanced};
 
 use enum_map::enum_map;
 

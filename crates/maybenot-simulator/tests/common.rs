@@ -1,9 +1,9 @@
 use std::time::{Duration, Instant};
 
 use log::debug;
-use maybenot::{action::Action, state::State, Machine, TriggerEvent};
+use maybenot::{Machine, TriggerEvent, action::Action, state::State};
 use maybenot_simulator::{
-    network::Network, queue::SimQueue, sim_advanced, SimEvent, SimulatorArgs,
+    SimEvent, SimulatorArgs, network::Network, queue::SimQueue, sim_advanced,
 };
 
 #[allow(clippy::too_many_arguments)]

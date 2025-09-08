@@ -55,7 +55,7 @@
 //! //
 //! // The framework validates all machines (like ::From_str() above) and
 //! // verifies that the fractions are fractions, so it can return an error.
-//! let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::thread_rng()).unwrap();
+//! let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::rng()).unwrap();
 //!
 //! // Below is the main loop for operating the framework. This should run
 //! // for as long as the underlying connection the framework is attached to
@@ -265,7 +265,7 @@
 //! | bypassable     | none            | queue padding  |
 //! |                | bypass          | send padding immediately |
 //! |                | replace         | queue padding if queue is empty |
-//! |                | bypass, replace | send packet from queue immediately, or padding if queue is emtpy |
+//! |                | bypass, replace | send packet from queue immediately, or padding if queue is empty |
 
 pub mod action;
 pub mod constants;
@@ -275,17 +275,16 @@ mod error;
 pub mod event;
 mod framework;
 mod machine;
+mod rate_limited_framework;
 pub mod state;
 pub mod time;
 
 pub use crate::action::{Timer, TriggerAction};
 pub use crate::error::Error;
 pub use crate::event::TriggerEvent;
+pub use crate::rate_limited_framework::RateLimitedFramework;
 pub use framework::{Framework, MachineId};
 pub use machine::Machine;
-
-#[cfg(feature = "parsing")]
-pub mod parsing;
 
 #[cfg(test)]
 mod tests {
@@ -332,7 +331,7 @@ mod tests {
         //
         // The framework validates all machines (like ::From_str() above) and
         // verifies that the fractions are fractions, so it can return an error.
-        let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::rng()).unwrap();
 
         // Below is the main loop for operating the framework. This should run
         // for as long as the underlying connection the framework is attached to

@@ -13,6 +13,6 @@ repository.workspace = true
 crate-type = ["lib", "staticlib", "cdylib"]
 
 [dependencies]
-maybenot = { version = "2.0.1", path = "../maybenot" }
-rand = "0.8.5"
-rand_chacha = "0.3.1"
+maybenot = { version = "2.1.0", path = "../maybenot" }
+rand = "0.9"
+rand_chacha = "0.9"

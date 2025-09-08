@@ -1,0 +1,28 @@
+[derive]
+max_attempts = 1024
+
+[derive.constraints]
+client_load = [0.5, 5.0]
+server_load = [0.5, 5.0]
+delay = [0.0, 0.0]
+client_min_normal_packets = 10
+server_min_normal_packets = 5
+include_after_last_normal = false
+
+[derive.env]
+traces = ["DeepFingerprinting", "GongSurakav"]
+num_traces = [4, 14]
+sim_steps = [1_000, 5_000]
+implied_framework_limits = true
+
+[derive.env.network]
+rtt_in_ms = [10, 100]
+
+[derive.machine]
+num_states = [3,3]
+allow_blocking_client = false
+allow_blocking_server = false
+allow_expressive = false
+allow_fixed_budget = true
+allow_frac_limits = false
+duration_point = [1_000.0, 100_000.0]

@@ -1,7 +1,7 @@
 //! For simulating the network stack and network between client and server.
 
 use std::{
-    cmp::{max, Ordering},
+    cmp::{Ordering, max},
     collections::{BinaryHeap, VecDeque},
     fmt,
     time::{Duration, Instant},
@@ -11,9 +11,9 @@ use log::debug;
 use maybenot::{Machine, TriggerEvent};
 
 use crate::{
+    RngSource, SimEvent, SimState,
     delay::{agg_delay_on_padding_bypass_replace, should_delayed_packet_prop_agg_delay},
     queue::SimQueue,
-    RngSource, SimEvent, SimState,
 };
 
 /// A model of the network between the client and server.
@@ -147,23 +147,23 @@ impl NetworkBottleneck {
                 // @client: max(4D-B, 0)
                 if 4 * d > block_duration {
                     client = 4 * d - block_duration;
-                };
+                }
                 // @server: max(3D-B, 0)
                 if 3 * d > block_duration {
                     server = 3 * d - block_duration;
-                };
+                }
             }
             false => {
                 // @client: max(D-B, 0)
                 if d > block_duration {
                     client = d - block_duration;
-                };
+                }
                 // @server: max(4D-B, 0)
                 if 4 * d > block_duration {
                     server = 4 * d - block_duration;
-                };
+                }
             }
-        };
+        }
 
         debug!("\tpushing aggregate delay {block_duration:?} in {client:?} at the client");
         self.aggregate_delay_queue.push(PendingAggregateDelay {
@@ -190,7 +190,7 @@ impl NetworkBottleneck {
                     debug!("\tpopping aggregate delay at server {:?}", aggregate.delay);
                     self.server_aggregate_base_delay += aggregate.delay;
                 }
-            };
+            }
         }
     }
 }
@@ -298,57 +298,55 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 // bugs related to integration delays
                 if let (Some(queued), qid) =
                     sq.peek_blocking(state.blocking_bypassable, next.client)
+                    && queued.client == next.client
+                    && TriggerEvent::TunnelSent == queued.event
+                    && !queued.contains_padding
                 {
-                    if queued.client == next.client
-                        && TriggerEvent::TunnelSent == queued.event
-                        && !queued.contains_padding
-                    {
-                        // two options:
-                        // 1. the padding has the bypass flag set, so we need to
-                        //    propagate the flag to the queued packet
-                        // 2. the bypass flag is not set, which is also the case
-                        //    for normal packets, so we do nothing
-                        if !next.bypass {
-                            debug!("\treplaced padding sent with blocked queued normal @{side}");
-                            return false;
-                        }
-
-                        // we need to remove and re-insert to get the packet
-                        // into the correct internal queue with the new flags
-                        let mut entry = sq
-                            .pop_blocking(
-                                qid,
-                                state.blocking_bypassable,
-                                next.client,
-                                if next.client {
-                                    network.client_aggregate_base_delay
-                                } else {
-                                    network.server_aggregate_base_delay
-                                },
-                            )
-                            .unwrap();
-                        entry.bypass = true;
-                        entry.replace = false;
-                        debug!(
-                            "\treplaced bypassable padding sent with blocked queued normal TunnelSent @{side}"
-                        );
-                        // queue any aggregate delay caused by the blocking
-                        if let Some(block_duration) = agg_delay_on_padding_bypass_replace(
-                            sq,
-                            next.client,
-                            *current_time,
-                            &entry,
-                            match next.client {
-                                true => network.client_aggregate_base_delay,
-                                false => network.server_aggregate_base_delay,
-                            },
-                        ) {
-                            network.push_aggregate_delay(block_duration, current_time, next.client);
-                        }
-
-                        sq.push_sim(entry);
+                    // two options:
+                    // 1. the padding has the bypass flag set, so we need to
+                    //    propagate the flag to the queued packet
+                    // 2. the bypass flag is not set, which is also the case
+                    //    for normal packets, so we do nothing
+                    if !next.bypass {
+                        debug!("\treplaced padding sent with blocked queued normal @{side}");
                         return false;
                     }
+
+                    // we need to remove and re-insert to get the packet
+                    // into the correct internal queue with the new flags
+                    let mut entry = sq
+                        .pop_blocking(
+                            qid,
+                            state.blocking_bypassable,
+                            next.client,
+                            if next.client {
+                                network.client_aggregate_base_delay
+                            } else {
+                                network.server_aggregate_base_delay
+                            },
+                        )
+                        .unwrap();
+                    entry.bypass = true;
+                    entry.replace = false;
+                    debug!(
+                        "\treplaced bypassable padding sent with blocked queued normal TunnelSent @{side}"
+                    );
+                    // queue any aggregate delay caused by the blocking
+                    if let Some(block_duration) = agg_delay_on_padding_bypass_replace(
+                        sq,
+                        next.client,
+                        *current_time,
+                        &entry,
+                        match next.client {
+                            true => network.client_aggregate_base_delay,
+                            false => network.server_aggregate_base_delay,
+                        },
+                    ) {
+                        network.push_aggregate_delay(block_duration, current_time, next.client);
+                    }
+
+                    sq.push_sim(entry);
+                    return false;
                 }
             }
             // nothing to replace with (or we're not replacing), so queue up
@@ -368,19 +366,19 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
         TriggerEvent::TunnelSent => {
             let reporting_delay = recipient.reporting_delay();
             let (network_delay, baseline_delay) = network.sample(current_time, next.client);
-            if let Some(pps_delay) = baseline_delay {
-                if should_delayed_packet_prop_agg_delay(
+            if let Some(pps_delay) = baseline_delay
+                && should_delayed_packet_prop_agg_delay(
                     sq,
                     next.client,
                     next,
                     network.client_aggregate_base_delay,
-                ) {
-                    debug!(
-                        "\tadding {:?} delay to packet due to {:?}pps limit",
-                        pps_delay, network.pps_limit
-                    );
-                    network.push_aggregate_delay(pps_delay, current_time, next.client);
-                }
+                )
+            {
+                debug!(
+                    "\tadding {:?} delay to packet due to {:?}pps limit",
+                    pps_delay, network.pps_limit
+                );
+                network.push_aggregate_delay(pps_delay, current_time, next.client);
             }
 
             if !next.contains_padding {

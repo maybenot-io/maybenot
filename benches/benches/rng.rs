@@ -1,50 +1,50 @@
 use std::time::Duration;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use enum_map::enum_map;
+use maybenot::Machine;
 use maybenot::dist::{Dist, DistType};
 use maybenot::event::Event;
 use maybenot::state::{State, Trans};
-use maybenot::Machine;
 use maybenot_simulator::network::Network;
 use maybenot_simulator::queue::SimQueue;
-use maybenot_simulator::{parse_trace, sim_advanced, SimulatorArgs};
+use maybenot_simulator::{SimulatorArgs, parse_trace, sim_advanced};
+use rand::SeedableRng;
 use rand_core::RngCore;
-use rand_xoshiro::rand_core::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
 
 pub fn dist_rng_source_benchmarks(c: &mut Criterion) {
     let n = 10;
     c.bench_function("11 distributions 10 samples, thread_rng()", |b| {
-        let rng = &mut rand::thread_rng();
+        let mut rng = rand::rng();
         b.iter(|| {
-            sample_uniform(rng, black_box(n));
-            sample_normal(rng, black_box(n));
-            sample_skew_normal(rng, black_box(n));
-            sample_log_normal(rng, black_box(n));
-            sample_binomial(rng, black_box(n));
-            sample_geometric(rng, black_box(n));
-            sample_pareto(rng, black_box(n));
-            sample_poisson(rng, black_box(n));
-            sample_weibull(rng, black_box(n));
-            sample_gamma(rng, black_box(n));
-            sample_beta(rng, black_box(n));
+            sample_uniform(&mut rng, black_box(n));
+            sample_normal(&mut rng, black_box(n));
+            sample_skew_normal(&mut rng, black_box(n));
+            sample_log_normal(&mut rng, black_box(n));
+            sample_binomial(&mut rng, black_box(n));
+            sample_geometric(&mut rng, black_box(n));
+            sample_pareto(&mut rng, black_box(n));
+            sample_poisson(&mut rng, black_box(n));
+            sample_weibull(&mut rng, black_box(n));
+            sample_gamma(&mut rng, black_box(n));
+            sample_beta(&mut rng, black_box(n));
         })
     });
     c.bench_function("11 distributions 10 samples, Xoshiro256StarStar", |b| {
-        let rng = &mut Xoshiro256StarStar::seed_from_u64(0);
+        let mut rng = Xoshiro256StarStar::seed_from_u64(0);
         b.iter(|| {
-            sample_uniform(rng, black_box(n));
-            sample_normal(rng, black_box(n));
-            sample_skew_normal(rng, black_box(n));
-            sample_log_normal(rng, black_box(n));
-            sample_binomial(rng, black_box(n));
-            sample_geometric(rng, black_box(n));
-            sample_pareto(rng, black_box(n));
-            sample_poisson(rng, black_box(n));
-            sample_weibull(rng, black_box(n));
-            sample_gamma(rng, black_box(n));
-            sample_beta(rng, black_box(n));
+            sample_uniform(&mut rng, black_box(n));
+            sample_normal(&mut rng, black_box(n));
+            sample_skew_normal(&mut rng, black_box(n));
+            sample_log_normal(&mut rng, black_box(n));
+            sample_binomial(&mut rng, black_box(n));
+            sample_geometric(&mut rng, black_box(n));
+            sample_pareto(&mut rng, black_box(n));
+            sample_poisson(&mut rng, black_box(n));
+            sample_weibull(&mut rng, black_box(n));
+            sample_gamma(&mut rng, black_box(n));
+            sample_beta(&mut rng, black_box(n));
         })
     });
 }
@@ -70,15 +70,15 @@ pub fn transition_rng_source_benchmarks(c: &mut Criterion) {
     });
 
     c.bench_function("1000 state transitions, thread_rng()", |b| {
-        let rng = &mut rand::thread_rng();
+        let mut rng = rand::rng();
         b.iter(|| {
-            sample_state(&state, rng, black_box(n));
+            sample_state(&state, &mut rng, black_box(n));
         })
     });
     c.bench_function("1000 state transitions, Xoshiro256StarStar", |b| {
-        let rng = &mut Xoshiro256StarStar::seed_from_u64(0);
+        let mut rng = Xoshiro256StarStar::seed_from_u64(0);
         b.iter(|| {
-            sample_state(&state, rng, black_box(n));
+            sample_state(&state, &mut rng, black_box(n));
         })
     });
 }

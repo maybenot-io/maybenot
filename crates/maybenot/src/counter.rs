@@ -3,7 +3,7 @@
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 
-use crate::*;
+use crate::{Error, dist};
 use std::fmt;
 
 use self::dist::Dist;
@@ -81,9 +81,21 @@ impl Counter {
 
     /// Sample a value to update the counter with.
     pub fn sample_value<R: RngCore>(&self, rng: &mut R) -> u64 {
+        // Maximum safe f64 value that can be converted to u64 without overflow
+        const MAX_SAFE_F64_TO_U64: f64 = u64::MAX as f64;
+
         match self.dist {
             None => 1,
-            Some(dist) => dist.sample(rng) as u64,
+            Some(dist) => {
+                let sampled = dist.sample(rng);
+                if !sampled.is_finite() || sampled < 0.0 {
+                    0
+                } else if sampled > MAX_SAFE_F64_TO_U64 {
+                    u64::MAX
+                } else {
+                    sampled as u64
+                }
+            }
         }
     }
 
@@ -137,12 +149,65 @@ mod tests {
         let r = cu.validate();
         assert!(r.is_ok());
 
-        assert_eq!(cu.sample_value(&mut rand::thread_rng()), 1);
+        assert_eq!(cu.sample_value(&mut rand::rng()), 1);
 
         // counter with copy value
         cu.copy = true;
 
         let r = cu.validate();
         assert!(r.is_ok());
+    }
+
+    #[test]
+    fn sample_value_overflow_protection() {
+        use crate::dist::{Dist, DistType};
+
+        // Test with distribution that can produce very large values
+        let cu = Counter::new_dist(
+            Operation::Increment,
+            Dist {
+                dist: DistType::Uniform {
+                    low: f64::MAX,
+                    high: f64::MAX,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+        );
+
+        let sampled = cu.sample_value(&mut rand::rng());
+        assert_eq!(sampled, u64::MAX);
+
+        // Test with distribution that can produce negative values
+        let cu_negative = Counter::new_dist(
+            Operation::Increment,
+            Dist {
+                dist: DistType::Uniform {
+                    low: -1000.0,
+                    high: -500.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+        );
+
+        let sampled_negative = cu_negative.sample_value(&mut rand::rng());
+        assert_eq!(sampled_negative, 0);
+
+        // Test with distribution that can produce NaN (create invalid Normal dist case)
+        let cu_nan = Counter::new_dist(
+            Operation::Increment,
+            Dist {
+                dist: DistType::Normal {
+                    mean: f64::NAN,
+                    stdev: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+        );
+
+        let sampled_nan = cu_nan.sample_value(&mut rand::rng());
+        assert_eq!(sampled_nan, 0);
     }
 }

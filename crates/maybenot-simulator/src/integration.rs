@@ -31,19 +31,19 @@ impl Integration {
     pub fn action_delay(&self) -> Duration {
         // TODO: needs to use the configured RngSource if we want to support
         // deterministic testing of integration delays
-        self.action_delay.sample(&mut rand::thread_rng())
+        self.action_delay.sample(&mut rand::rng())
     }
 
     pub fn reporting_delay(&self) -> Duration {
         // TODO: needs to use the configured RngSource if we want to support
         // deterministic testing of integration delays
-        self.reporting_delay.sample(&mut rand::thread_rng())
+        self.reporting_delay.sample(&mut rand::rng())
     }
 
     pub fn trigger_delay(&self) -> Duration {
         // TODO: needs to use the configured RngSource if we want to support
         // deterministic testing of integration delays
-        self.trigger_delay.sample(&mut rand::thread_rng())
+        self.trigger_delay.sample(&mut rand::rng())
     }
 }
 
@@ -71,7 +71,7 @@ impl BinDist {
                     .collect::<Result<Vec<f64>, _>>()?;
 
                 if range_values.len() != 2 {
-                    return Err("Range must have exactly two values".into());
+                    return Err("range must have exactly two values".into());
                 }
 
                 Ok(((range_values[0], range_values[1]), prob))
@@ -79,7 +79,7 @@ impl BinDist {
             .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
 
         // Sort bins by range start for cumulative probability calculation
-        sorted_bins.sort_by(|a, b| a.0 .0.partial_cmp(&b.0 .0).unwrap());
+        sorted_bins.sort_by(|a, b| a.0.0.partial_cmp(&b.0.0).unwrap());
 
         let mut cumulative_probabilities = Vec::with_capacity(sorted_bins.len());
         let mut total_prob = 0.0;
@@ -98,7 +98,7 @@ impl BinDist {
     }
 
     pub fn sample<R: RngCore>(&self, rng: &mut R) -> Duration {
-        let sample_prob = rng.gen::<f64>();
+        let sample_prob = rng.random::<f64>();
         let bin_index = match self
             .cumulative_probabilities
             .binary_search_by(|prob| prob.partial_cmp(&sample_prob).unwrap())
@@ -112,6 +112,6 @@ impl BinDist {
         if min == max {
             return Duration::from_micros((min * 1000.0) as u64);
         }
-        Duration::from_micros((rng.gen_range(min..max) * 1000.0) as u64)
+        Duration::from_micros((rng.random_range(min..max) * 1000.0) as u64)
     }
 }

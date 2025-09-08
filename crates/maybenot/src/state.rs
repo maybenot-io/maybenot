@@ -2,8 +2,8 @@
 //! [`Counter`] to be executed upon transition to this state, and a vector of
 //! state transitions for each possible [`Event`].
 
-use crate::constants::*;
-use crate::*;
+use crate::constants::{EVENT_NUM, STATE_END, STATE_SIGNAL};
+use crate::{Error, action, counter, event};
 use enum_map::Enum;
 use enum_map::EnumMap;
 use rand::RngCore;
@@ -150,7 +150,7 @@ impl State {
         use rand::Rng;
         if let Some(vector) = &self.transitions[event.to_usize()] {
             let mut sum = 0.0;
-            let r = rng.gen_range(0.0..1.0);
+            let r = rng.random_range(0.0..1.0);
             for t in vector.iter() {
                 sum += t.1;
                 if r < sum {
@@ -199,7 +199,7 @@ impl fmt::Display for State {
             _ => {
                 writeln!(f, "counter: None")?;
             }
-        };
+        }
 
         writeln!(f, "transitions: ")?;
         for event in Event::iter() {
@@ -242,7 +242,7 @@ mod tests {
         let s0: State = bincode::deserialize(&s0).unwrap();
 
         assert_eq!(
-            s0.sample_state(Event::PaddingSent, &mut rand::thread_rng()),
+            s0.sample_state(Event::PaddingSent, &mut rand::rng()),
             Some(6)
         );
     }

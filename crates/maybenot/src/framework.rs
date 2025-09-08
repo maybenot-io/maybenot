@@ -3,7 +3,7 @@
 
 use rand_core::RngCore;
 
-use crate::*;
+use crate::{Error, Machine, TriggerAction, TriggerEvent, action, constants, counter, event};
 
 use self::action::Action;
 use self::constants::{STATE_END, STATE_LIMIT_MAX, STATE_SIGNAL};
@@ -81,12 +81,12 @@ where
     T: crate::time::Instant,
 {
     // updated each time the framework is triggered
-    current_time: T,
+    pub(crate) current_time: T,
     // random number generator, used for sampling distributions and transitions
     rng: R,
     // we allocate the actions vector once and reuse it, handing out references
     // as part of the iterator in [`Framework::trigger_events`].
-    actions: Vec<Option<TriggerAction<T>>>,
+    pub(crate) actions: Vec<Option<TriggerAction<T>>>,
     // the machines are immutable, but we need to keep track of their runtime
     // state (size independent of number of states in the machine).
     machines: M,
@@ -191,6 +191,15 @@ where
         self.machines.as_ref().len()
     }
 
+    /// Returns true if all machines have reached the end state. This typically
+    /// means that the framework should be dropped (remember to let all
+    /// triggered actions expire and their effects be fully realized though).
+    pub fn all_machines_ended(&self) -> bool {
+        // TODO: consider if this functionality should be a TriggerAction
+        // instead, but could be problematic with the action rate limiting
+        self.runtime.iter().all(|r| r.current_state == STATE_END)
+    }
+
     /// Trigger zero or more [`TriggerEvent`] for all machines running in the
     /// framework.
     ///
@@ -242,10 +251,10 @@ where
 
             // signal all machines, except the excluded one
             for mi in 0..self.runtime.len() {
-                if let Some(excluded) = excluded {
-                    if excluded == mi {
-                        continue;
-                    }
+                if let Some(excluded) = excluded
+                    && excluded == mi
+                {
+                    continue;
                 }
                 self.transition(mi, Event::Signal);
             }
@@ -254,10 +263,10 @@ where
             // we excluded a machine, then we need to signal the excluded
             // machine as well (per definition, the signal must have come from
             // another machine)
-            if self.signal_pending.take().is_some() {
-                if let Some(excluded) = excluded {
-                    self.transition(excluded, Event::Signal);
-                }
+            if self.signal_pending.take().is_some()
+                && let Some(excluded) = excluded
+            {
+                self.transition(excluded, Event::Signal);
             }
         }
 
@@ -286,22 +295,22 @@ where
                 }
             }
             TriggerEvent::NormalSent => {
-                self.normal_sent_packets += 1;
+                self.normal_sent_packets = self.normal_sent_packets.saturating_add(1);
 
                 for mi in 0..self.runtime.len() {
-                    self.runtime[mi].normal_sent += 1;
+                    self.runtime[mi].normal_sent = self.runtime[mi].normal_sent.saturating_add(1);
 
                     self.transition(mi, Event::NormalSent);
                 }
             }
             TriggerEvent::PaddingSent { machine } => {
-                self.padding_sent_packets += 1;
+                self.padding_sent_packets = self.padding_sent_packets.saturating_add(1);
 
                 let mi = machine.into_raw();
                 if mi >= self.runtime.len() {
                     return;
                 }
-                self.runtime[mi].padding_sent += 1;
+                self.runtime[mi].padding_sent = self.runtime[mi].padding_sent.saturating_add(1);
                 if self.transition(mi, Event::PaddingSent) == StateChange::Unchanged
                     && self.runtime[mi].current_state != STATE_END
                 {
@@ -340,7 +349,7 @@ where
                     blocked = self
                         .current_time
                         .saturating_duration_since(self.blocking_started);
-                    self.blocking_duration += blocked;
+                    self.blocking_duration += blocked; // Duration has AddAssign trait with overflow protection
                     self.blocking_active = false;
                 }
 
@@ -348,7 +357,7 @@ where
                     // since block is global, every machine was blocked the
                     // same duration
                     if !blocked.is_zero() {
-                        self.runtime[mi].blocking_duration += blocked;
+                        self.runtime[mi].blocking_duration += blocked; // Duration has AddAssign trait with overflow protection
                     }
                     self.transition(mi, Event::BlockingEnd);
                 }
@@ -372,7 +381,7 @@ where
                 }
                 self.transition(mi, Event::TimerEnd);
             }
-        };
+        }
     }
 
     fn transition(&mut self, mi: usize, event: Event) -> StateChange {
@@ -569,13 +578,14 @@ where
         }
         let cs = self.runtime[mi].current_state;
 
-        if let Some(action) = self.machines.as_ref()[mi].states[cs].action {
-            if self.runtime[mi].state_limit == 0 && action.has_limit() {
-                // take no action and trigger limit reached
-                self.actions[mi] = None;
-                // next, we trigger internally event LimitReached
-                self.transition(mi, Event::LimitReached);
-            }
+        if let Some(action) = self.machines.as_ref()[mi].states[cs].action
+            && self.runtime[mi].state_limit == 0
+            && action.has_limit()
+        {
+            // take no action and trigger limit reached
+            self.actions[mi] = None;
+            // next, we trigger internally event LimitReached
+            self.transition(mi, Event::LimitReached);
         }
     }
 
@@ -703,16 +713,16 @@ mod tests {
     #[test]
     fn no_machines() {
         let machines = vec![];
-        let f = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::thread_rng());
+        let f = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::rng());
         assert!(f.is_ok());
     }
 
     #[test]
     fn reuse_machines() {
         let machines = vec![];
-        let f1 = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::thread_rng());
+        let f1 = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::rng());
         assert!(f1.is_ok());
-        let f2 = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::thread_rng());
+        let f2 = Framework::new(&machines, 0.0, 0.0, Instant::now(), rand::rng());
         assert!(f2.is_ok());
     }
 
@@ -774,7 +784,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         assert_eq!(f.actions.len(), 1);
 
@@ -942,7 +952,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(
@@ -1028,7 +1038,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(
             &[TriggerEvent::PaddingSent {
@@ -1122,7 +1132,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(
             &[TriggerEvent::PaddingSent {
@@ -1223,7 +1233,7 @@ mod tests {
 
         let current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         // decrement counter to 0
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
@@ -1289,7 +1299,7 @@ mod tests {
 
         let current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         // set counter to u64::MAX
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
@@ -1378,7 +1388,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(f.actions[0], None);
@@ -1483,7 +1493,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(f.actions[0], None);
@@ -1589,7 +1599,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(f.actions[0], None);
@@ -1679,7 +1689,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(f.actions[0], None);
@@ -1774,7 +1784,7 @@ mod tests {
 
         let current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(f.actions[0], None);
@@ -1872,7 +1882,7 @@ mod tests {
         .unwrap();
         let machines = vec![m];
         let current_time = Instant::now();
-        let mut f = Framework::new(machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
         // get into init state
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         // transition to state_a: this should not loop forever, but be limited
@@ -1929,7 +1939,7 @@ mod tests {
 
         let current_time = Instant::now();
         let machines = vec![m0, m1];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(f.actions[0], None);
@@ -1979,7 +1989,7 @@ mod tests {
 
         let current_time = Instant::now();
         let machines = vec![m0, m1];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(
@@ -2041,7 +2051,7 @@ mod tests {
 
         let current_time = Instant::now();
         let machines = vec![m0, m1];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(
@@ -2090,7 +2100,7 @@ mod tests {
 
         let current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         // transition to get the loop going
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
@@ -2176,7 +2186,7 @@ mod tests {
         // NOTE 0.5 max_padding_frac below
         let current_time = Instant::now();
         let machines = vec![m1, m2];
-        let mut f = Framework::new(&machines, 0.5, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.5, 0.0, current_time, rand::rng()).unwrap();
 
         // we have two machines that each can send 100 packets before their own
         // or any framework limits are applied (by design, see
@@ -2304,7 +2314,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         // trigger self to start the blocking (triggers action)
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
@@ -2413,7 +2423,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.5, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.5, current_time, rand::rng()).unwrap();
 
         // trigger self to start the blocking (triggers action)
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
@@ -2552,7 +2562,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m0, m1];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         // trigger to make machine 0 block
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
@@ -2665,7 +2675,7 @@ mod tests {
 
         let mut current_time = Instant::now();
         let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::thread_rng()).unwrap();
+        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         // trigger self to start the padding
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);

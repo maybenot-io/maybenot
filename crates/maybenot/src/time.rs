@@ -54,8 +54,6 @@ impl Duration for std::time::Duration {
 
     #[inline(always)]
     fn div_duration_f64(self, rhs: Self) -> f64 {
-        // TODO: Can be changed to just `self.div_duration_f64(rhs)` when Rust 1.80 has
-        // been released and we are fine with that being the oldest working Rust version.
-        self.as_secs_f64() / rhs.as_secs_f64()
+        self.div_duration_f64(rhs)
     }
 }

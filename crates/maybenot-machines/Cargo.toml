@@ -1,0 +1,24 @@
+[package]
+name = "maybenot-machines"
+version = "1.0.0"
+description = "A collection of useful Maybenot machines (e.g., as parts of defenses)"
+authors = ["Tobias Pulls <tobias@pulls.name>"]
+edition.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+maybenot = { version = "2.1.0", path = "../maybenot/" }
+enum-map = "2.7"
+rand = "0.9"
+rand_core = "0.9"
+anyhow = "1.0"

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use self::Event::*;
-use crate::{constants::*, MachineId};
+use crate::{MachineId, constants::EVENT_NUM};
 use enum_map::Enum;
 use std::fmt;
 use std::hash::Hash;

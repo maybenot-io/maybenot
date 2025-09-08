@@ -18,11 +18,10 @@ fuzzing = []
 
 [dependencies]
 afl = "0.15.13"
-rand = "0.8.5"
-rand_xoshiro = "0.6.0"
-rand_core = "0.6.4"
+rand = "0.9"
+rand_xoshiro = "0.7"
+rand_core = "0.9"
 maybenot = { path = "../crates/maybenot/" }
-maybenot-simulator = { path = "../crates/maybenot-simulator" }
 
 [[bin]]
 name = "maybenot_dist_uniform"

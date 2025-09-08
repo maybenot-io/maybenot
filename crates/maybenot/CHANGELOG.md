@@ -5,6 +5,16 @@ Manually generated changelog, for now. We follow semantic versioning.
 ## 2.2.0 - XXXX-XX-XX
 
 - Doc improvements focused on integration aspects, thanks Nick Mathewson.
+- Set STATE_MAX to 100,000 to prevent resource exhaustion on Machine::from_str
+  (was already limited by MAX_DECOMPRESSED_SIZE).
+- Remove deprecated v1 Machine parsing feature and dependencies.
+- Add overflow protection to counter sampling and packet counters.
+- Improve numerical robustness in distribution sampling.
+- Update to Rust edition 2024 with comprehensive clippy lint configuration.
+- Update all dependencies to rand 0.9 ecosystem and latest versions.
+- Add RateLimitedFramework with sliding window rate limiting for action control.
+- Use std::time::Duration::div_duration_f64 (available since Rust 1.80).
+- Add Framework::all_machines_ended() helper to check if all machines finished.
 
 ## 2.1.0 - 2025-02-02
 

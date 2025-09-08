@@ -1,6 +1,6 @@
-use crate::{error::MaybenotResult, MaybenotAction, MaybenotEvent, MaybenotFramework};
+use crate::{MaybenotAction, MaybenotEvent, MaybenotFramework, error::MaybenotResult};
 use core::{
-    ffi::{c_char, CStr},
+    ffi::{CStr, c_char},
     mem::MaybeUninit,
     slice::from_raw_parts_mut,
 };
@@ -12,7 +12,7 @@ static VERSION: &str = concat!("maybenot-ffi/", env!("CARGO_PKG_VERSION"), "\0")
 /// Get the version of maybenot-ffi as a null terminated UTF-8-string.
 ///
 /// Example: `maybenot-ffi/1.0.1`
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn maybenot_version() -> *const c_char {
     debug_assert_eq!(
         VERSION.find('\0'),
@@ -29,7 +29,7 @@ pub extern "C" fn maybenot_version() -> *const c_char {
 /// - `machines_str` must be a null-terminated UTF-8 string, containing LF-separated machines.
 /// - `out` must be a valid pointer to some valid and aligned pointer-sized memory.
 /// - The pointer written to `out` is NOT safe to be used concurrently.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn maybenot_start(
     machines_str: *const c_char,
     max_padding_frac: f64,
@@ -68,7 +68,7 @@ pub unsafe extern "C" fn maybenot_start(
 ///
 /// # Safety
 /// - `this` must have been created by [`maybenot_start`].
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn maybenot_num_machines(this: *mut MaybenotFramework) -> usize {
     let Some(this) = (unsafe { this.as_mut() }) else {
         return 0;
@@ -82,7 +82,7 @@ pub unsafe extern "C" fn maybenot_num_machines(this: *mut MaybenotFramework) -> 
 /// # Safety
 /// - `this` MUST have been created by [`maybenot_start`].
 /// - `this` MUST NOT be used after it has been passed to [`maybenot_stop`].
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn maybenot_stop(this: *mut MaybenotFramework) {
     // Reconstruct the Box<Maybenot> and drop it.
     // SAFETY: caller pinky promises that this pointer was created by `maybenot_start`
@@ -100,7 +100,7 @@ pub unsafe extern "C" fn maybenot_stop(this: *mut MaybenotFramework) {
 /// - `actions_out` MUST have capacity for [`maybenot_num_machines`] items of size
 ///   `sizeof(MaybenotAction)` bytes.
 /// - `num_actions_out` MUST be a valid pointer where a 64bit int can be written.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn maybenot_on_events(
     this: *mut MaybenotFramework,
     events: *const MaybenotEvent,
