@@ -2,9 +2,10 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
-## 2.1.1 - 2025-08-08
+## 2.2.0 - 2025-08-08
 
 - Update to Maybenot 2.2.0 and Rust edition 2024.
+- Use rand 0.9 ecosystem.
 
 ## 2.1.0 - 2025-06-18
 
