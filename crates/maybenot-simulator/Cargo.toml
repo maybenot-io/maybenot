@@ -23,6 +23,6 @@ rand_xoshiro = "0.7"
 
 [dev-dependencies]
 enum-map = "2.7"
-test-log = "0.2"
+test-log = "0.2.18"
 rand_core = "0.9"
 env_logger = "0.11"
