@@ -14,12 +14,12 @@ repository.workspace = true
 workspace = true
 
 [dependencies]
-anyhow = "1.0"
+anyhow = "1.0.99"
 enum-map = "2.7"
 log = "0.4"
 maybenot = { version = "2.2.1", path = "../maybenot/" }
 maybenot-simulator = { version = "2.2.1", path = "../maybenot-simulator" }
-num-bigint = "0.4"
+num-bigint = "0.4.6"
 num-integer = "0.1"
 num-traits = "0.2"
 petgraph = "0.8"

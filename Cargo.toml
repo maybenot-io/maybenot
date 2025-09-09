@@ -57,12 +57,14 @@ unused_async = "deny"
 undocumented_unsafe_blocks = "warn"
 wildcard_imports = "warn"
 
+# for cargo +nightly update -Z minimal-versions
+multiple-crate-versions = "allow"
+
 # once we move up rust versions, enable below
 # unnecessary_semicolon = "warn"
 
 # once we move up rust versions, warn on below
 collapsible_if = "allow"
-
 
 [profile.release]
 lto = true
