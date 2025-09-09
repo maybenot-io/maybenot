@@ -97,10 +97,10 @@ fn find_constrained_defense<R: Rng>(
         if attempts > max_attempts {
             return Ok(None);
         }
-        if let Some(max_duration) = max_duration_sec
-            && start_time.elapsed() >= max_duration
-        {
-            return Ok(None);
+        if let Some(max_duration) = max_duration_sec {
+            if start_time.elapsed() >= max_duration {
+                return Ok(None);
+            }
         }
 
         let client = vec![machine.get_random_machine(true, rng)];

@@ -1,6 +1,6 @@
 [package]
 name = "maybenot-machines"
-version = "1.0.0"
+version = "1.0.1"
 description = "A collection of useful Maybenot machines (e.g., as parts of defenses)"
 authors = ["Tobias Pulls <tobias@pulls.name>"]
 edition.workspace = true
@@ -17,7 +17,7 @@ workspace = true
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-maybenot = { version = "2.2.0", path = "../maybenot/" }
+maybenot = { version = "2.2.1", path = "../maybenot/" }
 enum-map = "2.7"
 rand = "0.9"
 rand_core = "0.9"

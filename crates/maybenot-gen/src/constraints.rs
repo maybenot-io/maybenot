@@ -105,17 +105,15 @@ impl ConstraintsConfig {
             // If a machine should produce some padding, check for at least 5
             // padding packets (arbitrary number) in the trace. This is to
             // ensure that the machine actually does something.
-            if let Some(client_load) = &self.client_load
-                && client_load.contains(&0.001)
-                && client_stats[i].padding < 5
-            {
-                bail!("too few padding packets from client");
+            if let Some(client_load) = &self.client_load {
+                if client_load.contains(&0.001) && client_stats[i].padding < 5 {
+                    bail!("too few padding packets from client");
+                }
             }
-            if let Some(server_load) = &self.server_load
-                && server_load.contains(&0.001)
-                && server_stats[i].padding < 5
-            {
-                bail!("too few padding packets from server");
+            if let Some(server_load) = &self.server_load {
+                if server_load.contains(&0.001) && server_stats[i].padding < 5 {
+                    bail!("too few padding packets from server");
+                }
             }
 
             // event sanity check: if we spend less than 20% of counted
@@ -301,11 +299,10 @@ fn get_durations(defended: &[SimEvent], base: &[Duration]) -> (Option<Duration>,
     let starting_time = defended[0].time;
     // the duration of the last normal sent packet in the defended trace for the client
     let defended_duration = defended.iter().rev().find_map(|event| {
-        if let TriggerEvent::TunnelSent = event.event
-            && !event.contains_padding
-            && event.client
-        {
-            return Some(event.time - starting_time);
+        if let TriggerEvent::TunnelSent = event.event {
+            if !event.contains_padding && event.client {
+                return Some(event.time - starting_time);
+            }
         }
         None
     });

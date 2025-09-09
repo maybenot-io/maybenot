@@ -1,6 +1,6 @@
 [package]
 name = "maybenot-gen"
-version = "1.0.0"
+version = "1.0.1"
 description = "A library to help generate and evaluate Maybenot defenses"
 authors = ["Tobias Pulls <tobias@pulls.name>"]
 edition.workspace = true
@@ -17,8 +17,8 @@ workspace = true
 anyhow = "1.0"
 enum-map = "2.7"
 log = "0.4"
-maybenot = { version = "2.2.0", path = "../maybenot/" }
-maybenot-simulator = { version = "2.2.0", path = "../maybenot-simulator" }
+maybenot = { version = "2.2.1", path = "../maybenot/" }
+maybenot-simulator = { version = "2.2.1", path = "../maybenot-simulator" }
 num-bigint = "0.4"
 num-integer = "0.1"
 num-traits = "0.2"

@@ -2,6 +2,10 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 2.2.1 - 2025-09-09
+
+- MSRV 1.85 to align with Arti.
+
 ## 2.2.0 - 2025-08-08
 
 - Update to Maybenot 2.2.0 and Rust edition 2024.

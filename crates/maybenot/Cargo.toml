@@ -1,6 +1,6 @@
 [package]
 name = "maybenot"
-version = "2.2.0"
+version = "2.2.1"
 description = "A framework for traffic analysis defenses"
 authors = ["Tobias Pulls <tobias@pulls.name>", "Ethan Witwer <ethan@ethanwitwer.com>"]
 edition.workspace = true

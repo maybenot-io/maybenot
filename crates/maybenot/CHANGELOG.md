@@ -2,6 +2,10 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 2.2.1 - 2025-09-09
+
+- MSRV 1.85 to align with Arti.
+
 ## 2.2.0 - 2025-09-08
 
 - Doc improvements focused on integration aspects, thanks Nick Mathewson.

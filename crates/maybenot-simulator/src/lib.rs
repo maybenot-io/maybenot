@@ -760,25 +760,25 @@ fn do_internal_timer<M: AsRef<[Machine]>>(
     let mut is_client = false;
 
     for (id, opt) in client.scheduled_internal_timer.iter_mut().enumerate() {
-        if let Some(a) = opt
-            && *a == target
-        {
-            machine = Some(MachineId::from_raw(id));
-            is_client = true;
-            *opt = None;
-            break;
+        if let Some(a) = opt {
+            if *a == target {
+                machine = Some(MachineId::from_raw(id));
+                is_client = true;
+                *opt = None;
+                break;
+            }
         }
     }
 
     if machine.is_none() {
         for (id, opt) in server.scheduled_internal_timer.iter_mut().enumerate() {
-            if let Some(a) = opt
-                && *a == target
-            {
-                machine = Some(MachineId::from_raw(id));
-                is_client = false;
-                *opt = None;
-                break;
+            if let Some(a) = opt {
+                if *a == target {
+                    machine = Some(MachineId::from_raw(id));
+                    is_client = false;
+                    *opt = None;
+                    break;
+                }
             }
         }
     }
@@ -810,26 +810,26 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
     let mut is_client = false;
 
     for opt in client.scheduled_action.iter_mut() {
-        if let Some(sa) = opt
-            && sa.time == target
-        {
-            a = Some(sa.clone());
-            is_client = true;
-            *opt = None;
-            break;
+        if let Some(sa) = opt {
+            if sa.time == target {
+                a = Some(sa.clone());
+                is_client = true;
+                *opt = None;
+                break;
+            }
         }
     }
 
     // cannot schedule a None action, so if we found one, done
     if a.is_none() {
         for opt in server.scheduled_action.iter_mut() {
-            if let Some(sa) = opt
-                && sa.time == target
-            {
-                a = Some(sa.clone());
-                is_client = false;
-                *opt = None;
-                break;
+            if let Some(sa) = opt {
+                if sa.time == target {
+                    a = Some(sa.clone());
+                    is_client = false;
+                    *opt = None;
+                    break;
+                }
             }
         }
     }

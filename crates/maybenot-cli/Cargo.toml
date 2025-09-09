@@ -1,6 +1,6 @@
 [package]
 name = "maybenot-cli"
-version = "1.0.0"
+version = "1.0.1"
 description = "A CLI tool for defense generation using Maybenot"
 authors = ["Tobias Pulls <tobias@pulls.name>"]
 edition.workspace = true
@@ -23,10 +23,10 @@ clap = { version = "4.5", features = ["derive"] }
 env_logger = "0.11"
 indicatif = { version = "0.18", features = ["rayon"] }
 log = "0.4"
-maybenot = { version = "2.2.0", path = "../maybenot/" }
-maybenot-simulator = { version = "2.2.0", path = "../maybenot-simulator" }
-maybenot-gen = { version = "1.0.0", path = "../maybenot-gen" }
-maybenot-machines = { version = "1.0.0", path = "../maybenot-machines" }
+maybenot = { version = "2.2.1", path = "../maybenot/" }
+maybenot-simulator = { version = "2.2.1", path = "../maybenot-simulator" }
+maybenot-gen = { version = "1.0.1", path = "../maybenot-gen" }
+maybenot-machines = { version = "1.0.1", path = "../maybenot-machines" }
 num_cpus = "1.17"
 rand = "0.9"
 rand_core = "0.9"

@@ -52,6 +52,12 @@ Maybenot is used by [Mullvad VPN](https://mullvad.net) in
 [DAITA](https://mullvad.net/en/vpn/daita). [Their WireGuard Go
 integration](https://github.com/mullvad/wireguard-go/).
 
+## Minimum Supported Rust Version
+
+We aim to [follow the MSRV of
+Arti](https://gitlab.torproject.org/tpo/core/arti#minimum-supported-rust-version),
+currently at 1.85.
+
 ## Contributing
 
 Unless you explicitly state otherwise, any contribution intentionally submitted

@@ -182,14 +182,13 @@ pub fn do_sim_def<R: RngCore>(
         }
         // check for edge case: augmentation set and max_samples is below the
         // number of (non-augmented) samples per subpage
-        if let Some(max_samples) = cfg.max_samples
-            && max_samples > 0
-            && max_samples < dataset_samples
-        {
-            bail!(
-                "augmentation set, but max_samples < |samples| in dataset {}",
-                dataset_samples
-            );
+        if let Some(max_samples) = cfg.max_samples {
+            if max_samples > 0 && max_samples < dataset_samples {
+                bail!(
+                    "augmentation set, but max_samples < |samples| in dataset {}",
+                    dataset_samples
+                );
+            }
         }
     }
 
@@ -327,11 +326,10 @@ fn sim_dataset<R: RngCore>(
                 .parse()
                 .unwrap();
             // early exit?
-            if let Some(max_samples) = cfg.max_samples
-                && max_samples > 0
-                && sample >= max_samples
-            {
-                return;
+            if let Some(max_samples) = cfg.max_samples {
+                if max_samples > 0 && sample >= max_samples {
+                    return;
+                }
             }
             // prefix is everything before the sample number and extension
             let prefix = parts[..parts.len() - 1].join("-");

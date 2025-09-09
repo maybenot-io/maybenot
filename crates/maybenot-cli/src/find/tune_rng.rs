@@ -253,14 +253,13 @@ fn wiggle_wf_cfg(cfg: &mut Config, prob: f64, rng: &mut Xoshiro256StarStar) -> S
         fname.push_str(format!("sl{:?}", constraints.server_load).as_str());
     }
     // delay
-    if let Some(delay) = constraints.delay.clone()
-        && *delay.end() > 0.0
-        && rng.random_bool(prob)
-    {
-        let max = round_f64(rng.random_range(0.0..=5.0));
-        let min = round_f64(rng.random_range(0.0..=max));
-        constraints.delay = Some(min..=max);
-        fname.push_str(format!("d{:?}", constraints.delay).as_str());
+    if let Some(delay) = constraints.delay.clone() {
+        if *delay.end() > 0.0 && rng.random_bool(prob) {
+            let max = round_f64(rng.random_range(0.0..=5.0));
+            let min = round_f64(rng.random_range(0.0..=max));
+            constraints.delay = Some(min..=max);
+            fname.push_str(format!("d{:?}", constraints.delay).as_str());
+        }
     }
 
     // client min normal packets
@@ -384,14 +383,13 @@ fn wiggle_cf_cfg(cfg: &mut Config, prob: f64, rng: &mut Xoshiro256StarStar) -> S
         fname.push_str(format!("sl{:?}", constraints.server_load).as_str());
     }
     // delay
-    if let Some(delay) = constraints.delay.clone()
-        && *delay.end() > 0.0
-        && rng.random_bool(prob)
-    {
-        let max = round_f64(rng.random_range(0.0..=5.0));
-        let min = round_f64(rng.random_range(0.0..=max));
-        constraints.delay = Some(min..=max);
-        fname.push_str(format!("d{:?}", constraints.delay).as_str());
+    if let Some(delay) = constraints.delay.clone() {
+        if *delay.end() > 0.0 && rng.random_bool(prob) {
+            let max = round_f64(rng.random_range(0.0..=5.0));
+            let min = round_f64(rng.random_range(0.0..=max));
+            constraints.delay = Some(min..=max);
+            fname.push_str(format!("d{:?}", constraints.delay).as_str());
+        }
     }
 
     // client min normal packets makes no sense for CF

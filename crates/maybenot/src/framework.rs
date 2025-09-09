@@ -251,10 +251,10 @@ where
 
             // signal all machines, except the excluded one
             for mi in 0..self.runtime.len() {
-                if let Some(excluded) = excluded
-                    && excluded == mi
-                {
-                    continue;
+                if let Some(excluded) = excluded {
+                    if excluded == mi {
+                        continue;
+                    }
                 }
                 self.transition(mi, Event::Signal);
             }
@@ -263,10 +263,10 @@ where
             // we excluded a machine, then we need to signal the excluded
             // machine as well (per definition, the signal must have come from
             // another machine)
-            if self.signal_pending.take().is_some()
-                && let Some(excluded) = excluded
-            {
-                self.transition(excluded, Event::Signal);
+            if self.signal_pending.take().is_some() {
+                if let Some(excluded) = excluded {
+                    self.transition(excluded, Event::Signal);
+                }
             }
         }
 
@@ -578,14 +578,13 @@ where
         }
         let cs = self.runtime[mi].current_state;
 
-        if let Some(action) = self.machines.as_ref()[mi].states[cs].action
-            && self.runtime[mi].state_limit == 0
-            && action.has_limit()
-        {
-            // take no action and trigger limit reached
-            self.actions[mi] = None;
-            // next, we trigger internally event LimitReached
-            self.transition(mi, Event::LimitReached);
+        if let Some(action) = self.machines.as_ref()[mi].states[cs].action {
+            if self.runtime[mi].state_limit == 0 && action.has_limit() {
+                // take no action and trigger limit reached
+                self.actions[mi] = None;
+                // next, we trigger internally event LimitReached
+                self.transition(mi, Event::LimitReached);
+            }
         }
     }
 
