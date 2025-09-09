@@ -32,8 +32,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SimConfig {
     /// base dataset to use for simulation, must be a directory with traces in
-    /// the format <class>-<sample>.log. Between <class> and <sample> there can
-    /// be any number of characters, but splitting on '-' must yield the class
+    /// the format "class-sample.log". Between "class" and "sample" there can be
+    /// any number of characters, but splitting on '-' must yield the class
     /// (first) and sample (last) parts.
     pub base_dataset: String,
     /// configuration for the network
@@ -44,7 +44,7 @@ pub struct SimConfig {
     pub events_multiplier: usize,
     /// seed for the simulation, if not set, uses a random seed
     pub seed: Option<String>,
-    /// simulate with tunable defense limits using a list of factors [0,1] to
+    /// simulate with tunable defense limits using a list of factors \[0,\1\] to
     /// multiply limits set in the simulator config
     pub tunable_defense_limits: Option<Vec<f64>>,
     /// client limits, if not set, uses no limits

@@ -14,7 +14,7 @@ use num_traits::Zero;
 use rand::{Rng, seq::IndexedRandom};
 
 /// Create a new defense by randomly combining machines. Repeatedly samples
-/// [1,height] machines from the clients and servers, independently, combining
+/// \[1,height\] machines from the clients and servers, independently, combining
 /// them into a defense. The constraints and environment configurations are used
 /// to ensure the defense is valid, if provided. The `max_attempts` parameter
 /// controls how many times the function will try to find a valid defense before

@@ -12,7 +12,7 @@ use std::hash::Hash;
 
 use self::dist::Dist;
 
-/// The different types of timers used by a [`Machine`].
+/// The different types of timers used by a [`Machine`](crate::Machine).
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Timer {
     /// The scheduled timer for actions with a timeout.
@@ -184,7 +184,8 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// Depending on the value of `timer`, either the internal timer should be
     /// cancelled, the external timer should be cancelled, or both.
     ///
-    /// Cancelling a timer does not cause a [`TriggerEvent::TimerEnd`] event.
+    /// Cancelling a timer does not cause a
+    /// [`TriggerEvent::TimerEnd`](crate::TriggerEvent::TimerEnd) event.
     Cancel { machine: MachineId, timer: Timer },
     /// Schedule padding to be injected after the given timeout for a machine.
     ///
@@ -209,9 +210,9 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// padding packet AND bypass the active blocking.
     ///
     /// When the padding is queued, a corresponding
-    /// [`TriggerEvent::PaddingSent`] event SHOULD always be triggered, with a
-    /// matching MachineId, even if the padding packet is replaced by another
-    /// packet.
+    /// [`TriggerEvent::PaddingSent`](crate::TriggerEvent::PaddingSent) event
+    /// SHOULD always be triggered, with a matching MachineId, even if the
+    /// padding packet is replaced by another packet.
     ///
     /// Note that, since only one action timer per machine can be pending at a
     /// time, this `SendPadding` action should replace any currently pending
@@ -229,8 +230,9 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// running, then the blocking will affect all of them.
     ///
     /// Whenever the given action timeout expires, a corresponding
-    /// [`TriggerEvent::BlockingBegin`] event should be triggered with the same
-    /// MachineId, regardless of whether the current blocking was adjusted.
+    /// [`TriggerEvent::BlockingBegin`](crate::TriggerEvent::BlockingBegin)
+    /// event should be triggered with the same MachineId, regardless of whether
+    /// the current blocking was adjusted.
     ///
     /// The bypass flag indicates if the blocking of outgoing traffic can be
     /// bypassed by padding packets with the bypass flag set to true.
@@ -260,11 +262,13 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// MUST be used.
     ///
     /// Whenever an internal timer is created, and whenever the timer's duration
-    /// is changed, a corresponding [`TriggerEvent::TimerBegin`] event should be
-    /// triggered, with a matching [`MachineId`].
+    /// is changed, a corresponding
+    /// [`TriggerEvent::TimerBegin`](crate::TriggerEvent::TimerBegin) event
+    /// should be triggered, with a matching [`MachineId`].
     ///
-    /// Whenever an internal expires, a corresponding [`TriggerEvent::TimerEnd`]
-    /// event should be triggered. with a matching [`MachineId`].
+    /// Whenever an internal expires, a corresponding
+    /// [`TriggerEvent::TimerEnd`](crate::TriggerEvent::TimerEnd) event should
+    /// be triggered. with a matching [`MachineId`].
     UpdateTimer {
         duration: T::Duration,
         replace: bool,

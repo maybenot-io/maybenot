@@ -1,4 +1,4 @@
-//! Counters as part of a [`Machine`].
+//! Counters as part of a [`Machine`](crate::Machine).
 
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
@@ -8,8 +8,8 @@ use std::fmt;
 
 use self::dist::Dist;
 
-/// The operation applied to one of a [`Machine`]'s counters upon transition to
-/// a [`State`](crate::state::State).
+/// The operation applied to one of a [`Machine`](crate::Machine)'s counters
+/// upon transition to a [`State`](crate::state::State).
 #[derive(Debug, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Operation {
     /// Increment the counter.
@@ -20,14 +20,14 @@ pub enum Operation {
     Set,
 }
 
-/// A specification of how one of a [`Machine`]'s counters should be updated
-/// when transitioning to a [`State`](crate::state::State). Consists of an
-/// [`Operation`] to be applied to the counter with one of three values: by
-/// default, the value 1, unless a distribution is provided or the copy flag is
-/// set to true. If the copy flag is set to true, the counter will be updated
-/// with the value of the other counter *prior to transitioning to the state*.
-/// If a distribution is provided, the counter will be updated with a value
-/// sampled from the distribution.
+/// A specification of how one of a [`Machine`](crate::Machine)'s counters
+/// should be updated when transitioning to a [`State`](crate::state::State).
+/// Consists of an [`Operation`] to be applied to the counter with one of three
+/// values: by default, the value 1, unless a distribution is provided or the
+/// copy flag is set to true. If the copy flag is set to true, the counter will
+/// be updated with the value of the other counter *prior to transitioning to
+/// the state*. If a distribution is provided, the counter will be updated with
+/// a value sampled from the distribution.
 #[derive(PartialEq, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Counter {
     /// The operation to apply to the counter upon a state transition. If the
