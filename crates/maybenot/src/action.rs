@@ -33,6 +33,9 @@ pub enum Action {
     Cancel { timer: Timer },
     /// Schedule padding to be sent after a timeout.
     ///
+    /// Replaces any previously pending scheduled action timer (set via
+    /// SendPadding or BlockOutgoing) for this machine.
+    ///
     /// The bypass flag determines if the padding packet MUST bypass any
     /// existing blocking that was triggered with the bypass flag set.
     ///
@@ -54,6 +57,9 @@ pub enum Action {
         limit: Option<Dist>,
     },
     /// Schedule blocking of outgoing traffic after a timeout.
+    ///
+    /// Replaces any previously pending scheduled action timer (set via
+    /// SendPadding or BlockOutgoing) for this machine.
     ///
     /// The bypass flag determines if padding actions are allowed to bypass this
     /// blocking action. This allows for machines that can fail closed (never
@@ -213,6 +219,11 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// [`TriggerEvent::PaddingSent`](crate::TriggerEvent::PaddingSent) event
     /// SHOULD always be triggered, with a matching MachineId, even if the
     /// padding packet is replaced by another packet.
+    /// (If the padding packet is replaced by queueing a _new_ normal
+    /// packet, then a `NormalSent` should _also_ be triggered, along
+    /// with `PaddingSent`.  If the padding packet is "replaced" by
+    /// noting the presence of an already queued packet, then no
+    /// additional event bedes `PaddingSent` needs to be triggered.)
     ///
     /// Note that, since only one action timer per machine can be pending at a
     /// time, this `SendPadding` action should replace any currently pending
