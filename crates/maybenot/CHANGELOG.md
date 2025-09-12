@@ -2,6 +2,12 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 2.2.2 - 2025-09-12
+
+- Limit `trigger_events` lifetime bounds to what is strictly necessary, thanks
+  Sebastian Holmin.
+- Doc clarifications on actions, thanks Nick Mathewson.
+
 ## 2.2.1 - 2025-09-09
 
 - MSRV 1.85 to align with Arti.
