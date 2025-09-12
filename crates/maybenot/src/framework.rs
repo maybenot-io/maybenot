@@ -218,11 +218,11 @@ where
     ///
     /// Returns an iterator of zero or more [`TriggerAction`] that MUST be taken
     /// by the caller.
-    pub fn trigger_events(
-        &mut self,
+    pub fn trigger_events<'a>(
+        &'a mut self,
         events: &[TriggerEvent],
         current_time: T,
-    ) -> impl Iterator<Item = &TriggerAction<T>> {
+    ) -> impl Iterator<Item = &'a TriggerAction<T>> + use<'a, M, R, T> {
         // reset all actions
         self.actions.fill(None);
 
