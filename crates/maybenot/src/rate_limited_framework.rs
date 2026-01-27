@@ -202,6 +202,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
 

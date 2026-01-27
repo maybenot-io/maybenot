@@ -549,6 +549,7 @@ where
                     bypass, replace, ..
                 } => Some(TriggerAction::SendPadding {
                     timeout: T::Duration::from_micros(action.sample_timeout(&mut self.rng)),
+                    amount: action.sample_amount(&mut self.rng),
                     bypass,
                     replace,
                     machine: index,
@@ -755,6 +756,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
 
@@ -772,6 +781,14 @@ mod tests {
                     high: 1.0,
                 },
 
+                start: 0.0,
+                max: 0.0,
+            },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
@@ -817,6 +834,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(1),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -839,6 +857,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(10),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -860,6 +879,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::SendPadding {
                     timeout: Duration::from_micros(10),
+                    amount: 1,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -884,6 +904,7 @@ mod tests {
                     f.actions[0],
                     Some(TriggerAction::SendPadding {
                         timeout: Duration::from_micros(10),
+                        amount: 1,
                         bypass: false,
                         replace: false,
                         machine: MachineId(0),
@@ -906,6 +927,7 @@ mod tests {
                     f.actions[0],
                     Some(TriggerAction::SendPadding {
                         timeout: Duration::from_micros(1),
+                        amount: 1,
                         bypass: false,
                         replace: false,
                         machine: MachineId(0),
@@ -1007,7 +1029,15 @@ mod tests {
                     low: 1.0,
                     high: 1.0,
                 },
-
+                
+                start: 0.0,
+                max: 0.0,
+            },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
                 start: 0.0,
                 max: 0.0,
             },
@@ -1065,6 +1095,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(1),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -1109,6 +1140,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
         s2.counter = (
@@ -1148,6 +1187,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -1220,6 +1260,14 @@ mod tests {
                 dist: DistType::Uniform {
                     low: 2.0,
                     high: 2.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
                 },
                 start: 0.0,
                 max: 0.0,
@@ -1544,6 +1592,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
         s1.counter = (
@@ -1563,6 +1619,14 @@ mod tests {
                 dist: DistType::Uniform {
                     low: 67.0,
                     high: 67.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
                 },
                 start: 0.0,
                 max: 0.0,
@@ -1616,6 +1680,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(67),
+                amount: 1,
                 bypass: true,
                 replace: false,
                 machine: MachineId(0),
@@ -1762,6 +1827,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: Some(Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
@@ -1868,6 +1941,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
 
@@ -1929,6 +2010,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
 
@@ -1946,6 +2035,7 @@ mod tests {
             f.actions[1],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(1),
@@ -1979,6 +2069,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
 
@@ -1995,6 +2093,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -2004,6 +2103,7 @@ mod tests {
             f.actions[1],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(1),
@@ -2041,6 +2141,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
 
@@ -2057,6 +2165,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -2091,6 +2200,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
 
@@ -2110,6 +2227,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::SendPadding {
                     timeout: Duration::from_micros(2),
+                    amount: 1,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -2145,6 +2263,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -2175,6 +2294,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
 
@@ -2198,6 +2325,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::SendPadding {
                     timeout: Duration::from_micros(2),
+                    amount: 1,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -2207,6 +2335,7 @@ mod tests {
                 f.actions[1],
                 Some(TriggerAction::SendPadding {
                     timeout: Duration::from_micros(2),
+                    amount: 1,
                     bypass: false,
                     replace: false,
                     machine: MachineId(1),
@@ -2257,6 +2386,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -2266,6 +2396,7 @@ mod tests {
             f.actions[1],
             Some(TriggerAction::SendPadding {
                 timeout: Duration::from_micros(2),
+                amount: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(1),
@@ -2659,6 +2790,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: Some(Dist {
                 dist: DistType::Uniform {
                     low: 4.0,
@@ -2687,6 +2826,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::SendPadding {
                     timeout: Duration::from_micros(1),
+                    amount: 1,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),

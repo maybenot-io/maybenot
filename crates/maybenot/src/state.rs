@@ -318,6 +318,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: None,
         });
 
@@ -332,6 +340,14 @@ mod tests {
             timeout: Dist {
                 dist: DistType::Uniform {
                     low: 2.0, // NOTE low > high
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
                     high: 1.0,
                 },
                 start: 0.0,

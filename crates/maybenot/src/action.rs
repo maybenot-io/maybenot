@@ -4,7 +4,7 @@ use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
-    MAX_SAMPLED_BLOCK_DURATION, MAX_SAMPLED_TIMEOUT, MAX_SAMPLED_TIMER_DURATION, STATE_LIMIT_MAX,
+    MAX_SAMPLED_BLOCK_DURATION, MAX_SAMPLED_TIMEOUT, MAX_SAMPLED_TIMER_DURATION, MAX_SAMPLED_PADDING_AMOUNT, STATE_LIMIT_MAX,
 };
 use crate::{Error, MachineId, dist};
 use std::fmt;
@@ -31,21 +31,21 @@ pub enum Timer {
 pub enum Action {
     /// Cancel a timer.
     Cancel { timer: Timer },
-    /// Schedule padding to be sent after a timeout.
+    /// Schedule an amount of padding to be sent after a timeout.
     ///
     /// Replaces any previously pending scheduled action timer (set via
     /// SendPadding or BlockOutgoing) for this machine.
     ///
-    /// The bypass flag determines if the padding packet MUST bypass any
+    /// The bypass flag determines if the padding packet(s) MUST bypass any
     /// existing blocking that was triggered with the bypass flag set.
     ///
-    /// The replace flag determines if the padding packet MAY be replaced by a
-    /// packet already queued to be sent at the time the padding packet would be
-    /// sent. This applies for data queued to be turned into normal
+    /// The replace flag determines if the padding packet(s) MAY be replaced by
+    /// packets already queued to be sent at the time the padding packet would
+    /// be sent. This applies for data queued to be turned into normal
     /// (non-padding) packets AND _any_ packet (padding or normal) in the egress
     /// queue yet to be sent (i.e., before the TunnelSent event is triggered).
-    /// Such a packet could be in the queue due to ongoing blocking or just not
-    /// being sent yet (e.g., due to CC). We assume that packets will be
+    /// Such a packet could be in the queue due to ongoing blocking or just
+    /// not being sent yet (e.g., due to CC). We assume that packets will be
     /// encrypted ASAP for the egress queue and we do not want to keep state
     /// around to distinguish padding and non-padding, hence, any packet.
     /// Similarly, this implies that a single blocked packet in the egress queue
@@ -54,6 +54,7 @@ pub enum Action {
         bypass: bool,
         replace: bool,
         timeout: Dist,
+        amount: Dist,
         limit: Option<Dist>,
     },
     /// Schedule blocking of outgoing traffic after a timeout.
@@ -121,6 +122,16 @@ impl Action {
         }
     }
 
+    /// Sample an amount for a padding action.
+    pub(crate) fn sample_amount<R: RngCore>(&self, rng: &mut R) -> u64 {
+        match self {
+            Action::SendPadding { amount, .. } => {
+                amount.sample(rng).min(MAX_SAMPLED_PADDING_AMOUNT as f64).round() as u64
+            }
+            _ => 0,
+        }
+    }
+
     /// Sample a limit.
     pub(crate) fn sample_limit<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
@@ -149,8 +160,9 @@ impl Action {
     /// Validate all distributions contained in this action, if any.
     pub fn validate(&self) -> Result<(), Error> {
         match self {
-            Action::SendPadding { timeout, limit, .. } => {
+            Action::SendPadding { timeout, amount, limit, .. } => {
                 timeout.validate()?;
+                amount.validate()?;
                 if let Some(limit) = limit {
                     limit.validate()?;
                 }
@@ -195,17 +207,17 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     Cancel { machine: MachineId, timer: Timer },
     /// Schedule padding to be injected after the given timeout for a machine.
     ///
-    /// The bypass flag indicates if the padding packet MUST be sent despite
+    /// The bypass flag indicates if the padding packet(s) MUST be sent despite
     /// active blocking of outgoing traffic. Note that this is only allowed if
     /// the active blocking was set with the bypass flag set to true.
     ///
-    /// The replace flag determines if the padding packet MAY be replaced by a
-    /// packet already queued to be sent at the time the padding packet would be
-    /// sent. This applies for data queued to be turned into normal
+    /// The replace flag determines if the padding packet(s) MAY be replaced by
+    /// packets already queued to be sent at the time the padding packet would
+    /// be sent. This applies for data queued to be turned into normal
     /// (non-padding) packets AND _any_ packet (padding or normal) in the egress
     /// queue yet to be sent (i.e., before the TunnelSent event is triggered).
-    /// Such a packet could be in the queue due to ongoing blocking or just not
-    /// being sent yet (e.g., due to CC). We assume that packets will be
+    /// Such a packet could be in the queue due to ongoing blocking or just
+    /// not being sent yet (e.g., due to CC). We assume that packets will be
     /// encrypted ASAP for the egress queue and we do not want to keep state
     /// around to distinguish padding and non-padding, hence, any packet.
     /// Similarly, this implies that a single blocked packet in the egress queue
@@ -231,6 +243,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// not yet expired.
     SendPadding {
         timeout: T::Duration,
+        amount: u64,
         bypass: bool,
         replace: bool,
         machine: MachineId,
@@ -338,6 +351,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 1.0,
+                    high: 1.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
             limit: Some(Dist {
                 dist: DistType::Normal {
                     mean: 50.0,
@@ -388,6 +409,33 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             });
+        }
+
+        let r = a.validate();
+        assert!(r.is_err());
+
+        // repair limit dist
+        if let Action::SendPadding { limit, .. } = &mut a {
+            *limit = Some(Dist {
+                dist: DistType::Normal {
+                    mean: 50.0,
+                    stdev: 10.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            });
+        }
+
+        // invalid amount dist, not allowed
+        if let Action::SendPadding { amount, .. } = &mut a {
+            *amount = Dist {
+                dist: DistType::Uniform {
+                    low: 15.0, // NOTE low > high
+                    high: 5.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            };
         }
 
         let r = a.validate();

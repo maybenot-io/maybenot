@@ -98,6 +98,7 @@
 //!             }
 //!             TriggerAction::SendPadding {
 //!                 timeout: _,
+//!                 amount: _,
 //!                 bypass: _,
 //!                 replace: _,
 //!                 machine: _,
@@ -105,9 +106,9 @@
 //!                 // Set the action timer with the specified timeout. On
 //!                 // expiry, do the following:
 //!                 //
-//!                 // 1. Send a padding packet.
+//!                 // 1. Send the specified amount of padding.
 //!                 // 2. Trigger TriggerEvent::PaddingSent { machine:
-//!                 //    machine }.
+//!                 //    machine } after each packet has been sent.
 //!                 //
 //!                 // If bypass is true, then the padding MUST be sent even
 //!                 // if there is active blocking of outgoing traffic AND
@@ -117,14 +118,14 @@
 //!                 // completely fail-closed defenses.
 //!                 //
 //!                 // If replace is true, then the padding MAY be replaced
-//!                 // by another packet. The other packet could be an
-//!                 // encrypted packet already queued but not already sent
+//!                 // by other packet(s). The other packets could be
+//!                 // encrypted packets already queued but not already sent
 //!                 // in the tunnel, containing either padding or normal
 //!                 // data (ideally, the user of the framework cannot tell,
 //!                 // because encrypted). The other data could also be
-//!                 // normal data about to be turned into a normal packet
+//!                 // normal data about to be turned into normal packet(s)
 //!                 // and sent. Regardless of if the padding is replaced or
-//!                 // not, the event should still be triggered (steps 2).
+//!                 // not, the event should still be triggered (step 2).
 //!                 // If enqueued normal data sent instead of padding, then
 //!                 // the NormalSent event should be triggered as well.
 //!                 //
@@ -374,6 +375,7 @@ mod tests {
                     }
                     TriggerAction::SendPadding {
                         timeout: _,
+                        amount: _,
                         bypass: _,
                         replace: _,
                         machine: _,
@@ -381,9 +383,9 @@ mod tests {
                         // Set the action timer with the specified timeout. On
                         // expiry, do the following:
                         //
-                        // 1. Send a padding packet.
+                        // 1. Send the specified amount of padding.
                         // 2. Trigger TriggerEvent::PaddingSent { machine:
-                        //    machine }.
+                        //    machine } after each packet has been sent.
                         //
                         // If bypass is true, then the padding MUST be sent even
                         // if there is active blocking of outgoing traffic AND
@@ -393,12 +395,12 @@ mod tests {
                         // completely fail-closed defenses.
                         //
                         // If replace is true, then the padding MAY be replaced
-                        // by another packet. The other packet could be an
-                        // encrypted packet already queued but not already sent
+                        // by other packet(s). The other packets could be
+                        // encrypted packets already queued but not already sent
                         // in the tunnel, containing either padding or normal
                         // data (ideally, the user of the framework cannot tell,
                         // because encrypted). The other data could also be
-                        // normal data about to be turned into a normal packet
+                        // normal data about to be turned into normal packet(s)
                         // and sent. Regardless of if the padding is replaced or
                         // not, the event should still be triggered (steps 2).
                         // If enqueued normal data sent instead of padding, then
