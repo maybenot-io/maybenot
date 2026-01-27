@@ -4,7 +4,8 @@ use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
-    MAX_SAMPLED_BLOCK_DURATION, MAX_SAMPLED_TIMEOUT, MAX_SAMPLED_TIMER_DURATION, MAX_SAMPLED_PADDING_AMOUNT, STATE_LIMIT_MAX,
+    MAX_SAMPLED_BLOCK_DURATION, MAX_SAMPLED_PADDING_AMOUNT, MAX_SAMPLED_TIMEOUT,
+    MAX_SAMPLED_TIMER_DURATION, STATE_LIMIT_MAX,
 };
 use crate::{Error, MachineId, dist};
 use std::fmt;
@@ -125,9 +126,10 @@ impl Action {
     /// Sample an amount for a padding action.
     pub(crate) fn sample_amount<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
-            Action::SendPadding { amount, .. } => {
-                amount.sample(rng).min(MAX_SAMPLED_PADDING_AMOUNT as f64).round() as u64
-            }
+            Action::SendPadding { amount, .. } => amount
+                .sample(rng)
+                .min(MAX_SAMPLED_PADDING_AMOUNT as f64)
+                .round() as u64,
             _ => 0,
         }
     }
@@ -160,7 +162,12 @@ impl Action {
     /// Validate all distributions contained in this action, if any.
     pub fn validate(&self) -> Result<(), Error> {
         match self {
-            Action::SendPadding { timeout, amount, limit, .. } => {
+            Action::SendPadding {
+                timeout,
+                amount,
+                limit,
+                ..
+            } => {
                 timeout.validate()?;
                 amount.validate()?;
                 if let Some(limit) = limit {
