@@ -547,9 +547,9 @@ where
                     machine: index,
                     timer,
                 }),
-                Action::SendDecoyTraffic {
+                Action::DecoyTraffic {
                     bypass, replace, ..
-                } => Some(TriggerAction::SendDecoyTraffic {
+                } => Some(TriggerAction::DecoyTraffic {
                     timeout: T::Duration::from_micros(action.sample_timeout(&mut self.rng)),
                     n: action.sample_decoy_n(&mut self.rng),
                     bypass,
@@ -600,7 +600,7 @@ where
 
         match action {
             Action::BlockOutgoing { .. } => self.below_limit_blocking(runtime, machine),
-            Action::SendDecoyTraffic { .. } => self.below_limit_decoys(runtime, machine),
+            Action::DecoyTraffic { .. } => self.below_limit_decoys(runtime, machine),
             Action::UpdateTimer { .. } => runtime.state_limit > 0,
             _ => true,
         }
@@ -747,7 +747,7 @@ mod tests {
             Event::DecoySent => vec![Trans(1, 1.0)],
         _ => vec![],
         });
-        s0.action = Some(Action::SendDecoyTraffic {
+        s0.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -774,7 +774,7 @@ mod tests {
             Event::DecoyRecv => vec![Trans(0, 1.0)],
         _ => vec![],
         });
-        s1.action = Some(Action::SendDecoyTraffic {
+        s1.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -834,7 +834,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(1),
                 n: 1,
                 bypass: false,
@@ -857,7 +857,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::DecoyRecv], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(10),
                 n: 1,
                 bypass: false,
@@ -879,7 +879,7 @@ mod tests {
             );
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::SendDecoyTraffic {
+                Some(TriggerAction::DecoyTraffic {
                     timeout: Duration::from_micros(10),
                     n: 1,
                     bypass: false,
@@ -904,7 +904,7 @@ mod tests {
                 );
                 assert_eq!(
                     f.actions[0],
-                    Some(TriggerAction::SendDecoyTraffic {
+                    Some(TriggerAction::DecoyTraffic {
                         timeout: Duration::from_micros(10),
                         n: 1,
                         bypass: false,
@@ -927,7 +927,7 @@ mod tests {
                 );
                 assert_eq!(
                     f.actions[0],
-                    Some(TriggerAction::SendDecoyTraffic {
+                    Some(TriggerAction::DecoyTraffic {
                         timeout: Duration::from_micros(1),
                         n: 1,
                         bypass: false,
@@ -1023,7 +1023,7 @@ mod tests {
                  Event::DecoySent => vec![Trans(1, 1.0)],
              _ => vec![],
         });
-        s0.action = Some(Action::SendDecoyTraffic {
+        s0.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1095,7 +1095,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(1),
                 n: 1,
                 bypass: false,
@@ -1131,7 +1131,7 @@ mod tests {
             Event::DecoySent => vec![Trans(1, 1.0)],
         _ => vec![],
         });
-        s2.action = Some(Action::SendDecoyTraffic {
+        s2.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1187,7 +1187,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(2),
                 n: 1,
                 bypass: false,
@@ -1255,7 +1255,7 @@ mod tests {
             Event::NormalRecv => vec![Trans(1, 1.0)],
         _ => vec![],
         });
-        s2.action = Some(Action::SendDecoyTraffic {
+        s2.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1583,7 +1583,7 @@ mod tests {
            Event::CounterZero => vec![Trans(2, 1.0)], // the "chain reaction"
            _ => vec![],
         });
-        s1.action = Some(Action::SendDecoyTraffic {
+        s1.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1614,7 +1614,7 @@ mod tests {
            Event::CounterZero => vec![Trans(3, 1.0)],
            _ => vec![],
         });
-        s2.action = Some(Action::SendDecoyTraffic {
+        s2.action = Some(Action::DecoyTraffic {
             bypass: true,
             replace: false,
             timeout: Dist {
@@ -1680,7 +1680,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(67),
                 n: 1,
                 bypass: true,
@@ -1818,7 +1818,7 @@ mod tests {
            _ => vec![],
         });
         s1.counter = (Some(Counter::new(Operation::Decrement)), None);
-        s1.action = Some(Action::SendDecoyTraffic {
+        s1.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1932,7 +1932,7 @@ mod tests {
         let mut state_pad = State::new(enum_map! {
             _ => vec![],
         });
-        state_pad.action = Some(Action::SendDecoyTraffic {
+        state_pad.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2001,7 +2001,7 @@ mod tests {
         let mut s1 = State::new(enum_map! {
            _ => vec![],
         });
-        s1.action = Some(Action::SendDecoyTraffic {
+        s1.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2035,7 +2035,7 @@ mod tests {
         assert_eq!(f.actions[0], None);
         assert_eq!(
             f.actions[1],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(2),
                 n: 1,
                 bypass: false,
@@ -2060,7 +2060,7 @@ mod tests {
         let mut s1 = State::new(enum_map! {
            _ => vec![],
         });
-        s1.action = Some(Action::SendDecoyTraffic {
+        s1.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2093,7 +2093,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(2),
                 n: 1,
                 bypass: false,
@@ -2103,7 +2103,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[1],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(2),
                 n: 1,
                 bypass: false,
@@ -2132,7 +2132,7 @@ mod tests {
         let mut s1 = State::new(enum_map! {
            _ => vec![],
         });
-        s1.action = Some(Action::SendDecoyTraffic {
+        s1.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2165,7 +2165,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(2),
                 n: 1,
                 bypass: false,
@@ -2190,7 +2190,7 @@ mod tests {
             Event::DecoySent | Event::NormalSent | Event::NormalRecv => vec![Trans(0, 1.0)],
             _ => vec![],
         });
-        s0.action = Some(Action::SendDecoyTraffic {
+        s0.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2226,7 +2226,7 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::SendDecoyTraffic {
+                Some(TriggerAction::DecoyTraffic {
                     timeout: Duration::from_micros(2),
                     n: 1,
                     bypass: false,
@@ -2262,7 +2262,7 @@ mod tests {
 
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(2),
                 n: 1,
                 bypass: false,
@@ -2285,7 +2285,7 @@ mod tests {
             Event::DecoySent | Event::NormalSent | Event::NormalRecv => vec![Trans(0, 1.0)],
         _ => vec![],
         });
-        s0.action = Some(Action::SendDecoyTraffic {
+        s0.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2325,7 +2325,7 @@ mod tests {
         for _ in 0..100 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::SendDecoyTraffic {
+                Some(TriggerAction::DecoyTraffic {
                     timeout: Duration::from_micros(2),
                     n: 1,
                     bypass: false,
@@ -2335,7 +2335,7 @@ mod tests {
             );
             assert_eq!(
                 f.actions[1],
-                Some(TriggerAction::SendDecoyTraffic {
+                Some(TriggerAction::DecoyTraffic {
                     timeout: Duration::from_micros(2),
                     n: 1,
                     bypass: false,
@@ -2386,7 +2386,7 @@ mod tests {
 
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(2),
                 n: 1,
                 bypass: false,
@@ -2396,7 +2396,7 @@ mod tests {
         );
         assert_eq!(
             f.actions[1],
-            Some(TriggerAction::SendDecoyTraffic {
+            Some(TriggerAction::DecoyTraffic {
                 timeout: Duration::from_micros(2),
                 n: 1,
                 bypass: false,
@@ -2781,7 +2781,7 @@ mod tests {
             Event::DecoySent => vec![Trans(1, 1.0)],
         _ => vec![],
         });
-        s1.action = Some(Action::SendDecoyTraffic {
+        s1.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2826,7 +2826,7 @@ mod tests {
         for _ in 0..4 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::SendDecoyTraffic {
+                Some(TriggerAction::DecoyTraffic {
                     timeout: Duration::from_micros(1),
                     n: 1,
                     bypass: false,

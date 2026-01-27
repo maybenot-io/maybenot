@@ -304,7 +304,7 @@ mod tests {
                  Event::DecoySent => vec![Trans(0, 1.0)],
              _ => vec![],
         });
-        s.action = Some(Action::SendDecoyTraffic {
+        s.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -331,7 +331,7 @@ mod tests {
         assert!(r.is_ok());
 
         // invalid action in state
-        s.action = Some(Action::SendDecoyTraffic {
+        s.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {

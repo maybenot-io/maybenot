@@ -191,7 +191,7 @@ mod tests {
             Event::DecoySent => vec![Trans(0, 1.0)],
         _ => vec![],
         });
-        state.action = Some(Action::SendDecoyTraffic {
+        state.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {

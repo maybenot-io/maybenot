@@ -114,7 +114,7 @@ fn make_decoy_state(start: usize, done: usize, limit: Dist) -> Vec<State> {
         Event::LimitReached => vec![Trans(done, 1.0)],
         _ => vec![],
     });
-    decoy_state.action = Some(Action::SendDecoyTraffic {
+    decoy_state.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {

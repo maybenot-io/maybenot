@@ -114,7 +114,7 @@ fn generate_padding_state(
         0.0,
     );
 
-    state.action = Some(Action::SendDecoyTraffic {
+    state.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout,
@@ -162,7 +162,7 @@ fn generate_last_padding_state(
         0.0,
     );
 
-    state.action = Some(Action::SendDecoyTraffic {
+    state.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout,

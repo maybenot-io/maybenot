@@ -55,7 +55,7 @@ fn test_simple_pad_machine() {
         Event::DecoySent => vec![Trans(1, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::SendDecoyTraffic {
+    s1.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -287,7 +287,7 @@ fn test_block_and_decoy() {
         Event::DecoySent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s2.action = Some(Action::SendDecoyTraffic {
+    s2.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -381,7 +381,7 @@ fn test_bypass_machine() {
         Event::DecoySent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s2.action = Some(Action::SendDecoyTraffic {
+    s2.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: false,
         timeout: Dist {
@@ -567,7 +567,7 @@ fn test_bypass_replace_machine() {
         Event::DecoySent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s2.action = Some(Action::SendDecoyTraffic {
+    s2.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -706,7 +706,7 @@ fn test_bypass_replace_machine() {
         false,
     );
     // bump the limit to 5
-    if let Some(Action::SendDecoyTraffic { ref mut limit, .. }) = m.states[2].action {
+    if let Some(Action::DecoyTraffic { ref mut limit, .. }) = m.states[2].action {
         *limit = Some(Dist {
             dist: DistType::Uniform {
                 low: 5.0,
@@ -784,7 +784,7 @@ fn test_timer_action_basic() {
     let mut s3 = State::new(enum_map! {
         _ => vec![],
     });
-    s3.action = Some(Action::SendDecoyTraffic {
+    s3.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -863,7 +863,7 @@ fn test_timer_action_longest() {
     let mut s3 = State::new(enum_map! {
         _ => vec![],
     });
-    s3.action = Some(Action::SendDecoyTraffic {
+    s3.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -942,7 +942,7 @@ fn test_timer_action_replace() {
     let mut s3 = State::new(enum_map! {
         _ => vec![],
     });
-    s3.action = Some(Action::SendDecoyTraffic {
+    s3.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -990,7 +990,7 @@ fn test_action_cancel_timer_internal() {
         Event::NormalSent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::SendDecoyTraffic {
+    s1.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -1061,7 +1061,7 @@ fn test_action_cancel_timer_action() {
         Event::NormalSent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::SendDecoyTraffic {
+    s1.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -1132,7 +1132,7 @@ fn test_action_cancel_timer_both() {
         Event::NormalSent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::SendDecoyTraffic {
+    s1.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -1243,7 +1243,7 @@ fn test_counter_machine() {
     let mut s4 = State::new(enum_map! {
         _ => vec![],
     });
-    s4.action = Some(Action::SendDecoyTraffic {
+    s4.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {

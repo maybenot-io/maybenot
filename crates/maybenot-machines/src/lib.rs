@@ -345,7 +345,7 @@ mod tests {
             Event::DecoySent => vec![Trans(0, 1.0)],
             _ => vec![],
         });
-        padding_state.action = Some(Action::SendDecoyTraffic {
+        padding_state.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -390,7 +390,7 @@ mod tests {
             Event::DecoySent => vec![Trans(1, 1.0)],
             _ => vec![],
         });
-        padding_state.action = Some(Action::SendDecoyTraffic {
+        padding_state.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {

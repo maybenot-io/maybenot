@@ -71,7 +71,7 @@ pub fn random_state<R: Rng>(
     min_action_timeout: RangeInclusive<f64>,
     rng: &mut R,
 ) -> State {
-    let mut action = Action::SendDecoyTraffic {
+    let mut action = Action::DecoyTraffic {
         bypass: false,
         replace: false,
         // this is circpad_distribution_t iat_dist
@@ -90,7 +90,7 @@ pub fn random_state<R: Rng>(
     };
 
     // enforce the minimum action timeout for blocking and decoy actions
-    if let Action::SendDecoyTraffic {
+    if let Action::DecoyTraffic {
         ref mut timeout, ..
     } = action
     {
@@ -101,7 +101,7 @@ pub fn random_state<R: Rng>(
     }
 
     let transitions = match action {
-        Action::SendDecoyTraffic { limit: Some(_), .. } => {
+        Action::DecoyTraffic { limit: Some(_), .. } => {
             random_transitions(num_states, true, rng)
         }
         _ => random_transitions(num_states, false, rng),

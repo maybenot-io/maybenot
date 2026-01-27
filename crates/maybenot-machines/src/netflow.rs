@@ -28,7 +28,7 @@ fn gen_simple_netflow_machine(low_ms: usize, high_ms: usize) -> Machine {
        Event::TunnelSent => vec![Trans(1, 1.0)],
        _ => vec![],
     });
-    s1.action = Some(Action::SendDecoyTraffic {
+    s1.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {

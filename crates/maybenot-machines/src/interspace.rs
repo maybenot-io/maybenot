@@ -49,7 +49,7 @@ pub fn interspace_client<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         _ => vec![],
         })
     };
-    padding.action = Some(Action::SendDecoyTraffic {
+    padding.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -118,7 +118,7 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         // random_log_logistic() below for details
         let alpha = rng.random_range(0.01..1000.0);
         let beta = rng.random_range(0.01..10000.0);
-        wait.action = Some(Action::SendDecoyTraffic {
+        wait.action = Some(Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -147,7 +147,7 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         Event::DecoySent => vec![Trans(2, 1.0)],
        _ => vec![],
     });
-    extend.action = Some(Action::SendDecoyTraffic {
+    extend.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_pareto(0.0, 10000.0, rng),
@@ -168,7 +168,7 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         Event::DecoySent => vec![Trans(3, 1.0)],
        _ => vec![],
     });
-    fake.action = Some(Action::SendDecoyTraffic {
+    fake.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_pareto(0.0, 10000.0, rng),
@@ -195,7 +195,7 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         Event::DecoyRecv => vec![Trans(1, 1.0)],
        _ => vec![],
     });
-    s0.action = Some(Action::SendDecoyTraffic {
+    s0.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 10000.0, rng),
@@ -215,7 +215,7 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         Event::NormalSent => vec![Trans(2, 1.0)],
        _ => vec![],
     });
-    s1.action = Some(Action::SendDecoyTraffic {
+    s1.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 31443.0, rng),
@@ -236,7 +236,7 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         Event::DecoyRecv => vec![Trans(3, 1.0)],
        _ => vec![],
     });
-    s2.action = Some(Action::SendDecoyTraffic {
+    s2.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 100000.0, rng),
@@ -258,7 +258,7 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         Event::DecoyRecv => vec![Trans(2, 1.0)],
        _ => vec![],
     });
-    s3.action = Some(Action::SendDecoyTraffic {
+    s3.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 55878.0, rng),

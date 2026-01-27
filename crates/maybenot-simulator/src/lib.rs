@@ -850,7 +850,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
             // this should never happen, bug
             panic!("bug: update timer action in scheduled action");
         }
-        TriggerAction::SendDecoyTraffic {
+        TriggerAction::DecoyTraffic {
             timeout: _,
             n: amount,
             bypass,
@@ -958,7 +958,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                     }
                 }
             }
-            TriggerAction::SendDecoyTraffic {
+            TriggerAction::DecoyTraffic {
                 timeout,
                 n,
                 bypass: _,

@@ -414,7 +414,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
             Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
             _ => vec![],
         });
-        pad.action = Some(Action::SendDecoyTraffic {
+        pad.action = Some(Action::DecoyTraffic {
             bypass: true,
             replace: true,
             timeout: Dist {
@@ -445,7 +445,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
         Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
     });
-    pad.action = Some(Action::SendDecoyTraffic {
+    pad.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -506,7 +506,7 @@ fn make_regulator_boot_machine(pps: f64, n: usize) -> Machine {
         Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
     });
-    pad.action = Some(Action::SendDecoyTraffic {
+    pad.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -658,7 +658,7 @@ fn push_loop_cluster(states: &mut Vec<State>, upload_ratio: f64) {
         Event::TunnelSent => vec![Trans(start_index, 1.0)],
         _ => vec![],
     });
-    send.action = Some(Action::SendDecoyTraffic {
+    send.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {

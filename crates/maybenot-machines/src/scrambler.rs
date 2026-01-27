@@ -92,7 +92,7 @@ pub fn scrambler_client() -> Vec<Machine> {
         Event::DecoySent => vec![Trans(2, 1.0)],
        _ => vec![],
     });
-    padding.action = Some(Action::SendDecoyTraffic {
+    padding.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -196,7 +196,7 @@ fn generate_min_state(interval: f64, min_count: f64) -> State {
         Event::LimitReached => vec![Trans(RIGHT_STATE_INDEX, 1.0)],
        _ => vec![],
     });
-    min.action = Some(Action::SendDecoyTraffic {
+    min.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -254,7 +254,7 @@ fn generate_left_state(index: usize, interval: f64, min_trail: f64, max_trail: f
         })
     };
 
-    left.action = Some(Action::SendDecoyTraffic {
+    left.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -312,7 +312,7 @@ fn generate_right_state(index: usize, interval: f64, min_trail: f64, max_trail: 
         })
     };
 
-    right.action = Some(Action::SendDecoyTraffic {
+    right.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -367,7 +367,7 @@ fn generate_count_left_state(count: f64) -> State {
        _ => vec![],
     });
 
-    left.action = Some(Action::SendDecoyTraffic {
+    left.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -411,7 +411,7 @@ fn generate_count_right_state(count: f64) -> State {
        _ => vec![],
     });
 
-    right.action = Some(Action::SendDecoyTraffic {
+    right.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {

@@ -119,7 +119,7 @@ pub fn random_state<R: Rng>(
         Some(Action::BlockOutgoing {
             ref mut timeout, ..
         })
-        | Some(Action::SendDecoyTraffic {
+        | Some(Action::DecoyTraffic {
             ref mut timeout, ..
         }) => {
             let min = rng_range!(rng, min_action_timeout);
@@ -145,7 +145,7 @@ pub fn random_state<R: Rng>(
 
     let action_has_limit = action.is_some()
         && match action.as_ref().unwrap() {
-            Action::SendDecoyTraffic { limit, .. }
+            Action::DecoyTraffic { limit, .. }
             | Action::BlockOutgoing { limit, .. }
             | Action::UpdateTimer { limit, .. } => limit.is_some(),
             _ => false,
@@ -307,7 +307,7 @@ fn random_action_cancel<R: Rng>(rng: &mut R) -> Action {
 }
 
 fn random_action_decoy<R: Rng>(count_point: u64, duration_point: f64, rng: &mut R) -> Action {
-    Action::SendDecoyTraffic {
+    Action::DecoyTraffic {
         bypass: rng.random_bool(0.5),
         replace: rng.random_bool(0.5),
         timeout: random_timeout(duration_point, rng),

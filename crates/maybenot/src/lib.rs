@@ -96,7 +96,7 @@
 //!                 // Cancel the specified timer (action, internal, or
 //!                 // both) for the machine in question.
 //!             }
-//!             TriggerAction::SendDecoyTraffic {
+//!             TriggerAction::DecoyTraffic {
 //!                 timeout: _,
 //!                 n: _,
 //!                 bypass: _,
@@ -373,7 +373,7 @@ mod tests {
                         // Cancel the specified timer (action, internal, or
                         // both) for the machine in question.
                     }
-                    TriggerAction::SendDecoyTraffic {
+                    TriggerAction::DecoyTraffic {
                         timeout: _,
                         n: _,
                         bypass: _,

@@ -26,7 +26,7 @@ fn get_test_machine() -> Machine {
     let mut s1 = State::new(enum_map! {
         _ => vec![],
     });
-    s1.action = Some(Action::SendDecoyTraffic {
+    s1.action = Some(Action::DecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {

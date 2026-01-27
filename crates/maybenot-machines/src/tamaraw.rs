@@ -62,7 +62,7 @@ fn make_padding_machine(p: f64) -> Machine {
         Event::TunnelSent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    padding.action = Some(Action::SendDecoyTraffic {
+    padding.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -178,7 +178,7 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
         }),
         None,
     );
-    tail.action = Some(Action::SendDecoyTraffic {
+    tail.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {

@@ -167,7 +167,7 @@ typedef struct MaybenotAction {
   MaybenotAction_Tag tag;
   union {
     MaybenotAction_Cancel_Body cancel;
-    MaybenotAction_SendDecoyTraffic_Body send_decoy;
+    MaybenotAction_DecoyTraffic_Body send_decoy;
     MaybenotAction_BlockOutgoing_Body block_outgoing;
     MaybenotAction_UpdateTimer_Body update_timer;
   };

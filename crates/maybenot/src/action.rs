@@ -35,7 +35,7 @@ pub enum Action {
     /// Schedule N decoy packets to be sent after a timeout.
     ///
     /// Replaces any previously pending scheduled action timer (set via
-    /// SendDecoyTraffic or BlockOutgoing) for this machine.
+    /// DecoyTraffic or BlockOutgoing) for this machine.
     ///
     /// The bypass flag determines if the decoy packet(s) MUST bypass any
     /// existing blocking that was triggered with the bypass flag set.
@@ -51,7 +51,7 @@ pub enum Action {
     /// decoy and non-decoy, hence, any packet. Similarly, this implies that a
     /// single blocked packet in the egress queue can replace multiple decoy
     /// packets with the replace flag set.
-    SendDecoyTraffic {
+    DecoyTraffic {
         bypass: bool,
         replace: bool,
         timeout: Dist,
@@ -61,7 +61,7 @@ pub enum Action {
     /// Schedule blocking of outgoing traffic after a timeout.
     ///
     /// Replaces any previously pending scheduled action timer (set via
-    /// SendDecoyTraffic or BlockOutgoing) for this machine.
+    /// DecoyTraffic or BlockOutgoing) for this machine.
     ///
     /// The bypass flag determines if decoy actions are allowed to bypass this
     /// blocking action. This allows for machines that can fail closed (never
@@ -103,7 +103,7 @@ impl Action {
     /// Sample a timeout for a decoy or blocking action.
     pub(crate) fn sample_timeout<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
-            Action::SendDecoyTraffic { timeout, .. } | Action::BlockOutgoing { timeout, .. } => {
+            Action::DecoyTraffic { timeout, .. } | Action::BlockOutgoing { timeout, .. } => {
                 timeout.sample(rng).min(MAX_SAMPLED_TIMEOUT).round() as u64
             }
             _ => 0,
@@ -126,7 +126,7 @@ impl Action {
     /// Sample the number of decoy packets for a decoy action.
     pub(crate) fn sample_decoy_n<R: RngCore>(&self, rng: &mut R) -> usize {
         match self {
-            Action::SendDecoyTraffic { n: amount, .. } => {
+            Action::DecoyTraffic { n: amount, .. } => {
                 amount.sample(rng).min(MAX_SAMPLED_DECOY_N as f64).round() as usize
             }
             _ => 0,
@@ -136,7 +136,7 @@ impl Action {
     /// Sample a limit.
     pub(crate) fn sample_limit<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
-            Action::SendDecoyTraffic { limit, .. }
+            Action::DecoyTraffic { limit, .. }
             | Action::BlockOutgoing { limit, .. }
             | Action::UpdateTimer { limit, .. } => {
                 if limit.is_none() {
@@ -151,7 +151,7 @@ impl Action {
     /// Check if the action has a limit distribution.
     pub(crate) fn has_limit(&self) -> bool {
         match self {
-            Action::SendDecoyTraffic { limit, .. }
+            Action::DecoyTraffic { limit, .. }
             | Action::BlockOutgoing { limit, .. }
             | Action::UpdateTimer { limit, .. } => limit.is_some(),
             _ => false,
@@ -161,7 +161,7 @@ impl Action {
     /// Validate all distributions contained in this action, if any.
     pub fn validate(&self) -> Result<(), Error> {
         match self {
-            Action::SendDecoyTraffic {
+            Action::DecoyTraffic {
                 timeout, n, limit, ..
             } => {
                 timeout.validate()?;
@@ -243,7 +243,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// time, this `SendDecoy` action should replace any currently pending
     /// `SendDecoy` or `BlockOutgoing` action timer for this machine that has
     /// not yet expired.
-    SendDecoyTraffic {
+    DecoyTraffic {
         timeout: T::Duration,
         n: usize,
         bypass: bool,
@@ -342,7 +342,7 @@ mod tests {
     #[test]
     fn validate_decoy_action() {
         // valid SendDecoy action
-        let mut a = Action::SendDecoyTraffic {
+        let mut a = Action::DecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -375,7 +375,7 @@ mod tests {
         assert!(r.is_ok());
 
         // invalid timeout dist, not allowed
-        if let Action::SendDecoyTraffic { timeout, .. } = &mut a {
+        if let Action::DecoyTraffic { timeout, .. } = &mut a {
             *timeout = Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
@@ -390,7 +390,7 @@ mod tests {
         assert!(r.is_err());
 
         // repair timeout dist
-        if let Action::SendDecoyTraffic { timeout, .. } = &mut a {
+        if let Action::DecoyTraffic { timeout, .. } = &mut a {
             *timeout = Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
@@ -402,7 +402,7 @@ mod tests {
         }
 
         // invalid limit dist, not allowed
-        if let Action::SendDecoyTraffic { limit, .. } = &mut a {
+        if let Action::DecoyTraffic { limit, .. } = &mut a {
             *limit = Some(Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
@@ -417,7 +417,7 @@ mod tests {
         assert!(r.is_err());
 
         // repair limit dist
-        if let Action::SendDecoyTraffic { limit, .. } = &mut a {
+        if let Action::DecoyTraffic { limit, .. } = &mut a {
             *limit = Some(Dist {
                 dist: DistType::Normal {
                     mean: 50.0,
@@ -429,7 +429,7 @@ mod tests {
         }
 
         // invalid amount dist, not allowed
-        if let Action::SendDecoyTraffic { n: amount, .. } = &mut a {
+        if let Action::DecoyTraffic { n: amount, .. } = &mut a {
             *amount = Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high

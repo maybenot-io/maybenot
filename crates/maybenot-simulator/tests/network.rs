@@ -290,7 +290,7 @@ fn ratio3_machine() -> Machine {
         Event::DecoySent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    padding_state.action = Some(Action::SendDecoyTraffic {
+    padding_state.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -347,7 +347,7 @@ fn blocking_machine(blocking_duration: DistType, padding_delay: DistType) -> Mac
     let mut s2 = State::new(enum_map! {
         _ => vec![],
     });
-    s2.action = Some(Action::SendDecoyTraffic {
+    s2.action = Some(Action::DecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {

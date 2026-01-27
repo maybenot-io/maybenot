@@ -84,7 +84,7 @@ pub enum MaybenotAction {
 
     /// Schedule decoy traffic to be injected after the given timeout for a
     /// machine.
-    SendDecoyTraffic {
+    DecoyTraffic {
         /// The machine that generated the action.
         machine: usize,
 
@@ -201,13 +201,13 @@ fn convert_action(action: &maybenot::TriggerAction) -> MaybenotAction {
             machine: machine.into_raw(),
             timer: timer.into(),
         },
-        maybenot::TriggerAction::SendDecoyTraffic {
+        maybenot::TriggerAction::DecoyTraffic {
             timeout,
             n: amount,
             bypass,
             replace,
             machine,
-        } => MaybenotAction::SendDecoyTraffic {
+        } => MaybenotAction::DecoyTraffic {
             timeout: timeout.into(),
             amount,
             replace,
