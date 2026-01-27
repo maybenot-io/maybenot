@@ -66,6 +66,14 @@ fn test_simple_pad_machine() {
             start: 0.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
     let m = Machine::new(0, 1.0, 0, 1.0, vec![s0, s1]).unwrap();
@@ -290,6 +298,14 @@ fn test_block_and_padding() {
             start: 0.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(Dist {
             dist: DistType::Uniform {
                 low: 3.0,
@@ -374,6 +390,14 @@ fn test_bypass_machine() {
                 high: 1.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: Some(Dist {
@@ -552,6 +576,14 @@ fn test_bypass_replace_machine() {
                 high: 2.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: Some(Dist {
@@ -763,6 +795,14 @@ fn test_timer_action_basic() {
             start: 0.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
     let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3]).unwrap();
@@ -832,6 +872,14 @@ fn test_timer_action_longest() {
                 high: 1.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: None,
@@ -905,6 +953,14 @@ fn test_timer_action_replace() {
             start: 0.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
     let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3]).unwrap();
@@ -943,6 +999,14 @@ fn test_action_cancel_timer_internal() {
                 high: 4.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: None,
@@ -1008,6 +1072,14 @@ fn test_action_cancel_timer_action() {
             start: 0.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
     let mut s2 = State::new(enum_map! {
@@ -1069,6 +1141,14 @@ fn test_action_cancel_timer_both() {
                 high: 4.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: None,
@@ -1172,6 +1252,14 @@ fn test_counter_machine() {
                 high: 3.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: None,

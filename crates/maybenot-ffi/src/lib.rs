@@ -87,7 +87,10 @@ pub enum MaybenotAction {
         /// The machine that generated the action.
         machine: usize,
 
-        /// The time to wait before injecting a padding packet.
+        /// The number of packets to inject.
+        amount: usize,
+
+        /// The time to wait before injecting padding packets.
         timeout: MaybenotDuration,
 
         replace: bool,
@@ -199,11 +202,13 @@ fn convert_action(action: &maybenot::TriggerAction) -> MaybenotAction {
         },
         maybenot::TriggerAction::SendPadding {
             timeout,
+            amount,
             bypass,
             replace,
             machine,
         } => MaybenotAction::SendPadding {
             timeout: timeout.into(),
+            amount,
             replace,
             bypass,
             machine: machine.into_raw(),

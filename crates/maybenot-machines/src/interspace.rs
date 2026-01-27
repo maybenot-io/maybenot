@@ -60,6 +60,14 @@ pub fn interspace_client<R: RngCore>(rng: &mut R) -> Vec<Machine> {
             start: 0.0,
             max: 9445.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(Dist {
             dist: DistType::Pareto {
                 scale: 4.7,
@@ -121,6 +129,14 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
                 start: 0.0,
                 max: 100000.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: 1.0,
+                max: 0.0,
+            },
             limit: None,
         });
         states.push(wait);
@@ -135,6 +151,14 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         bypass: false,
         replace: false,
         timeout: random_pareto(0.0, 10000.0, rng),
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(random_pareto(1.0, 0.0, rng)),
     });
     states.push(extend);
@@ -148,6 +172,14 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         bypass: false,
         replace: false,
         timeout: random_pareto(0.0, 10000.0, rng),
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(random_pareto(1.0, 4.0, rng)),
     });
     states.push(fake);
@@ -167,6 +199,14 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 10000.0, rng),
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
     states.push(s0);
@@ -179,6 +219,14 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 31443.0, rng),
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
     states.push(s1);
@@ -192,6 +240,14 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 100000.0, rng),
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(random_log_logistic(5.0, 0.0, rng)),
     });
     states.push(s2);
@@ -206,6 +262,14 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 55878.0, rng),
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(random_log_logistic(5.0, 0.0, rng)),
     });
     states.push(s3);

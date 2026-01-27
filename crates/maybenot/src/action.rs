@@ -124,12 +124,12 @@ impl Action {
     }
 
     /// Sample an amount for a padding action.
-    pub(crate) fn sample_amount<R: RngCore>(&self, rng: &mut R) -> u64 {
+    pub(crate) fn sample_amount<R: RngCore>(&self, rng: &mut R) -> usize {
         match self {
             Action::SendPadding { amount, .. } => amount
                 .sample(rng)
                 .min(MAX_SAMPLED_PADDING_AMOUNT as f64)
-                .round() as u64,
+                .round() as usize,
             _ => 0,
         }
     }
@@ -250,7 +250,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// not yet expired.
     SendPadding {
         timeout: T::Duration,
-        amount: u64,
+        amount: usize,
         bypass: bool,
         replace: bool,
         machine: MachineId,

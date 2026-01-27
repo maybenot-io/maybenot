@@ -45,7 +45,7 @@
 //!
 //! // A simple machine that sends one padding packet 20 milliseconds after the
 //! // first normal packet is sent.
-//! let m = "02eNp1ibEJAEAIA5Nf7B3N0v1cSESwEL0m5A6YvBqSgP7WeXfM5UoBW7ICYg==";
+//! let m = "02eNp9ycEJACAMQ9EfF6ujeXQ/F3EEEcFDafsuIQl47YUkGPbnW2NzdWrbsucAyNsDkQ==";
 //! let m = Machine::from_str(m).unwrap();
 //!
 //! // Run the simulator with the machine at the client. Run the simulation up
@@ -746,7 +746,9 @@ fn pick_next<M: AsRef<[Machine]>>(
     let target = current_time + s;
     let act = do_scheduled_action(client, server, target);
     if let Some(a) = act {
-        sq.push_sim(a.clone());
+        for event in a {
+            sq.push_sim(event);
+        }
     }
     pick_next(sq, client, server, network, current_time)
 }
@@ -804,7 +806,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
     client: &mut SimState<M, RngSource>,
     server: &mut SimState<M, RngSource>,
     target: Instant,
-) -> Option<SimEvent> {
+) -> Option<Vec<SimEvent>> {
     // find the action
     let mut a: Option<ScheduledAction> = None;
     let mut is_client = false;
@@ -850,26 +852,32 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
         }
         TriggerAction::SendPadding {
             timeout: _,
+            amount,
             bypass,
             replace,
             machine,
         } => {
-            let action_delay = if is_client {
-                client.action_delay()
-            } else {
-                server.action_delay()
-            };
+            let mut r = Vec::with_capacity(amount);
 
-            Some(SimEvent {
-                event: TriggerEvent::PaddingSent { machine },
-                time: a.time,
-                integration_delay: action_delay,
-                client: is_client,
-                bypass,
-                replace,
-                contains_padding: true,
-                debug_note: None,
-            })
+            for _ in 0..amount {
+                let action_delay = if is_client {
+                    client.action_delay()
+                } else {
+                    server.action_delay()
+                };
+
+                r.push(SimEvent {
+                    event: TriggerEvent::PaddingSent { machine },
+                    time: a.time,
+                    integration_delay: action_delay,
+                    client: is_client,
+                    bypass,
+                    replace,
+                    contains_padding: true,
+                    debug_note: None,
+                });
+            }
+            Some(r)
         }
         TriggerAction::BlockOutgoing {
             timeout: _,
@@ -904,7 +912,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
             }
 
             // event triggered regardless
-            Some(SimEvent {
+            Some(vec![SimEvent {
                 event: TriggerEvent::BlockingBegin { machine },
                 time: reported,
                 integration_delay: total_delay,
@@ -913,7 +921,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
                 replace: false,
                 contains_padding: false,
                 debug_note: None,
-            })
+            }])
         }
     }
 }
@@ -952,11 +960,14 @@ fn trigger_update<M: AsRef<[Machine]>>(
             }
             TriggerAction::SendPadding {
                 timeout,
+                amount,
                 bypass: _,
                 replace: _,
                 machine,
             } => {
-                debug!("\ttrigger_update(): send padding action {timeout:?} {machine:?}");
+                debug!(
+                    "\ttrigger_update(): send padding action {amount:?} {timeout:?} {machine:?}"
+                );
                 state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
                     action: action.clone(),
                     time: *current_time + *timeout + trigger_delay,

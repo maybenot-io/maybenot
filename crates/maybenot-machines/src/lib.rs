@@ -356,6 +356,14 @@ mod tests {
                 start: 5_000_000.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: 1.0,
+                max: 0.0,
+            },
             limit: None,
         });
         states.push(padding_state);
@@ -363,7 +371,7 @@ mod tests {
         let m = Machine::new(u64::MAX, 1.0, 0, 0.0, states).unwrap();
         assert_eq!(
             m.serialize(),
-            "02eNpti1EJACAQQzcjWEjMYCEjGsUCojiUg+Pex2CPbe0HxCz4JCVJoJvF7SEjt+qUtnY+gDUNIg=="
+            "02eNp9zMENABAMRuFXI1hIzGAhIxrFAkI0pD2I79Ck/+GNeaB64gp6RQSqrez/qcWS+XN1F7P6Aj51DlE="
         );
     }
 
@@ -393,6 +401,14 @@ mod tests {
                 start: 1_000_000.0,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: 1.0,
+                max: 0.0,
+            },
             limit: None,
         });
         states.push(padding_state);
@@ -400,7 +416,7 @@ mod tests {
         let m = Machine::new(u64::MAX, 1.0, 0, 0.0, states).unwrap();
         assert_eq!(
             m.serialize(),
-            "02eNpty8sJACAMA9DEgVyhuFkPDuwC4o8KpfRBoQlkLoNnCL5yjiSg4h5zY0p7baEK2w33hw3i"
+            "02eNp9zcsJACAMA9DEgVyhuFkPDuwC4o8WKogPCs0l6cPgaAKX1pEEVMJjdnzSmgv+woaXXeUTzmYPEQ=="
         );
     }
 }

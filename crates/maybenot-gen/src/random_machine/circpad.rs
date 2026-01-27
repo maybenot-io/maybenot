@@ -78,6 +78,15 @@ pub fn random_state<R: Rng>(
         timeout: random_timeout(duration_point, rng),
         // this is circpad_distribution_t length_dist
         limit: random_limit(count_point, rng),
+        // always one packet in circpad
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
     };
 
     // enforce the minimum action timeout for blocking and padding actions

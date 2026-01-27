@@ -301,6 +301,14 @@ fn ratio3_machine() -> Machine {
             start: 0.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
     states.push(padding_state);
@@ -345,6 +353,14 @@ fn blocking_machine(blocking_duration: DistType, padding_delay: DistType) -> Mac
         timeout: Dist {
             dist: padding_delay,
             start: 0.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: None,

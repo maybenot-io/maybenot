@@ -118,6 +118,14 @@ fn generate_padding_state(
         bypass: false,
         replace: false,
         timeout,
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(limit),
     });
 
@@ -158,6 +166,14 @@ fn generate_last_padding_state(
         bypass: false,
         replace: false,
         timeout,
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(limit),
     });
 

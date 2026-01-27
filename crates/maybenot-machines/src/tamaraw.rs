@@ -73,6 +73,14 @@ fn make_padding_machine(p: f64) -> Machine {
             start: 1000.0 * 1000.0 * p,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
     states.push(padding);
@@ -174,6 +182,14 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
         bypass: true,
         replace: true,
         timeout: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
+        amount: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,

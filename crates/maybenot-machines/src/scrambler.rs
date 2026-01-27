@@ -103,6 +103,14 @@ pub fn scrambler_client() -> Vec<Machine> {
             start: 0.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
     states.push(padding);
@@ -199,6 +207,14 @@ fn generate_min_state(interval: f64, min_count: f64) -> State {
             start: 0.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(Dist {
             dist: DistType::Uniform {
                 low: min_count,
@@ -247,6 +263,14 @@ fn generate_left_state(index: usize, interval: f64, min_trail: f64, max_trail: f
                 high: interval,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: Some(Dist {
@@ -299,6 +323,14 @@ fn generate_right_state(index: usize, interval: f64, min_trail: f64, max_trail: 
             start: 0.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(Dist {
             dist: DistType::Uniform {
                 low: min_trail,
@@ -346,6 +378,14 @@ fn generate_count_left_state(count: f64) -> State {
             start: 0.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(Dist {
             dist: DistType::Uniform {
                 low: count * 1.25,
@@ -380,6 +420,14 @@ fn generate_count_right_state(count: f64) -> State {
                 high: 0.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: Some(Dist {

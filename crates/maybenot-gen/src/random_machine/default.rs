@@ -311,6 +311,15 @@ fn random_action_padding<R: Rng>(count_point: u64, duration_point: f64, rng: &mu
         bypass: rng.random_bool(0.5),
         replace: rng.random_bool(0.5),
         timeout: random_timeout(duration_point, rng),
+        // TODO/FIXME: randomize this later properly
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: random_limit(count_point, rng),
     }
 }

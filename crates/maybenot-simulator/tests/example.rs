@@ -29,12 +29,20 @@ fn simple_machine_for_example() {
             start: 20.0 * 1000.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
     let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1]).unwrap();
     assert_eq!(
         m.serialize(),
-        "02eNp1ibEJAEAIA5Nf7B3N0v1cSESwEL0m5A6YvBqSgP7WeXfM5UoBW7ICYg=="
+        "02eNp9ycEJACAMQ9EfF6ujeXQ/F3EEEcFDafsuIQl47YUkGPbnW2NzdWrbsucAyNsDkQ=="
     );
 }
 
@@ -67,7 +75,7 @@ fn simulator_example_use() {
 
     // A simple machine that sends one padding packet 20 milliseconds after the
     // first normal packet is sent.
-    let m = "02eNp1ibEJAEAIA5Nf7B3N0v1cSESwEL0m5A6YvBqSgP7WeXfM5UoBW7ICYg==";
+    let m = "02eNp9ycEJACAMQ9EfF6ujeXQ/F3EEEcFDafsuIQl47YUkGPbnW2NzdWrbsucAyNsDkQ==";
     let m = Machine::from_str(m).unwrap();
 
     // Run the simulator with the machine at the client. Run the simulation up

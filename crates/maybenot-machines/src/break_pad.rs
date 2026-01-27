@@ -126,6 +126,14 @@ fn make_pad_state(start: usize, done: usize, limit: Dist) -> Vec<State> {
             start: 1.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: Some(limit),
     });
     states.push(pad_state);

@@ -425,6 +425,14 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
                 start: 1_000_000.0 / rate,
                 max: 0.0,
             },
+            amount: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: 1.0,
+                max: 0.0,
+            },
             limit: None,
         });
         states.push(pad);
@@ -446,6 +454,14 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
                 high: 0.0,
             },
             start: 1_000_000.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: None,
@@ -499,6 +515,14 @@ fn make_regulator_boot_machine(pps: f64, n: usize) -> Machine {
                 high: 0.0,
             },
             start: 1_000_000.0 / pps,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: Some(Dist {
@@ -643,6 +667,14 @@ fn push_loop_cluster(states: &mut Vec<State>, upload_ratio: f64) {
                 high: 0.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
             max: 0.0,
         },
         limit: None,

@@ -37,6 +37,14 @@ fn get_test_machine() -> Machine {
             start: 5.0 * 1000.0,
             max: 0.0,
         },
+        amount: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: 1.0,
+            max: 0.0,
+        },
         limit: None,
     });
 
