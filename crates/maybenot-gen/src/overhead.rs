@@ -56,8 +56,7 @@ impl DefendedTraceStats {
             .unwrap_or(Duration::ZERO);
         let last_normal = defended
             .lines()
-            .filter(|l| l.contains("sn") || l.contains("rn"))
-            .next_back()
+            .rfind(|l| l.contains("sn") || l.contains("rn"))
             .and_then(|l| l.split(',').next())
             .and_then(|s| s.trim().parse::<u64>().ok())
             .map(Duration::from_nanos)

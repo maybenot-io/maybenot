@@ -225,15 +225,16 @@ fn do_main() -> Result<()> {
             tweak::sim::sim(cfg.clone(), input, output.clone(), seed)?;
             if eval {
                 let sim_cfg = cfg.clone().sim.unwrap();
-                if sim_cfg.tunable_defense_limits.is_none() {
-                    tweak::eval::eval(cfg, &output, None)?;
-                } else {
-                    let limits = sim_cfg.tunable_defense_limits.as_ref().unwrap();
+
+                if let Some(limits) = &sim_cfg.tunable_defense_limits {
                     for limit in limits.iter() {
                         let output = Path::new(&output).join(format!("limit-{limit}"));
                         tweak::eval::eval(cfg.clone(), &output, None)?;
                     }
+                } else {
+                    tweak::eval::eval(cfg, &output, None)?;
                 }
+
                 remove_dir_all(output)?;
             }
             Ok(())

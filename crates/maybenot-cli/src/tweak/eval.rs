@@ -346,7 +346,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
             info!("running classifier: {classifier}");
             let result = run_classifier(classifier, input)?;
             info!("result: {result}");
-            classifier_metrics.insert(classifier.to_string(), result);
+            classifier_metrics.insert(classifier.clone(), result);
         }
     } else {
         info!("no classifiers configured, skipping");
@@ -500,7 +500,7 @@ pub fn brief_eval_print(input: &Path) -> Result<()> {
             .values()
             .map(|s| {
                 s.parse::<f64>()
-                    .map_or_else(|_| s.to_string(), |v| format!("{v:5.2}"))
+                    .map_or_else(|_| s.clone(), |v| format!("{v:5.2}"))
             })
             .collect::<Vec<String>>()
             .join(" ");

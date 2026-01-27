@@ -219,25 +219,7 @@ pub fn do_sim_def<R: RngCore>(
     // all checks passed, we can now simulate
     create_dir(&output)?;
 
-    if cfg.tunable_defense_limits.is_none() {
-        info!("simulating...");
-        sim_dataset(
-            dataset,
-            dataset_samples,
-            enough_defenses,
-            cfg,
-            defenses,
-            1.0,
-            &output,
-            rng,
-        )?;
-        info!(
-            "done, wrote {} traces to {}",
-            dataset.len() * cfg.augmentation.unwrap_or(1),
-            output.display()
-        );
-    } else {
-        let limits = cfg.tunable_defense_limits.as_ref().unwrap();
+    if let Some(limits) = &cfg.tunable_defense_limits {
         for limit in limits.iter() {
             // subdirectory for the limit
             let output = Path::new(&output).join(format!("limit-{limit}"));
@@ -259,6 +241,23 @@ pub fn do_sim_def<R: RngCore>(
                 output.display()
             );
         }
+    } else {
+        info!("simulating...");
+        sim_dataset(
+            dataset,
+            dataset_samples,
+            enough_defenses,
+            cfg,
+            defenses,
+            1.0,
+            &output,
+            rng,
+        )?;
+        info!(
+            "done, wrote {} traces to {}",
+            dataset.len() * cfg.augmentation.unwrap_or(1),
+            output.display()
+        );
     }
 
     Ok(())

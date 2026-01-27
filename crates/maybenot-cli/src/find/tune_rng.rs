@@ -132,14 +132,13 @@ pub fn tune_rng(
         sim(cfg.clone(), vec![def.clone()], sim_folder.clone(), None)?;
         let sim = cfg.clone().sim.unwrap();
         info!("🧂🧂 eval for def: {}", fname);
-        if sim.tunable_defense_limits.is_none() {
-            eval(cfg.clone(), &sim_folder, None)?;
-        } else {
-            let limits = sim.tunable_defense_limits.as_ref().unwrap();
+        if let Some(limits) = &sim.tunable_defense_limits {
             for limit in limits.iter() {
                 let output = Path::new(&sim_folder).join(format!("limit-{}", limit));
                 eval(cfg.clone(), &output, None)?;
             }
+        } else {
+            eval(cfg.clone(), &sim_folder, None)?;
         }
         info!("🧂🧂 done, removing tmp output");
         remove_dir_all(&output)?;
