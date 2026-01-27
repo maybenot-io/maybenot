@@ -402,7 +402,7 @@ fn sim_dataset<R: RngCore>(
                         TriggerEvent::TunnelRecv => {
                             n += 1;
                             if t.contains_decoy {
-                                s.push_str(&format!("{ts},rp,514\n"));
+                                s.push_str(&format!("{ts},rd,514\n"));
                             } else {
                                 s.push_str(&format!("{ts},rn,514\n"));
                             }
@@ -410,7 +410,7 @@ fn sim_dataset<R: RngCore>(
                         TriggerEvent::TunnelSent => {
                             n += 1;
                             if t.contains_decoy {
-                                s.push_str(&format!("{ts},sp,514\n"));
+                                s.push_str(&format!("{ts},sd,514\n"));
                             } else {
                                 s.push_str(&format!("{ts},sn,514\n"));
                             }

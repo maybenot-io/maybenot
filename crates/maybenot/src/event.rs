@@ -158,10 +158,10 @@ impl fmt::Display for TriggerEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TriggerEvent::NormalRecv => write!(f, "rn"),
-            TriggerEvent::DecoyRecv => write!(f, "rp"),
+            TriggerEvent::DecoyRecv => write!(f, "rd"),
             TriggerEvent::TunnelRecv => write!(f, "rt"),
             TriggerEvent::NormalSent => write!(f, "sn"),
-            TriggerEvent::DecoySent { .. } => write!(f, "sp"),
+            TriggerEvent::DecoySent { .. } => write!(f, "sd"),
             TriggerEvent::TunnelSent => write!(f, "st"),
             TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
             TriggerEvent::BlockingEnd => write!(f, "be"),

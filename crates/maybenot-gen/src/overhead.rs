@@ -35,8 +35,14 @@ impl DefendedTraceStats {
     pub fn new(defended: &str, base: &str) -> Self {
         let normal_sent = defended.lines().filter(|l| l.contains("sn")).count();
         let normal_received = defended.lines().filter(|l| l.contains("rn")).count();
-        let decoy_sent = defended.lines().filter(|l| l.contains("sp")).count();
-        let decoy_received = defended.lines().filter(|l| l.contains("rp")).count();
+        let decoy_sent = defended
+            .lines()
+            .filter(|l| l.contains("sp") || l.contains("sd"))
+            .count();
+        let decoy_received = defended
+            .lines()
+            .filter(|l| l.contains("rp") || l.contains("rd"))
+            .count();
 
         // for the tail, we first filter out the tail packets by reversing the lines then collecting until we hit a normal packet
         let tail_vec = defended
@@ -44,8 +50,14 @@ impl DefendedTraceStats {
             .rev()
             .take_while(|l| l.contains("sp") || l.contains("rp"))
             .collect::<Vec<&str>>();
-        let tail_sent = tail_vec.iter().filter(|l| l.contains("sp")).count();
-        let tail_received = tail_vec.iter().filter(|l| l.contains("rp")).count();
+        let tail_sent = tail_vec
+            .iter()
+            .filter(|l| l.contains("sp") || l.contains("sd"))
+            .count();
+        let tail_received = tail_vec
+            .iter()
+            .filter(|l| l.contains("rp") || l.contains("rd"))
+            .count();
 
         let last_packet = defended
             .lines()

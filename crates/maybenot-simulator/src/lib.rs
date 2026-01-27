@@ -1099,7 +1099,7 @@ pub fn parse_trace_advanced(
                         recv_max_pps = m;
                     }
                 }
-                "sp" | "rp" => {
+                "sp" | "rp" | "sd" | "rd" => {
                     // TODO: figure out of ignoring is the right thing to do
                 }
                 _ => {

@@ -81,7 +81,7 @@ fn test_simple_pad_machine() {
     // client machine and client output
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "0,sn 0,st 8,sp 8,st 16,sp 16,st 18,sn 18,st 24,sp 24,st 25,rt 25,rt 25,rn 25,rn 30,sn 30,st 32,sp 32,st 35,rt 35,rn",
+        "0,sn 0,st 8,sd 8,st 16,sd 16,st 18,sn 18,st 24,sd 24,st 25,rt 25,rt 25,rn 25,rn 30,sn 30,st 32,sd 32,st 35,rt 35,rn",
         Duration::from_micros(5),
         slice::from_ref(&m),
         &[],
@@ -94,7 +94,7 @@ fn test_simple_pad_machine() {
     // client machine and server output
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "5,rt 5,rn 13,rt 13,rp 20,sn 20,st 20,sn 20,st 21,rt 21,rp 23,rt 23,rn 29,rt 29,rp 30,sn 30,st 35,rt 35,rn 37,rt 37,rp 45,rt 45,rp",
+        "5,rt 5,rn 13,rt 13,rd 20,sn 20,st 20,sn 20,st 21,rt 21,rd 23,rt 23,rn 29,rt 29,rd 30,sn 30,st 35,rt 35,rn 37,rt 37,rd 45,rt 45,rd",
         Duration::from_micros(5),
         slice::from_ref(&m),
         &[],
@@ -107,7 +107,7 @@ fn test_simple_pad_machine() {
     // server machine and client output
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "0,sn 0,st 18,sn 18,st 25,rt 25,rt 25,rn 25,rn 30,sn 30,st 33,rt 33,rp 35,rt 35,rn",
+        "0,sn 0,st 18,sn 18,st 25,rt 25,rt 25,rn 25,rn 30,sn 30,st 33,rt 33,rd 35,rt 35,rn",
         Duration::from_micros(5),
         &[],
         slice::from_ref(&m),
@@ -120,7 +120,7 @@ fn test_simple_pad_machine() {
     // server machine and server output
     run_test_sim(
         "0,sn 18,sn 25,rn 25,rn 30,sn 35,rn",
-        "5,rt 5,rn 20,sn 20,st 20,sn 20,st 23,rt 23,rn 28,sp 28,st 30,sn 30,st 35,rt 35,rn 36,sp 36,st 44,sp 44,st",
+        "5,rt 5,rn 20,sn 20,st 20,sn 20,st 23,rt 23,rn 28,sd 28,st 30,sn 30,st 35,rt 35,rn 36,sd 36,st 44,sd 44,st",
         Duration::from_micros(5),
         &[],
         &[m],
@@ -320,7 +320,7 @@ fn test_block_and_decoy() {
     // client
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,be 15,st 15,st 15,st 15,st",
+        "0,sn 0,st 5,bb 6,rt 6,rn 6,sd 7,sd 8,sd 14,sn 15,be 15,st 15,st 15,st 15,st",
         Duration::from_micros(5),
         slice::from_ref(&m),
         &[],
@@ -333,7 +333,7 @@ fn test_block_and_decoy() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rd 20,rd 20,rd",
         Duration::from_micros(5),
         &[m],
         &[],
@@ -414,7 +414,7 @@ fn test_bypass_machine() {
     // client
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 6,st 7,sp 7,st 8,sp 8,st 14,sn 15,be 15,st",
+        "0,sn 0,st 5,bb 6,rt 6,rn 6,sd 6,st 7,sd 7,st 8,sd 8,st 14,sn 15,be 15,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -427,7 +427,7 @@ fn test_bypass_machine() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 11,rt 11,rp 12,rt 12,rp 13,rt 13,rp 20,rt 20,rn",
+        "1,sn 1,st 5,rt 5,rn 11,rt 11,rd 12,rt 12,rd 13,rt 13,rd 20,rt 20,rn",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -443,7 +443,7 @@ fn test_bypass_machine() {
     // client
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,be 15,st 15,st 15,st 15,st",
+        "0,sn 0,st 5,bb 6,rt 6,rn 6,sd 7,sd 8,sd 14,sn 15,be 15,st 15,st 15,st 15,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -456,7 +456,7 @@ fn test_bypass_machine() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rd 20,rd 20,rd",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -473,7 +473,7 @@ fn test_bypass_machine() {
     // client
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,be 15,st 15,st 15,st 15,st",
+        "0,sn 0,st 5,bb 6,rt 6,rn 6,sd 7,sd 8,sd 14,sn 15,be 15,st 15,st 15,st 15,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -486,7 +486,7 @@ fn test_bypass_machine() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rd 20,rd 20,rd",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -503,7 +503,7 @@ fn test_bypass_machine() {
     // client
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "0,sn 0,st 5,bb 6,rt 6,rn 6,sp 7,sp 8,sp 14,sn 15,be 15,st 15,st 15,st 15,st",
+        "0,sn 0,st 5,bb 6,rt 6,rn 6,sd 7,sd 8,sd 14,sn 15,be 15,st 15,st 15,st 15,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -516,7 +516,7 @@ fn test_bypass_machine() {
     // server log of client machine
     run_test_sim(
         "0,sn 6,rn 14,sn",
-        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rp 20,rp 20,rp",
+        "1,sn 1,st 5,rt 5,rn 20,rt 20,rt 20,rt 20,rt 20,rn 20,rd 20,rd 20,rd",
         Duration::from_micros(5),
         &[m],
         &[],
@@ -600,7 +600,7 @@ fn test_bypass_replace_machine() {
     // client, without any bypass or replace
     run_test_sim(
         "0,sn 4,sn 6,rn 6,rn 7,sn",
-        "0,sn 0,st 1,bb 3,sp 4,sn 5,sp 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 1001,be 1001,st 1001,st 1001,st 1001,st 1001,st",
+        "0,sn 0,st 1,bb 3,sd 4,sn 5,sd 6,rt 6,rt 6,rn 6,rn 7,sn 7,sd 1001,be 1001,st 1001,st 1001,st 1001,st 1001,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -615,7 +615,7 @@ fn test_bypass_replace_machine() {
     set_bypass(&mut m.states[2], true);
     run_test_sim(
         "0,sn 4,sn 6,rn 6,rn 7,sn",
-        "0,sn 0,st 1,bb 3,sp 3,st 4,sn 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st 1001,be 1001,st 1001,st",
+        "0,sn 0,st 1,bb 3,sd 3,st 4,sn 5,sd 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sd 7,st 1001,be 1001,st 1001,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -656,7 +656,7 @@ fn test_bypass_replace_machine() {
     run_test_sim(
         "0,sn 4,sn 6,rn 6,rn 7,sn",
         // with all events, we also get SP events and blocking events
-        "0,sn 0,st 1,bb 3,sp 3,st 4,sn 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st 1001,be",
+        "0,sn 0,st 1,bb 3,sd 3,st 4,sn 5,sd 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sd 7,st 1001,be",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -682,7 +682,7 @@ fn test_bypass_replace_machine() {
     run_test_sim(
         "0,sn 2,sn 2,sn 6,rn 6,rn 7,sn",
         // with all events, we also get SP events and blocking events
-        "0,sn 0,st 1,bb 2,sn 2,sn 3,sp 3,st 5,sp 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sp 7,st 1001,be",
+        "0,sn 0,st 1,bb 2,sn 2,sn 3,sd 3,st 5,sd 5,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,sd 7,st 1001,be",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -809,7 +809,7 @@ fn test_timer_action_basic() {
 
     run_test_sim(
         "0,sn 3,sn 6,rn 6,rn 7,sn",
-        "0,sn 0,st 0,tb 2,te 3,sn 3,st 3,sp 3,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st",
+        "0,sn 0,st 0,tb 2,te 3,sn 3,st 3,sd 3,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st",
         Duration::from_micros(5),
         slice::from_ref(&m),
         &[],
@@ -888,7 +888,7 @@ fn test_timer_action_longest() {
 
     run_test_sim(
         "0,sn 3,sn 6,rn 6,rn 7,sn",
-        "0,sn 0,st 0,tb 3,sn 3,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 10,te 11,sp 11,st",
+        "0,sn 0,st 0,tb 3,sn 3,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 10,te 11,sd 11,st",
         Duration::from_micros(5),
         slice::from_ref(&m),
         &[],
@@ -967,7 +967,7 @@ fn test_timer_action_replace() {
 
     run_test_sim(
         "0,sn 3,sn 6,rn 6,rn 7,sn",
-        "0,sn 0,st 0,tb 0,tb 2,te 3,sn 3,st 3,sp 3,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st",
+        "0,sn 0,st 0,tb 0,tb 2,te 3,sn 3,st 3,sd 3,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st",
         Duration::from_micros(5),
         slice::from_ref(&m),
         &[],
@@ -1038,7 +1038,7 @@ fn test_action_cancel_timer_internal() {
 
     run_test_sim(
         "0,sn 1,sn 6,rn 7,sn",
-        "0,sn 0,st 1,sn 1,st 1,tb 4,sp 4,st 6,rt 6,rn 7,sn 7,st",
+        "0,sn 0,st 1,sn 1,st 1,tb 4,sd 4,st 6,rt 6,rn 7,sn 7,st",
         Duration::from_micros(5),
         slice::from_ref(&m),
         &[],
@@ -1268,7 +1268,7 @@ fn test_counter_machine() {
 
     run_test_sim(
         "0,sn 6,rn 6,rn 7,sn 7,sn 7,sn",
-        "0,sn 0,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 7,sn 7,st 7,sn 7,st 10,sp 10,st",
+        "0,sn 0,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 7,sn 7,st 7,sn 7,st 10,sd 10,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -1324,7 +1324,7 @@ fn test_counter_machine() {
     );
     run_test_sim(
         "0,sn 6,rn 6,rn 7,sn 7,sn 7,sn",
-        "0,sn 0,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 7,sn 7,st 7,sn 7,st 10,sp 10,st",
+        "0,sn 0,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 7,sn 7,st 7,sn 7,st 10,sd 10,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
@@ -1351,7 +1351,7 @@ fn test_counter_machine() {
     );
     run_test_sim(
         "0,sn 6,rn 6,rn 7,sn 7,sn 7,sn",
-        "0,sn 0,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 7,sn 7,st 7,sn 7,st 10,sp 10,st",
+        "0,sn 0,st 6,rt 6,rt 6,rn 6,rn 7,sn 7,st 7,sn 7,st 7,sn 7,st 10,sd 10,st",
         Duration::from_micros(5),
         &[m.clone()],
         &[],
