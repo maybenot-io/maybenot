@@ -20,11 +20,11 @@ use self::state::State;
 /// [`State`] that determine when to inject and/or block outgoing traffic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Machine {
-    /// The number of padding packets the machine is allowed to generate as
+    /// The number of decoy packets the machine is allowed to generate as
     /// actions before other limits apply.
-    pub allowed_padding_packets: u64,
-    /// The maximum fraction of padding packets to allow as actions.
-    pub max_padding_frac: f64,
+    pub allowed_decoy_packets: u64,
+    /// The maximum fraction of decoy packets to allow as actions.
+    pub max_decoy_frac: f64,
     /// The number of microseconds of blocking a machine is allowed to generate
     /// as actions before other limits apply.
     pub allowed_blocked_microsec: u64,
@@ -38,15 +38,15 @@ impl Machine {
     /// Create a new [`Machine`] with the given limits and states. Returns an
     /// error if the machine or any of its states are invalid.
     pub fn new(
-        allowed_padding_packets: u64,
-        max_padding_frac: f64,
+        allowed_decoy_packets: u64,
+        max_decoy_frac: f64,
         allowed_blocked_microsec: u64,
         max_blocking_frac: f64,
         states: Vec<State>,
     ) -> Result<Self, Error> {
         let machine = Machine {
-            allowed_padding_packets,
-            max_padding_frac,
+            allowed_decoy_packets,
+            max_decoy_frac,
             allowed_blocked_microsec,
             max_blocking_frac,
             states,
@@ -77,10 +77,10 @@ impl Machine {
     /// mutated may get into an invalid state).
     pub fn validate(&self) -> Result<(), Error> {
         // sane limits
-        if self.max_padding_frac < 0.0 || self.max_padding_frac > 1.0 {
+        if self.max_decoy_frac < 0.0 || self.max_decoy_frac > 1.0 {
             return Err(Error::Machine(format!(
-                "max_padding_frac has to be [0.0, 1.0], got {}",
-                self.max_padding_frac
+                "max_decoy_frac has to be [0.0, 1.0], got {}",
+                self.max_decoy_frac
             )));
         }
         if self.max_blocking_frac < 0.0 || self.max_blocking_frac > 1.0 {
@@ -166,15 +166,15 @@ impl fmt::Display for Machine {
         write!(
             f,
             "Machine {}\n\
-            - allowed_padding_packets: {}\n\
-            - max_padding_frac: {}\n\
+            - allowed_decoy_packets: {}\n\
+            - max_decoy_frac: {}\n\
             - allowed_blocked_microsec: {}\n\
             - max_blocking_frac: {}\n\
             States:\n\
             {}",
             self.name(),
-            self.allowed_padding_packets,
-            self.max_padding_frac,
+            self.allowed_decoy_packets,
+            self.max_decoy_frac,
             self.allowed_blocked_microsec,
             self.max_blocking_frac,
             self.states
@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn machine_name_generation() {
         let s0 = State::new(enum_map! {
-                 Event::PaddingSent => vec![Trans(0, 1.0)],
+                 Event::DecoySent => vec![Trans(0, 1.0)],
              _ => vec![],
         });
 
@@ -210,24 +210,24 @@ mod tests {
     #[test]
     fn validate_machine_limits() {
         let s0 = State::new(enum_map! {
-               Event::PaddingSent => vec![Trans(0, 1.0)],
+               Event::DecoySent => vec![Trans(0, 1.0)],
              _ => vec![],
         });
 
         let mut m = Machine::new(1000, 1.0, 0, 0.0, vec![s0]).unwrap();
 
-        // max padding frac
-        m.max_padding_frac = -0.1;
+        // max_decoy_frac
+        m.max_decoy_frac = -0.1;
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
-        m.max_padding_frac = 1.1;
+        m.max_decoy_frac = 1.1;
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
-        m.max_padding_frac = 0.5;
+        m.max_decoy_frac = 0.5;
         let r = m.validate();
         assert!(r.is_ok());
 
@@ -260,7 +260,7 @@ mod tests {
     fn validate_machine_states() {
         // out of bounds index
         let s0 = State::new(enum_map! {
-                 Event::PaddingSent => vec![Trans(1, 1.0)],
+                 Event::DecoySent => vec![Trans(1, 1.0)],
              _ => vec![],
         });
         // machine with broken state
@@ -270,7 +270,7 @@ mod tests {
 
         // valid states should be allowed
         let s0 = State::new(enum_map! {
-                 Event::PaddingSent => vec![Trans(0, 0.8)],
+                 Event::DecoySent => vec![Trans(0, 0.8)],
              _ => vec![],
         });
         let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0]);

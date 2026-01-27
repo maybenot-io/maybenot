@@ -1,5 +1,5 @@
-// Maybenot FRONT -- uses normally distributed padding to approximate the FRONT
-// defense Code from the paper "State Machine Frameworks for Website
+// Maybenot FRONT -- uses normally distributed decoy traffic to approximate the
+// FRONT defense Code from the paper "State Machine Frameworks for Website
 // Fingerprinting Defenses: Maybe Not" and updates to Maybenot v2 from
 // https://github.com/moschramm/maybenot-defenses
 
@@ -92,7 +92,7 @@ fn generate_padding_state(
     stdev: f64,
 ) -> State {
     let mut state = State::new(enum_map! {
-        Event::PaddingSent => vec![Trans(curr_index, 1.0)],
+        Event::DecoySent => vec![Trans(curr_index, 1.0)],
         Event::LimitReached => vec![Trans(next_index, 1.0)],
         _ => vec![],
     });
@@ -114,11 +114,11 @@ fn generate_padding_state(
         0.0,
     );
 
-    state.action = Some(Action::SendPadding {
+    state.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout,
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -140,7 +140,7 @@ fn generate_last_padding_state(
     stdev: f64,
 ) -> State {
     let mut state = State::new(enum_map! {
-        Event::PaddingSent => vec![Trans(curr_index, 1.0)],
+        Event::DecoySent => vec![Trans(curr_index, 1.0)],
         Event::LimitReached => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
     });
@@ -162,11 +162,11 @@ fn generate_last_padding_state(
         0.0,
     );
 
-    state.action = Some(Action::SendPadding {
+    state.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout,
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,

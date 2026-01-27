@@ -83,10 +83,10 @@ pub fn agg_delay_on_blocking_expire(
     }
 }
 
-/// when a padding packet with bypass replace is sent through bypassable
+/// when a decoy packet with bypass replace is sent through bypassable
 /// blocking, this function determines the duration, if any, that should be
 /// added as aggregated delay as a consequence of packets being blocked
-pub fn agg_delay_on_padding_bypass_replace(
+pub fn agg_delay_on_decoy_bypass_replace(
     sq: &SimQueue,
     is_client: bool,
     current_time: Instant,
@@ -111,7 +111,7 @@ pub fn agg_delay_on_padding_bypass_replace(
         false => sq.server.base.peek(),
     };
 
-    // before calling agg_delay_on_padding_bypass_replace() in network.rs, the
+    // before calling agg_delay_on_decoy_bypass_replace() in network.rs, the
     // blocking packet has been temporarily popped, so we look for any adjacent
     // packet either in the blocking or bypassable queues
     for e in blocking.iter().chain(bypassable.iter()) {

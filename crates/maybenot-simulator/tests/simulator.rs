@@ -52,10 +52,10 @@ fn test_simple_pad_machine() {
         _ => vec![],
     });
     let mut s1 = State::new(enum_map! {
-        Event::PaddingSent => vec![Trans(1, 1.0)],
+        Event::DecoySent => vec![Trans(1, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::SendPadding {
+    s1.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -66,7 +66,7 @@ fn test_simple_pad_machine() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -251,9 +251,9 @@ fn test_both_block_machine() {
 }
 
 #[test_log::test]
-fn test_block_and_padding() {
-    // a simple machine that blocks for 10us, then queues up 3 padding
-    // packets that should be blocked
+fn test_block_and_decoy() {
+    // a simple machine that blocks for 10us, then queues up 3 decoy packets
+    // that should be blocked
     let s0 = State::new(enum_map! {
         Event::NormalSent => vec![Trans(1, 1.0)],
         _ => vec![],
@@ -284,10 +284,10 @@ fn test_block_and_padding() {
         limit: None,
     });
     let mut s2 = State::new(enum_map! {
-        Event::PaddingSent => vec![Trans(2, 1.0)],
+        Event::DecoySent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s2.action = Some(Action::SendPadding {
+    s2.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -298,7 +298,7 @@ fn test_block_and_padding() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -346,8 +346,8 @@ fn test_block_and_padding() {
 
 #[test_log::test]
 fn test_bypass_machine() {
-    // a simple machine that blocks for 10us, then queues up 3 padding
-    // packets that should NOT be blocked (bypass block and padding)
+    // a simple machine that blocks for 10us, then queues up 3 decoy packets
+    // that should NOT be blocked (bypass block and decoy)
     let s0 = State::new(enum_map! {
         Event::NormalSent => vec![Trans(1, 1.0)],
         _ => vec![],
@@ -378,10 +378,10 @@ fn test_bypass_machine() {
         limit: None,
     });
     let mut s2 = State::new(enum_map! {
-        Event::PaddingSent => vec![Trans(2, 1.0)],
+        Event::DecoySent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s2.action = Some(Action::SendPadding {
+    s2.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: false,
         timeout: Dist {
@@ -392,7 +392,7 @@ fn test_bypass_machine() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -466,7 +466,7 @@ fn test_bypass_machine() {
         false,
     );
 
-    // make the blocking bypassable but the padding not
+    // make the blocking bypassable but the decoy not
     set_bypass(&mut m.states[1], true);
     set_bypass(&mut m.states[2], false);
 
@@ -496,7 +496,7 @@ fn test_bypass_machine() {
         false,
     );
 
-    // make the blocking not bypassable but the padding is
+    // make the blocking not bypassable but the decoy is
     set_bypass(&mut m.states[1], false);
     set_bypass(&mut m.states[2], true);
 
@@ -562,12 +562,12 @@ fn test_bypass_replace_machine() {
         },
         limit: None,
     });
-    // 2: send padding every 2us, 3 times
+    // 2: send a decoy packet every 2us, 3 times
     let mut s2 = State::new(enum_map! {
-        Event::PaddingSent => vec![Trans(2, 1.0)],
+        Event::DecoySent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s2.action = Some(Action::SendPadding {
+    s2.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -578,7 +578,7 @@ fn test_bypass_replace_machine() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -641,7 +641,7 @@ fn test_bypass_replace_machine() {
     set_replace(&mut m.states[2], true);
     run_test_sim(
         "0,sn 4,sn 6,rn 6,rn 7,sn",
-        // padding at 5us is replaced by sending queued up 4,sn, and padding at 7us is replaced by queued up 7,sn
+        // decoy at 5us is replaced by sending queued up 4,sn, and decoy at 7us is replaced by queued up 7,sn
         "0,st 3,st 5,st 6,rt 6,rt 7,st",
         Duration::from_micros(5),
         &[m.clone()],
@@ -667,7 +667,7 @@ fn test_bypass_replace_machine() {
     );
 
     // another important detail: the window is 1us, what about normal packets
-    // queued up earlier than that?  They should also replace padding
+    // queued up earlier than that?  They should also replace decoy
     run_test_sim(
         "0,sn 2,sn 2,sn 6,rn 6,rn 7,sn",
         "0,st 3,st 5,st 6,rt 6,rt 7,st",
@@ -693,7 +693,7 @@ fn test_bypass_replace_machine() {
     );
 
     // same as above, we just queue up more packets: note that the machine above
-    // only does 3 padding packets due to limit
+    // only does 3 decoy packets due to limit
     run_test_sim(
         "0,sn 2,sn 2,sn 2,sn 2,sn 6,rn 6,rn 7,sn",
         "0,st 3,st 5,st 6,rt 6,rt 7,st 1001,st 1001,st",
@@ -706,7 +706,7 @@ fn test_bypass_replace_machine() {
         false,
     );
     // bump the limit to 5
-    if let Some(Action::SendPadding { ref mut limit, .. }) = m.states[2].action {
+    if let Some(Action::SendDecoyTraffic { ref mut limit, .. }) = m.states[2].action {
         *limit = Some(Dist {
             dist: DistType::Uniform {
                 low: 5.0,
@@ -784,7 +784,7 @@ fn test_timer_action_basic() {
     let mut s3 = State::new(enum_map! {
         _ => vec![],
     });
-    s3.action = Some(Action::SendPadding {
+    s3.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -795,7 +795,7 @@ fn test_timer_action_basic() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -863,7 +863,7 @@ fn test_timer_action_longest() {
     let mut s3 = State::new(enum_map! {
         _ => vec![],
     });
-    s3.action = Some(Action::SendPadding {
+    s3.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -874,7 +874,7 @@ fn test_timer_action_longest() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -942,7 +942,7 @@ fn test_timer_action_replace() {
     let mut s3 = State::new(enum_map! {
         _ => vec![],
     });
-    s3.action = Some(Action::SendPadding {
+    s3.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -953,7 +953,7 @@ fn test_timer_action_replace() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -980,8 +980,8 @@ fn test_timer_action_replace() {
 
 #[test_log::test]
 fn test_action_cancel_timer_internal() {
-    // start a padding action, start a timer, then cancel the timer yet observe
-    // the padding
+    // start a decoy action, start a timer, then cancel the timer yet observe
+    // the decoy
     let s0 = State::new(enum_map! {
         Event::NormalSent => vec![Trans(1, 1.0)],
         _ => vec![],
@@ -990,7 +990,7 @@ fn test_action_cancel_timer_internal() {
         Event::NormalSent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::SendPadding {
+    s1.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -1001,7 +1001,7 @@ fn test_action_cancel_timer_internal() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -1051,7 +1051,7 @@ fn test_action_cancel_timer_internal() {
 
 #[test_log::test]
 fn test_action_cancel_timer_action() {
-    // start a padding action, start a timer, then cancel the action and observe
+    // start a decoy action, start a timer, then cancel the action and observe
     // the time ending
     let s0 = State::new(enum_map! {
         Event::NormalSent => vec![Trans(1, 1.0)],
@@ -1061,7 +1061,7 @@ fn test_action_cancel_timer_action() {
         Event::NormalSent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::SendPadding {
+    s1.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -1072,7 +1072,7 @@ fn test_action_cancel_timer_action() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -1122,8 +1122,8 @@ fn test_action_cancel_timer_action() {
 
 #[test_log::test]
 fn test_action_cancel_timer_both() {
-    // start a padding action, start a timer, then cancel both and observe
-    // no padding and no timer ending
+    // start a decoy action, start a timer, then cancel both and observe no
+    // decoy and no timer ending
     let s0 = State::new(enum_map! {
         Event::NormalSent => vec![Trans(1, 1.0)],
         _ => vec![],
@@ -1132,7 +1132,7 @@ fn test_action_cancel_timer_both() {
         Event::NormalSent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::SendPadding {
+    s1.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -1143,7 +1143,7 @@ fn test_action_cancel_timer_both() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -1243,7 +1243,7 @@ fn test_counter_machine() {
     let mut s4 = State::new(enum_map! {
         _ => vec![],
     });
-    s4.action = Some(Action::SendPadding {
+    s4.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -1254,7 +1254,7 @@ fn test_counter_machine() {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,

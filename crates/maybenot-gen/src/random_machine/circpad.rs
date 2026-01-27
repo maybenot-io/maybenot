@@ -29,7 +29,7 @@ pub(crate) fn random_circpad_compatible_machine<R: Rng>(
     rng: &mut R,
 ) -> Machine {
     // this is circpad_machine_spec_t->allowed_padding_count
-    let allowed_padding_packets = if fixed_budget {
+    let allowed_decoy_packets = if fixed_budget {
         let p = rng_range!(rng, count_point);
         rng.random_range(0..=p)
     } else {
@@ -37,7 +37,7 @@ pub(crate) fn random_circpad_compatible_machine<R: Rng>(
     };
 
     // this is circpad_machine_spec_t->max_padding_percent
-    let max_padding_frac = if frac_limit {
+    let max_decoy_frac = if frac_limit {
         round_f64(rng.random_range(0.0..=1.0))
     } else {
         0.0
@@ -56,7 +56,7 @@ pub(crate) fn random_circpad_compatible_machine<R: Rng>(
             })
             .collect();
         if check_machine_states(&states) {
-            let m = Machine::new(allowed_padding_packets, max_padding_frac, 0, 0.0, states);
+            let m = Machine::new(allowed_decoy_packets, max_decoy_frac, 0, 0.0, states);
             if let Ok(m) = m {
                 return m;
             }
@@ -71,7 +71,7 @@ pub fn random_state<R: Rng>(
     min_action_timeout: RangeInclusive<f64>,
     rng: &mut R,
 ) -> State {
-    let mut action = Action::SendPadding {
+    let mut action = Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         // this is circpad_distribution_t iat_dist
@@ -79,7 +79,7 @@ pub fn random_state<R: Rng>(
         // this is circpad_distribution_t length_dist
         limit: random_limit(count_point, rng),
         // always one packet in circpad
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -89,8 +89,8 @@ pub fn random_state<R: Rng>(
         },
     };
 
-    // enforce the minimum action timeout for blocking and padding actions
-    if let Action::SendPadding {
+    // enforce the minimum action timeout for blocking and decoy actions
+    if let Action::SendDecoyTraffic {
         ref mut timeout, ..
     } = action
     {
@@ -101,7 +101,9 @@ pub fn random_state<R: Rng>(
     }
 
     let transitions = match action {
-        Action::SendPadding { limit: Some(_), .. } => random_transitions(num_states, true, rng),
+        Action::SendDecoyTraffic { limit: Some(_), .. } => {
+            random_transitions(num_states, true, rng)
+        }
         _ => random_transitions(num_states, false, rng),
     };
 
@@ -281,8 +283,8 @@ pub fn random_transitions<R: Rng>(
     for e in [
         Event::NormalRecv,
         Event::NormalSent,
-        Event::PaddingSent,
-        Event::PaddingRecv,
+        Event::DecoySent,
+        Event::DecoyRecv,
         Event::LimitReached,
     ]
     .iter()

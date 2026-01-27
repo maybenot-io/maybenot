@@ -13,17 +13,17 @@ use crate::environment::Environment;
 /// The constraints are expressed as overheads, i.e., load and delay, and
 /// minimal observed normal packets.
 ///
-/// The load is the percentage of additional (padding) packets, and the delay is
+/// The load is the percentage of additional (decoy) packets, and the delay is
 /// the fraction of duration delayed, both compared to the base case without a
 /// defense. Additionally, the load is defined per side (client and server),
-/// since padding can be asymmetric (just like common traffic to defend, e.g.,
-/// web traffic). Delay is a single value, since padding and blocking on both
-/// sides cause aggregate delays from propagated delays (in a realistic
-/// simulator).
+/// since decoy traffic can be asymmetric (just like common traffic to defend,
+/// e.g., web traffic). Delay is a single value, since decoy traffic and
+/// blocking on both sides cause aggregate delays from propagated delays (in a
+/// realistic simulator).
 ///
 /// The minimal number of normal packets is a sanity check to ensure that the
 /// defense does not complete block traffic or overwhelm the simulator with
-/// padding packets or TriggerEvents (e.g., infinite BlockingBegin ->
+/// decoy packets or TriggerEvents (e.g., infinite BlockingBegin ->
 /// BlockingBegin or BlockingBegin -> BlockingEnd loops). Random defenses,
 /// especially with learning, get creative fast.
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -79,7 +79,7 @@ impl ConstraintsConfig {
                 let last_normal = trace.iter().rev().position(|event| {
                     (matches!(event.event, TriggerEvent::TunnelSent)
                         || matches!(event.event, TriggerEvent::TunnelRecv))
-                        && !event.contains_padding
+                        && !event.contains_decoy
                 });
                 if let Some(last_normal) = last_normal {
                     trace.truncate(trace.len() - last_normal);
@@ -102,17 +102,17 @@ impl ConstraintsConfig {
                 bail!("too few normal server packets");
             }
 
-            // If a machine should produce some padding, check for at least 5
-            // padding packets (arbitrary number) in the trace. This is to
-            // ensure that the machine actually does something.
+            // If a machine should produce decoy traffic, check for at least 5
+            // decoy packets (arbitrary number) in the trace. This is to ensure
+            // that the machine actually does something.
             if let Some(client_load) = &self.client_load {
-                if client_load.contains(&0.001) && client_stats[i].padding < 5 {
-                    bail!("too few padding packets from client");
+                if client_load.contains(&0.001) && client_stats[i].decoy < 5 {
+                    bail!("too few decoy packets from client");
                 }
             }
             if let Some(server_load) = &self.server_load {
-                if server_load.contains(&0.001) && server_stats[i].padding < 5 {
-                    bail!("too few padding packets from server");
+                if server_load.contains(&0.001) && server_stats[i].decoy < 5 {
+                    bail!("too few decoy packets from server");
                 }
             }
 
@@ -183,8 +183,8 @@ fn check_delay(
 fn check_load(stats: &[Stats], oh: &RangeInclusive<f64>, party: &str) -> Result<()> {
     // load is (defended / undefended) - 1.0
     let normal = stats.iter().map(|s| s.normal).sum::<usize>() as f64;
-    let padding = stats.iter().map(|s| s.padding).sum::<usize>() as f64;
-    let avg_load = (padding + normal) / normal - 1.0;
+    let decoys = stats.iter().map(|s| s.decoy).sum::<usize>() as f64;
+    let avg_load = (decoys + normal) / normal - 1.0;
 
     if !oh.contains(&avg_load) {
         bail!(
@@ -201,11 +201,11 @@ fn check_load(stats: &[Stats], oh: &RangeInclusive<f64>, party: &str) -> Result<
 
 #[derive(Clone)]
 struct Stats {
-    /// sum of padding packets sent (from TriggerEvent:TunnelSent with the
-    /// padding flag)
-    padding: usize,
+    /// sum of decoy packets sent (from TriggerEvent:TunnelSent with the decoy
+    /// flag)
+    decoy: usize,
     /// sum of normal packets sent (from TriggerEvent:TunnelSent without the
-    /// padding flag)
+    /// decoy flag)
     normal: usize,
     /// sum of blocking begin events
     blocking_begin: usize,
@@ -220,7 +220,7 @@ struct Stats {
 impl Stats {
     pub fn new() -> Self {
         Self {
-            padding: 0,
+            decoy: 0,
             normal: 0,
             blocking_begin: 0,
             blocking_end: 0,
@@ -230,7 +230,7 @@ impl Stats {
     }
 
     pub fn len(&self) -> usize {
-        self.padding
+        self.decoy
             + self.normal
             + self.blocking_begin
             + self.blocking_end
@@ -239,7 +239,7 @@ impl Stats {
     }
 
     pub fn sum_packets(&self) -> usize {
-        self.padding + self.normal
+        self.decoy + self.normal
     }
 }
 
@@ -248,11 +248,11 @@ fn count_events(client: &mut Stats, server: &mut Stats, trace: &[SimEvent]) {
     for event in trace {
         match event.event {
             TriggerEvent::TunnelSent => {
-                if event.contains_padding {
+                if event.contains_decoy {
                     if event.client {
-                        client.padding += 1;
+                        client.decoy += 1;
                     } else {
-                        server.padding += 1;
+                        server.decoy += 1;
                     }
                 } else if event.client {
                     client.normal += 1;
@@ -300,7 +300,7 @@ fn get_durations(defended: &[SimEvent], base: &[Duration]) -> (Option<Duration>,
     // the duration of the last normal sent packet in the defended trace for the client
     let defended_duration = defended.iter().rev().find_map(|event| {
         if let TriggerEvent::TunnelSent = event.event {
-            if !event.contains_padding && event.client {
+            if !event.contains_decoy && event.client {
                 return Some(event.time - starting_time);
             }
         }
@@ -311,9 +311,7 @@ fn get_durations(defended: &[SimEvent], base: &[Duration]) -> (Option<Duration>,
     let defended_normal = defended
         .iter()
         .filter(|event| {
-            matches!(event.event, TriggerEvent::TunnelSent)
-                && !event.contains_padding
-                && event.client
+            matches!(event.event, TriggerEvent::TunnelSent) && !event.contains_decoy && event.client
         })
         .count();
 

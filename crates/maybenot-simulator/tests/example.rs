@@ -18,7 +18,7 @@ fn simple_machine_for_example() {
     let mut s1 = State::new(enum_map! {
         _ => vec![],
     });
-    s1.action = Some(Action::SendPadding {
+    s1.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -29,7 +29,7 @@ fn simple_machine_for_example() {
             start: 20.0 * 1000.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -73,7 +73,7 @@ fn simulator_example_use() {
     // at the same time as in the raw trace.
     let mut input_trace = parse_trace(raw_trace, network);
 
-    // A simple machine that sends one padding packet 20 milliseconds after the
+    // A simple machine that sends one decoy packet 20 milliseconds after the
     // first normal packet is sent.
     let m = "02eNp9ycEJACAMQ9EfF6ujeXQ/F3EEEcFDafsuIQl47YUkGPbnW2NzdWrbsucAyNsDkQ==";
     let m = Machine::from_str(m).unwrap();
@@ -89,9 +89,9 @@ fn simulator_example_use() {
         .filter(|p| p.client)
         .for_each(|p| match p.event {
             TriggerEvent::TunnelSent => {
-                if p.contains_padding {
+                if p.contains_decoy {
                     println!(
-                        "sent a padding packet at {} ms",
+                        "sent a decoy packet at {} ms",
                         (p.time - starting_time).as_millis()
                     );
                 } else {
@@ -102,9 +102,9 @@ fn simulator_example_use() {
                 }
             }
             TriggerEvent::TunnelRecv => {
-                if p.contains_padding {
+                if p.contains_decoy {
                     println!(
-                        "received a padding packet at {} ms",
+                        "received a decoy packet at {} ms",
                         (p.time - starting_time).as_millis()
                     );
                 } else {
@@ -120,7 +120,7 @@ fn simulator_example_use() {
     // Output:
     // sent a normal packet at 0 ms
     // received a normal packet at 19 ms
-    // sent a padding packet at 20 ms
+    // sent a decoy packet at 20 ms
     // sent a normal packet at 183 ms
     // received a normal packet at 243 ms
     // sent a normal packet at 1696 ms

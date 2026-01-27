@@ -16,7 +16,7 @@ pub fn interspace_client<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     let mut states = vec![];
 
     let start = State::new(enum_map! {
-        Event::PaddingRecv => vec![Trans(1, 1.0)],
+        Event::DecoyRecv => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     states.push(start);
@@ -29,7 +29,7 @@ pub fn interspace_client<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     } else {
         State::new(enum_map! {
             Event::NormalRecv => vec![Trans(2, 1.0)],
-            Event::PaddingRecv => vec![Trans(2, 1.0)],
+            Event::DecoyRecv => vec![Trans(2, 1.0)],
             _ => vec![],
         })
     };
@@ -38,18 +38,18 @@ pub fn interspace_client<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     let mut padding = if rng.random_bool(0.5) {
         State::new(enum_map! {
             Event::NormalSent => vec![Trans(1, 1.0)],
-            Event::PaddingSent => vec![Trans(2, 1.0)],
+            Event::DecoySent => vec![Trans(2, 1.0)],
         _ => vec![],
         })
     } else {
         State::new(enum_map! {
             Event::NormalSent => vec![Trans(1, 1.0)],
-            Event::PaddingSent => vec![Trans(2, 1.0)],
+            Event::DecoySent => vec![Trans(2, 1.0)],
             Event::NormalRecv => vec![Trans(1, 1.0)],
         _ => vec![],
         })
     };
-    padding.action = Some(Action::SendPadding {
+    padding.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -60,7 +60,7 @@ pub fn interspace_client<R: RngCore>(rng: &mut R) -> Vec<Machine> {
             start: 0.0,
             max: 9445.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -111,14 +111,14 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     } else {
         // wait: inject a fake burst after a while
         let mut wait = State::new(enum_map! {
-            Event::PaddingSent => vec![Trans(3, 1.0)],
+            Event::DecoySent => vec![Trans(3, 1.0)],
            _ => vec![],
         });
         // special log_logistic distribution parameters here, see
         // random_log_logistic() below for details
         let alpha = rng.random_range(0.01..1000.0);
         let beta = rng.random_range(0.01..10000.0);
-        wait.action = Some(Action::SendPadding {
+        wait.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -129,7 +129,7 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
                 start: 0.0,
                 max: 100000.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 0.0,
                     high: 0.0,
@@ -144,14 +144,14 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
 
     let mut extend = State::new(enum_map! {
         Event::NormalSent => vec![Trans(1, 1.0)],
-        Event::PaddingSent => vec![Trans(2, 1.0)],
+        Event::DecoySent => vec![Trans(2, 1.0)],
        _ => vec![],
     });
-    extend.action = Some(Action::SendPadding {
+    extend.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_pareto(0.0, 10000.0, rng),
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -165,14 +165,14 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
 
     let mut fake = State::new(enum_map! {
         Event::NormalSent => vec![Trans(1, 1.0)],
-        Event::PaddingSent => vec![Trans(3, 1.0)],
+        Event::DecoySent => vec![Trans(3, 1.0)],
        _ => vec![],
     });
-    fake.action = Some(Action::SendPadding {
+    fake.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_pareto(0.0, 10000.0, rng),
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -192,14 +192,14 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
 
     let mut s0 = State::new(enum_map! {
         Event::NormalRecv => vec![Trans(1, 1.0)],
-        Event::PaddingRecv => vec![Trans(1, 1.0)],
+        Event::DecoyRecv => vec![Trans(1, 1.0)],
        _ => vec![],
     });
-    s0.action = Some(Action::SendPadding {
+    s0.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 10000.0, rng),
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -215,11 +215,11 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
         Event::NormalSent => vec![Trans(2, 1.0)],
        _ => vec![],
     });
-    s1.action = Some(Action::SendPadding {
+    s1.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 31443.0, rng),
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -232,15 +232,15 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     states.push(s1);
 
     let mut s2 = State::new(enum_map! {
-        Event::PaddingSent => vec![Trans(2, 1.0)],
-        Event::PaddingRecv => vec![Trans(3, 1.0)],
+        Event::DecoySent => vec![Trans(2, 1.0)],
+        Event::DecoyRecv => vec![Trans(3, 1.0)],
        _ => vec![],
     });
-    s2.action = Some(Action::SendPadding {
+    s2.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 100000.0, rng),
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -255,14 +255,14 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     let mut s3 = State::new(enum_map! {
         Event::NormalRecv => vec![Trans(3, 1.0)],
         Event::NormalSent => vec![Trans(0, 1.0)],
-        Event::PaddingRecv => vec![Trans(2, 1.0)],
+        Event::DecoyRecv => vec![Trans(2, 1.0)],
        _ => vec![],
     });
-    s3.action = Some(Action::SendPadding {
+    s3.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: random_log_logistic(0.0, 55878.0, rng),
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,

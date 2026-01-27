@@ -56,11 +56,11 @@ pub struct MaybenotDuration {
 #[allow(dead_code)]
 pub enum MaybenotEventType {
     NormalRecv = 0,
-    PaddingRecv = 1,
+    DecoyRecv = 1,
     TunnelRecv = 2,
 
     NormalSent = 3,
-    PaddingSent = 4,
+    DecoySent = 4,
     TunnelSent = 5,
 
     BlockingBegin = 6,
@@ -82,15 +82,16 @@ pub enum MaybenotAction {
         timer: MaybenotTimer,
     } = 0,
 
-    /// Schedule padding to be injected after the given timeout for a machine.
-    SendPadding {
+    /// Schedule decoy traffic to be injected after the given timeout for a
+    /// machine.
+    SendDecoyTraffic {
         /// The machine that generated the action.
         machine: usize,
 
         /// The number of packets to inject.
         amount: usize,
 
-        /// The time to wait before injecting padding packets.
+        /// The time to wait before injecting decoy packets.
         timeout: MaybenotDuration,
 
         replace: bool,
@@ -140,7 +141,7 @@ pub enum MaybenotTimer {
 impl MaybenotFramework {
     fn start(
         machines_str: &str,
-        max_padding_frac: f64,
+        max_decoy_frac: f64,
         max_blocking_frac: f64,
     ) -> Result<Self, MaybenotResult> {
         let machines: Vec<_> = machines_str
@@ -155,7 +156,7 @@ impl MaybenotFramework {
 
         let framework = Framework::new(
             machines,
-            max_padding_frac,
+            max_decoy_frac,
             max_blocking_frac,
             Instant::now(),
             rng,
@@ -200,13 +201,13 @@ fn convert_action(action: &maybenot::TriggerAction) -> MaybenotAction {
             machine: machine.into_raw(),
             timer: timer.into(),
         },
-        maybenot::TriggerAction::SendPadding {
+        maybenot::TriggerAction::SendDecoyTraffic {
             timeout,
-            amount,
+            n: amount,
             bypass,
             replace,
             machine,
-        } => MaybenotAction::SendPadding {
+        } => MaybenotAction::SendDecoyTraffic {
             timeout: timeout.into(),
             amount,
             replace,
@@ -243,11 +244,11 @@ fn convert_event(event: MaybenotEvent) -> TriggerEvent {
 
     match event.event_type {
         MaybenotEventType::NormalRecv => TriggerEvent::NormalRecv,
-        MaybenotEventType::PaddingRecv => TriggerEvent::PaddingRecv,
+        MaybenotEventType::DecoyRecv => TriggerEvent::DecoyRecv,
         MaybenotEventType::TunnelRecv => TriggerEvent::TunnelRecv,
 
         MaybenotEventType::NormalSent => TriggerEvent::NormalSent,
-        MaybenotEventType::PaddingSent => TriggerEvent::PaddingSent { machine },
+        MaybenotEventType::DecoySent => TriggerEvent::DecoySent { machine },
         MaybenotEventType::TunnelSent => TriggerEvent::TunnelSent,
 
         MaybenotEventType::BlockingBegin => TriggerEvent::BlockingBegin { machine },

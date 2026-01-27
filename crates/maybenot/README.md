@@ -27,10 +27,10 @@ Maybenot is a framework for creating defenses that hide such patterns.
 
 An instance of Maybenot repeatedly takes as *input* one or more *events*
 describing the encrypted traffic going over an encrypted channel. It produces as
-*output* zero or more *scheduled actions*, such as to send *padding* traffic or
+*output* zero or more *scheduled actions*, such as to send *decoy* packets or
 to *block* outgoing traffic. One or more *state machines* determine what actions
 to take based on events. State machines have a lightweight runtime and are
-subject to *limits* on the amount of padding and blocking they can schedule.
+subject to *limits* on the amount of decoys and blocking they can schedule.
 
 <p align="center">
 <picture>
@@ -70,13 +70,14 @@ loop {
                 // cancel the specified timer (action, machine, or both) for the
                 // machine in question, if any
             }
-            TriggerAction::SendPadding {
+            TriggerAction::SendDecoys {
                 timeout: Duration,
                 bypass: bool,
                 replace: bool,
+                n: usize,
                 machine: MachineId,
             } => {
-                // schedule padding to be sent after timeout
+                // schedule N decoy packets to be sent after timeout
             }
             TriggerAction::BlockOutgoing {
                 timeout: Duration,

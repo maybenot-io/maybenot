@@ -60,22 +60,22 @@ impl EventQueue {
     /// Checks if there are no normal packets in the queue. This involves
     /// checking the base queue for TriggerEvent::NormalSent events, the
     /// blocking and bypassable queues for TriggerEvent::TunnelSent events
-    /// without the padding flag, and the internal queue for any TunnelRecv
-    /// without the padding flag.
+    /// without the decoy flag, and the internal queue for any TunnelRecv
+    /// without the decoy flag.
     pub fn no_normal_packets(&self) -> bool {
         self.base.is_empty()
             && self
                 .blocking
                 .iter()
-                .all(|e| e.event != TriggerEvent::TunnelSent && !e.contains_padding)
+                .all(|e| e.event != TriggerEvent::TunnelSent && !e.contains_decoy)
             && self
                 .bypassable
                 .iter()
-                .all(|e| e.event != TriggerEvent::TunnelSent && !e.contains_padding)
+                .all(|e| e.event != TriggerEvent::TunnelSent && !e.contains_decoy)
             && self
                 .internal
                 .iter()
-                .all(|e| e.event != TriggerEvent::TunnelRecv && !e.contains_padding)
+                .all(|e| e.event != TriggerEvent::TunnelRecv && !e.contains_decoy)
     }
 
     pub fn push(&mut self, item: SimEvent) {

@@ -59,13 +59,13 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
     if (peek.client
         && client_blocking
         && client.blocking_bypassable
-        // bypassable TunnelSent is the result of replaced padding
+        // bypassable TunnelSent is the result of replaced decoy traffic
         && (peek.event.is_event(Event::TunnelSent))
         && peek.bypass)
         || (!peek.client
             && server_blocking
             && server.blocking_bypassable
-            // bypassable TunnelSent is the result of replaced padding
+            // bypassable TunnelSent is the result of replaced decoy traffic
             && (peek.event.is_event(Event::TunnelSent))
             && peek.bypass)
     {

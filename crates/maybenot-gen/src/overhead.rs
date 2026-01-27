@@ -9,13 +9,13 @@ pub struct DefendedTraceStats {
     pub normal_sent: f64,
     /// number of normal packets received
     pub normal_received: f64,
-    /// number of padding packets sent, including tail packets
-    pub padding_sent: f64,
-    /// number of padding packets received, including tail packets
-    pub padding_received: f64,
-    /// number of (padding) packets sent after the last normal packet
+    /// number of decoy packets sent, including tail packets
+    pub decoy_sent: f64,
+    /// number of decoy packets received, including tail packets
+    pub decoy_received: f64,
+    /// number of (decoy) packets sent after the last normal packet
     pub tail_sent: f64,
-    /// number of (padding) packets received after the last normal packet
+    /// number of (decoy) packets received after the last normal packet
     pub tail_received: f64,
     /// duration until the last packet in the trace
     pub last_packet: Duration,
@@ -35,8 +35,8 @@ impl DefendedTraceStats {
     pub fn new(defended: &str, base: &str) -> Self {
         let normal_sent = defended.lines().filter(|l| l.contains("sn")).count();
         let normal_received = defended.lines().filter(|l| l.contains("rn")).count();
-        let padding_sent = defended.lines().filter(|l| l.contains("sp")).count();
-        let padding_received = defended.lines().filter(|l| l.contains("rp")).count();
+        let decoy_sent = defended.lines().filter(|l| l.contains("sp")).count();
+        let decoy_received = defended.lines().filter(|l| l.contains("rp")).count();
 
         // for the tail, we first filter out the tail packets by reversing the lines then collecting until we hit a normal packet
         let tail_vec = defended
@@ -83,8 +83,8 @@ impl DefendedTraceStats {
         DefendedTraceStats {
             normal_sent: normal_sent as f64,
             normal_received: normal_received as f64,
-            padding_sent: padding_sent as f64,
-            padding_received: padding_received as f64,
+            decoy_sent: decoy_sent as f64,
+            decoy_received: decoy_received as f64,
             tail_sent: tail_sent as f64,
             tail_received: tail_received as f64,
             last_packet,
@@ -115,19 +115,19 @@ impl DefendedTraceStats {
         self.normal_received + self.missing_normal_received
     }
 
-    /// Returns the total number of defended packets, including padding.
+    /// Returns the total number of defended packets, including decoys.
     pub fn defended_packets(&self) -> f64 {
-        self.normal_sent + self.normal_received + self.padding_sent + self.padding_received
+        self.normal_sent + self.normal_received + self.decoy_sent + self.decoy_received
     }
 
-    /// Returns the total number of defended packets sent, including padding.
+    /// Returns the total number of defended packets sent, including decoys.
     pub fn defended_packets_sent(&self) -> f64 {
-        self.normal_sent + self.padding_sent
+        self.normal_sent + self.decoy_sent
     }
 
-    /// Returns the total number of defended packets received, including padding.
+    /// Returns the total number of defended packets received, including decoys.
     pub fn defended_packets_received(&self) -> f64 {
-        self.normal_received + self.padding_received
+        self.normal_received + self.decoy_received
     }
 
     /// Returns the total number of missing packets, i.e. packets that were sent
@@ -136,14 +136,14 @@ impl DefendedTraceStats {
         self.missing_normal_sent + self.missing_normal_received
     }
 
-    /// Returns the total number of padding packets.
-    pub fn padding_total(&self) -> f64 {
-        self.padding_sent + self.padding_received
+    /// Returns the total number of decoy packets.
+    pub fn decoy_total(&self) -> f64 {
+        self.decoy_sent + self.decoy_received
     }
 
-    /// Returns the total number of padding packets sent in the tail, i.e.,
+    /// Returns the total number of decoy packets sent in the tail, i.e.,
     /// after the last normal packet.
-    pub fn tail_padding(&self) -> f64 {
+    pub fn tail_decoy(&self) -> f64 {
         self.tail_sent + self.tail_received
     }
 
@@ -152,13 +152,13 @@ impl DefendedTraceStats {
     /// trace, so it does not include the tail packets. This is normal in the
     /// website fingerprinting community. Note also that overhead is defined as
     /// the ratio of additional data, i.e., the data overhead when there is no
-    /// padding is 0.0.
+    /// decoy packets is 0.0.
     pub fn overhead_data(&self) -> Option<f64> {
         if self.normal_sent + self.normal_received == 0.0 {
             return None;
         }
         Some(
-            (self.normal_sent + self.normal_received + self.padding_sent + self.padding_received
+            (self.normal_sent + self.normal_received + self.decoy_sent + self.decoy_received
                 - self.tail_sent
                 - self.tail_received)
                 / (self.normal_sent + self.normal_received)
@@ -171,7 +171,7 @@ impl DefendedTraceStats {
         if self.normal_sent == 0.0 {
             return None;
         }
-        Some((self.normal_sent + self.padding_sent - self.tail_sent) / self.normal_sent - 1.0)
+        Some((self.normal_sent + self.decoy_sent - self.tail_sent) / self.normal_sent - 1.0)
     }
 
     /// Returns the overhead data received.
@@ -180,7 +180,7 @@ impl DefendedTraceStats {
             return None;
         }
         Some(
-            (self.normal_received + self.padding_received - self.tail_received)
+            (self.normal_received + self.decoy_received - self.tail_received)
                 / self.normal_received
                 - 1.0,
         )

@@ -188,10 +188,10 @@ mod tests {
 
     fn create_test_framework() -> Framework<Vec<Machine>, rand::rngs::ThreadRng, StdInstant> {
         let mut state = State::new(enum_map! {
-            Event::PaddingSent => vec![Trans(0, 1.0)],
+            Event::DecoySent => vec![Trans(0, 1.0)],
         _ => vec![],
         });
-        state.action = Some(Action::SendPadding {
+        state.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -202,7 +202,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -240,7 +240,7 @@ mod tests {
         let framework = create_test_framework();
         let mut rate_limited = RateLimitedFramework::new(framework);
 
-        let events = [TriggerEvent::PaddingSent {
+        let events = [TriggerEvent::DecoySent {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 10.0;
@@ -258,7 +258,7 @@ mod tests {
         let framework = create_test_framework();
         let mut rate_limited = RateLimitedFramework::new(framework);
 
-        let events = [TriggerEvent::PaddingSent {
+        let events = [TriggerEvent::DecoySent {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 0.5;
@@ -281,7 +281,7 @@ mod tests {
         rate_limited.prev = 2.0;
         rate_limited.current = 1.0;
 
-        let events = [TriggerEvent::PaddingSent {
+        let events = [TriggerEvent::DecoySent {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 2.0;
@@ -300,7 +300,7 @@ mod tests {
         rate_limited.current = 5.0;
         let original_tick = rate_limited.tick;
 
-        let events = [TriggerEvent::PaddingSent {
+        let events = [TriggerEvent::DecoySent {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 10.0;
@@ -322,7 +322,7 @@ mod tests {
 
         rate_limited.current = 5.0;
 
-        let events = [TriggerEvent::PaddingSent {
+        let events = [TriggerEvent::DecoySent {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 10.0;
@@ -341,7 +341,7 @@ mod tests {
         let framework = create_test_framework();
         let mut rate_limited = RateLimitedFramework::new(framework);
 
-        let events = [TriggerEvent::PaddingSent {
+        let events = [TriggerEvent::DecoySent {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 10.0;
@@ -365,7 +365,7 @@ mod tests {
         let framework = create_test_framework();
         let mut rate_limited = RateLimitedFramework::new(framework);
 
-        let events = [TriggerEvent::PaddingSent {
+        let events = [TriggerEvent::DecoySent {
             machine: crate::MachineId::from_raw(0),
         }];
         let max_rate = 10.0;
@@ -386,7 +386,7 @@ mod tests {
 
         rate_limited.current = 2.0;
 
-        let events = [TriggerEvent::PaddingSent {
+        let events = [TriggerEvent::DecoySent {
             machine: crate::MachineId::from_raw(0),
         }];
         let max_rate = 1.0;
@@ -408,7 +408,7 @@ mod tests {
         rate_limited.prev = 3.0;
         rate_limited.current = 1.0;
 
-        let events = [TriggerEvent::PaddingSent {
+        let events = [TriggerEvent::DecoySent {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 2.5;
@@ -427,7 +427,7 @@ mod tests {
         let framework = create_test_framework();
         let mut rate_limited = RateLimitedFramework::new(framework);
 
-        let events = [TriggerEvent::PaddingSent {
+        let events = [TriggerEvent::DecoySent {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 5.0;

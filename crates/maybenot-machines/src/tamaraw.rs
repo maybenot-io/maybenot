@@ -62,7 +62,7 @@ fn make_padding_machine(p: f64) -> Machine {
         Event::TunnelSent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    padding.action = Some(Action::SendPadding {
+    padding.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -73,7 +73,7 @@ fn make_padding_machine(p: f64) -> Machine {
             start: 1000.0 * 1000.0 * p,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -166,7 +166,7 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
 
     // 4: tail state, decrement until zero to send % L total number of packets
     let mut tail = State::new(enum_map! {
-        Event::PaddingSent=> vec![Trans(4, 1.0)],
+        Event::DecoySent=> vec![Trans(4, 1.0)],
         Event::CounterZero=> vec![Trans(5, 1.0)],
        _ => vec![],
     });
@@ -178,7 +178,7 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
         }),
         None,
     );
-    tail.action = Some(Action::SendPadding {
+    tail.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -189,7 +189,7 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
             start: 1.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,

@@ -58,7 +58,7 @@ impl SimQueue {
         &mut self,
         event: TriggerEvent,
         is_client: bool,
-        contains_padding: bool,
+        contains_decoy: bool,
         time: Instant,
         delay: Duration,
     ) {
@@ -67,7 +67,7 @@ impl SimQueue {
             time,
             integration_delay: delay,
             client: is_client,
-            contains_padding,
+            contains_decoy,
             bypass: false,
             replace: false,
             debug_note: None,

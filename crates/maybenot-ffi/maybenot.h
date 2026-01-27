@@ -9,10 +9,10 @@
 
 enum MaybenotEventType {
   MaybenotEventType_NormalRecv = 0,
-  MaybenotEventType_PaddingRecv = 1,
+  MaybenotEventType_DecoyRecv = 1,
   MaybenotEventType_TunnelRecv = 2,
   MaybenotEventType_NormalSent = 3,
-  MaybenotEventType_PaddingSent = 4,
+  MaybenotEventType_DecoySent = 4,
   MaybenotEventType_TunnelSent = 5,
   MaybenotEventType_BlockingBegin = 6,
   MaybenotEventType_BlockingEnd = 7,
@@ -104,9 +104,10 @@ enum MaybenotAction_Tag {
    */
   MaybenotAction_Cancel = 0,
   /**
-   * Schedule padding to be injected after the given timeout for a machine.
+   * Schedule decoy traffic to be injected after the given timeout for a
+   * machine.
    */
-  MaybenotAction_SendPadding = 1,
+  MaybenotAction_SendDecoy = 1,
   /**
    * Schedule blocking of outgoing traffic after the given timeout for a machine.
    */
@@ -126,18 +127,18 @@ typedef struct MaybenotAction_Cancel_Body {
   MaybenotTimer timer;
 } MaybenotAction_Cancel_Body;
 
-typedef struct MaybenotAction_SendPadding_Body {
+typedef struct MaybenotAction_SendDecoys_Body {
   /**
    * The machine that generated the action.
    */
   uintptr_t machine;
   /**
-   * The time to wait before injecting a padding packet.
+   * The time to wait before injecting decoy traffic.
    */
   struct MaybenotDuration timeout;
   bool replace;
   bool bypass;
-} MaybenotAction_SendPadding_Body;
+} MaybenotAction_SendDecoys_Body;
 
 typedef struct MaybenotAction_BlockOutgoing_Body {
   /**
@@ -166,7 +167,7 @@ typedef struct MaybenotAction {
   MaybenotAction_Tag tag;
   union {
     MaybenotAction_Cancel_Body cancel;
-    MaybenotAction_SendPadding_Body send_padding;
+    MaybenotAction_SendDecoyTraffic_Body send_decoy;
     MaybenotAction_BlockOutgoing_Body block_outgoing;
     MaybenotAction_UpdateTimer_Body update_timer;
   };
@@ -188,7 +189,7 @@ const char *maybenot_version(void);
  * - The pointer written to `out` is NOT safe to be used concurrently.
  */
 MaybenotResult maybenot_start(const char *machines_str,
-                              double max_padding_frac,
+                              double max_decoy_frac,
                               double max_blocking_frac,
                               struct MaybenotFramework **out);
 

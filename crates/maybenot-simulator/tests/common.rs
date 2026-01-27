@@ -105,7 +105,7 @@ pub fn set_bypass(s: &mut State, value: bool) {
             Action::BlockOutgoing { bypass, .. } => {
                 *bypass = value;
             }
-            Action::SendPadding { bypass, .. } => {
+            Action::SendDecoyTraffic { bypass, .. } => {
                 *bypass = value;
             }
             _ => {}
@@ -119,7 +119,7 @@ pub fn set_replace(s: &mut State, value: bool) {
             Action::BlockOutgoing { replace, .. } => {
                 *replace = value;
             }
-            Action::SendPadding { replace, .. } => {
+            Action::SendDecoyTraffic { replace, .. } => {
                 *replace = value;
             }
             _ => {}

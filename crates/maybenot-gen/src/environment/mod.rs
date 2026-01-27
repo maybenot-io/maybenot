@@ -137,9 +137,9 @@ impl Environment {
         args.max_sim_iterations = max_sim_steps;
         args.client_integration = client_integration;
         args.server_integration = server_integration;
-        args.max_padding_frac_client =
+        args.max_decoy_frac_client =
             overhead2frac(&constraints.client_load, cfg.implied_framework_limits);
-        args.max_padding_frac_server =
+        args.max_decoy_frac_server =
             overhead2frac(&constraints.server_load, cfg.implied_framework_limits);
         // FIXME: note that we cannot have different blocking fractions for
         // client and server as-is.
@@ -205,9 +205,8 @@ fn overhead2frac(oh: &Option<RangeInclusive<f64>>, implied_framework_limits: Opt
     let load = *oh.clone().unwrap().end();
     // The load is expressed as #defended/#undefended packets, for the two
     // complete traces. The fraction in the framework is the fraction of
-    // padding/normal packets. For example, a load of 1.0 means a fraction of
-    // 0.5, and a load of 2.0 means a fraction of 0.6666666666666666.
-    // Converting:
+    // decoy/normal packets. For example, a load of 1.0 means a fraction of 0.5,
+    // and a load of 2.0 means a fraction of 0.6666666666666666. Converting:
     (load / (load + 1.0)).clamp(0.0, 1.0)
 }
 

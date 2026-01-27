@@ -4,7 +4,7 @@ use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
-    MAX_SAMPLED_BLOCK_DURATION, MAX_SAMPLED_PADDING_AMOUNT, MAX_SAMPLED_TIMEOUT,
+    MAX_SAMPLED_BLOCK_DURATION, MAX_SAMPLED_DECOY_N, MAX_SAMPLED_TIMEOUT,
     MAX_SAMPLED_TIMER_DURATION, STATE_LIMIT_MAX,
 };
 use crate::{Error, MachineId, dist};
@@ -32,38 +32,38 @@ pub enum Timer {
 pub enum Action {
     /// Cancel a timer.
     Cancel { timer: Timer },
-    /// Schedule an amount of padding to be sent after a timeout.
+    /// Schedule N decoy packets to be sent after a timeout.
     ///
     /// Replaces any previously pending scheduled action timer (set via
-    /// SendPadding or BlockOutgoing) for this machine.
+    /// SendDecoyTraffic or BlockOutgoing) for this machine.
     ///
-    /// The bypass flag determines if the padding packet(s) MUST bypass any
+    /// The bypass flag determines if the decoy packet(s) MUST bypass any
     /// existing blocking that was triggered with the bypass flag set.
     ///
-    /// The replace flag determines if the padding packet(s) MAY be replaced by
-    /// packets already queued to be sent at the time the padding packet would
-    /// be sent. This applies for data queued to be turned into normal
-    /// (non-padding) packets AND _any_ packet (padding or normal) in the egress
-    /// queue yet to be sent (i.e., before the TunnelSent event is triggered).
-    /// Such a packet could be in the queue due to ongoing blocking or just
-    /// not being sent yet (e.g., due to CC). We assume that packets will be
-    /// encrypted ASAP for the egress queue and we do not want to keep state
-    /// around to distinguish padding and non-padding, hence, any packet.
-    /// Similarly, this implies that a single blocked packet in the egress queue
-    /// can replace multiple padding packets with the replace flag set.
-    SendPadding {
+    /// The replace flag determines if the decoy packet(s) MAY be replaced by
+    /// packets already queued to be sent at the time the decoy packet would be
+    /// sent. This applies for data queued to be turned into normal (non-decoy)
+    /// packets AND _any_ packet (decoy or normal) in the egress queue yet to be
+    /// sent (i.e., before the TunnelSent event is triggered). Such a packet
+    /// could be in the queue due to ongoing blocking or just not being sent yet
+    /// (e.g., due to CC). We assume that packets will be encrypted ASAP for the
+    /// egress queue and we do not want to keep state around to distinguish
+    /// decoy and non-decoy, hence, any packet. Similarly, this implies that a
+    /// single blocked packet in the egress queue can replace multiple decoy
+    /// packets with the replace flag set.
+    SendDecoyTraffic {
         bypass: bool,
         replace: bool,
         timeout: Dist,
-        amount: Dist,
+        n: Dist,
         limit: Option<Dist>,
     },
     /// Schedule blocking of outgoing traffic after a timeout.
     ///
     /// Replaces any previously pending scheduled action timer (set via
-    /// SendPadding or BlockOutgoing) for this machine.
+    /// SendDecoyTraffic or BlockOutgoing) for this machine.
     ///
-    /// The bypass flag determines if padding actions are allowed to bypass this
+    /// The bypass flag determines if decoy actions are allowed to bypass this
     /// blocking action. This allows for machines that can fail closed (never
     /// bypass blocking) while simultaneously providing support for
     /// constant-rate defenses, when set along with the replace flag.
@@ -100,10 +100,10 @@ impl fmt::Display for Action {
 }
 
 impl Action {
-    /// Sample a timeout for a padding or blocking action.
+    /// Sample a timeout for a decoy or blocking action.
     pub(crate) fn sample_timeout<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
-            Action::SendPadding { timeout, .. } | Action::BlockOutgoing { timeout, .. } => {
+            Action::SendDecoyTraffic { timeout, .. } | Action::BlockOutgoing { timeout, .. } => {
                 timeout.sample(rng).min(MAX_SAMPLED_TIMEOUT).round() as u64
             }
             _ => 0,
@@ -123,13 +123,12 @@ impl Action {
         }
     }
 
-    /// Sample an amount for a padding action.
-    pub(crate) fn sample_amount<R: RngCore>(&self, rng: &mut R) -> usize {
+    /// Sample the number of decoy packets for a decoy action.
+    pub(crate) fn sample_decoy_n<R: RngCore>(&self, rng: &mut R) -> usize {
         match self {
-            Action::SendPadding { amount, .. } => amount
-                .sample(rng)
-                .min(MAX_SAMPLED_PADDING_AMOUNT as f64)
-                .round() as usize,
+            Action::SendDecoyTraffic { n: amount, .. } => {
+                amount.sample(rng).min(MAX_SAMPLED_DECOY_N as f64).round() as usize
+            }
             _ => 0,
         }
     }
@@ -137,7 +136,7 @@ impl Action {
     /// Sample a limit.
     pub(crate) fn sample_limit<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
-            Action::SendPadding { limit, .. }
+            Action::SendDecoyTraffic { limit, .. }
             | Action::BlockOutgoing { limit, .. }
             | Action::UpdateTimer { limit, .. } => {
                 if limit.is_none() {
@@ -152,7 +151,7 @@ impl Action {
     /// Check if the action has a limit distribution.
     pub(crate) fn has_limit(&self) -> bool {
         match self {
-            Action::SendPadding { limit, .. }
+            Action::SendDecoyTraffic { limit, .. }
             | Action::BlockOutgoing { limit, .. }
             | Action::UpdateTimer { limit, .. } => limit.is_some(),
             _ => false,
@@ -162,14 +161,11 @@ impl Action {
     /// Validate all distributions contained in this action, if any.
     pub fn validate(&self) -> Result<(), Error> {
         match self {
-            Action::SendPadding {
-                timeout,
-                amount,
-                limit,
-                ..
+            Action::SendDecoyTraffic {
+                timeout, n, limit, ..
             } => {
                 timeout.validate()?;
-                amount.validate()?;
+                n.validate()?;
                 if let Some(limit) = limit {
                     limit.validate()?;
                 }
@@ -212,45 +208,44 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// Cancelling a timer does not cause a
     /// [`TriggerEvent::TimerEnd`](crate::TriggerEvent::TimerEnd) event.
     Cancel { machine: MachineId, timer: Timer },
-    /// Schedule padding to be injected after the given timeout for a machine.
+    /// Schedule N decoy packets to be sent after the given timeout.
     ///
-    /// The bypass flag indicates if the padding packet(s) MUST be sent despite
+    /// The bypass flag indicates if the decoy packet(s) MUST be sent despite
     /// active blocking of outgoing traffic. Note that this is only allowed if
     /// the active blocking was set with the bypass flag set to true.
     ///
-    /// The replace flag determines if the padding packet(s) MAY be replaced by
-    /// packets already queued to be sent at the time the padding packet would
-    /// be sent. This applies for data queued to be turned into normal
-    /// (non-padding) packets AND _any_ packet (padding or normal) in the egress
-    /// queue yet to be sent (i.e., before the TunnelSent event is triggered).
-    /// Such a packet could be in the queue due to ongoing blocking or just
-    /// not being sent yet (e.g., due to CC). We assume that packets will be
-    /// encrypted ASAP for the egress queue and we do not want to keep state
-    /// around to distinguish padding and non-padding, hence, any packet.
-    /// Similarly, this implies that a single blocked packet in the egress queue
-    /// can replace multiple padding packets with the replace flag set.
+    /// The replace flag determines if the decoy packet(s) MAY be replaced by
+    /// packets already queued to be sent at the time the decoy packet would be
+    /// sent. This applies for data queued to be turned into normal (non-decoy)
+    /// packets AND _any_ packet (decoy or normal) in the egress queue yet to be
+    /// sent (i.e., before the TunnelSent event is triggered). Such a packet
+    /// could be in the queue due to ongoing blocking or just not being sent yet
+    /// (e.g., due to CC). We assume that packets will be encrypted ASAP for the
+    /// egress queue and we do not want to keep state around to distinguish
+    /// decoy and non-decoy, hence, any packet. Similarly, this implies that a
+    /// single blocked packet in the egress queue can replace multiple decoy
+    /// packets with the replace flag set.
     ///
     /// If the bypass and replace flags are both set to true AND the active
-    /// blocking may be bypassed, then non-padding packets MAY replace the
-    /// padding packet AND bypass the active blocking.
+    /// blocking may be bypassed, then non-decoy packets MAY replace the decoy
+    /// packet AND bypass the active blocking.
     ///
-    /// When the padding is queued, a corresponding
-    /// [`TriggerEvent::PaddingSent`](crate::TriggerEvent::PaddingSent) event
-    /// SHOULD always be triggered, with a matching MachineId, even if the
-    /// padding packet is replaced by another packet.
-    /// (If the padding packet is replaced by queueing a _new_ normal
-    /// packet, then a `NormalSent` should _also_ be triggered, along
-    /// with `PaddingSent`.  If the padding packet is "replaced" by
-    /// noting the presence of an already queued packet, then no
-    /// additional event bedes `PaddingSent` needs to be triggered.)
+    /// For each decoy packet queued, a corresponding
+    /// [`TriggerEvent::DecoySent`](crate::TriggerEvent::DecoySent) event SHOULD
+    /// always be triggered, with a matching MachineId, even if the decoy packet
+    /// is replaced by another packet. (If the decoy packet is replaced by
+    /// queueing a _new_ normal packet, then a `NormalSent` should _also_ be
+    /// triggered, along with `DecoySent`.  If the decoy packet is "replaced" by
+    /// noting the presence of an already queued packet, then no additional
+    /// event besides `DecoySent` needs to be triggered.)
     ///
     /// Note that, since only one action timer per machine can be pending at a
-    /// time, this `SendPadding` action should replace any currently pending
-    /// `SendPadding` or `BlockOutgoing` action timer for this machine that has
+    /// time, this `SendDecoy` action should replace any currently pending
+    /// `SendDecoy` or `BlockOutgoing` action timer for this machine that has
     /// not yet expired.
-    SendPadding {
+    SendDecoyTraffic {
         timeout: T::Duration,
-        amount: usize,
+        n: usize,
         bypass: bool,
         replace: bool,
         machine: MachineId,
@@ -266,7 +261,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// the current blocking was adjusted.
     ///
     /// The bypass flag indicates if the blocking of outgoing traffic can be
-    /// bypassed by padding packets with the bypass flag set to true.
+    /// bypassed by decoy packets with the bypass flag set to true.
     ///
     /// The replace flag indicates if the duration MUST replace any other
     /// currently ongoing blocking of outgoing traffic. If the flag is false,
@@ -277,7 +272,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     ///
     /// Note that, since only one action timer per machine can be pending at a
     /// time, this `BlockOutgoing` action should replace any currently pending
-    /// `BlockOutgoing` or `SendPadding` action timer for this machine that has
+    /// `BlockOutgoing` or `SendDecoy` action timer for this machine that has
     /// not yet expired.
     BlockOutgoing {
         timeout: T::Duration,
@@ -345,9 +340,9 @@ mod tests {
     }
 
     #[test]
-    fn validate_padding_action() {
-        // valid SendPadding action
-        let mut a = Action::SendPadding {
+    fn validate_decoy_action() {
+        // valid SendDecoy action
+        let mut a = Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -358,7 +353,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -380,7 +375,7 @@ mod tests {
         assert!(r.is_ok());
 
         // invalid timeout dist, not allowed
-        if let Action::SendPadding { timeout, .. } = &mut a {
+        if let Action::SendDecoyTraffic { timeout, .. } = &mut a {
             *timeout = Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
@@ -395,7 +390,7 @@ mod tests {
         assert!(r.is_err());
 
         // repair timeout dist
-        if let Action::SendPadding { timeout, .. } = &mut a {
+        if let Action::SendDecoyTraffic { timeout, .. } = &mut a {
             *timeout = Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
@@ -407,7 +402,7 @@ mod tests {
         }
 
         // invalid limit dist, not allowed
-        if let Action::SendPadding { limit, .. } = &mut a {
+        if let Action::SendDecoyTraffic { limit, .. } = &mut a {
             *limit = Some(Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
@@ -422,7 +417,7 @@ mod tests {
         assert!(r.is_err());
 
         // repair limit dist
-        if let Action::SendPadding { limit, .. } = &mut a {
+        if let Action::SendDecoyTraffic { limit, .. } = &mut a {
             *limit = Some(Dist {
                 dist: DistType::Normal {
                     mean: 50.0,
@@ -434,7 +429,7 @@ mod tests {
         }
 
         // invalid amount dist, not allowed
-        if let Action::SendPadding { amount, .. } = &mut a {
+        if let Action::SendDecoyTraffic { n: amount, .. } = &mut a {
             *amount = Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high

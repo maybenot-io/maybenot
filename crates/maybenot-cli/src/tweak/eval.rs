@@ -209,39 +209,39 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
 
     info!("");
     print_absolute_state_line(
-        "total padding 📦",
+        "total decoy packets 📦",
         "packets",
         defended_stats
             .iter()
-            .map(DefendedTraceStats::padding_total)
+            .map(DefendedTraceStats::decoy_total)
             .collect(),
-        "padding_total",
+        "decoy_total",
         &mut fixed_metrics,
     );
     print_absolute_state_line(
         "-sent",
         "packets",
-        defended_stats.iter().map(|s| s.padding_sent).collect(),
-        "padding_sent",
+        defended_stats.iter().map(|s| s.decoy_sent).collect(),
+        "decoy_sent",
         &mut fixed_metrics,
     );
     print_absolute_state_line(
         "-recv",
         "packets",
-        defended_stats.iter().map(|s| s.padding_received).collect(),
-        "padding_received",
+        defended_stats.iter().map(|s| s.decoy_received).collect(),
+        "decoy_received",
         &mut fixed_metrics,
     );
 
     info!("");
     print_absolute_state_line(
-        "tail padding 🔚",
+        "tail decoy packets 🔚",
         "packets",
         defended_stats
             .iter()
-            .map(DefendedTraceStats::tail_padding)
+            .map(DefendedTraceStats::tail_decoy)
             .collect(),
-        "tail_padding",
+        "tail_decoy",
         &mut fixed_metrics,
     );
     print_absolute_state_line(
@@ -294,8 +294,8 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
 
     info!("");
     info!("overheads (last normal) 💸");
-    // only count the padding sent until the last normal packet, so we don't
-    // count the tail (padding) packets
+    // only count the decoy packets sent until the last normal packet, so we
+    // don't count the tail (decoy) packets
     print_relative_state_line(
         "data",
         "multiple",
@@ -591,7 +591,7 @@ fn get_corresponding_base_trace(defended: &str, max_base_sample: usize) -> Resul
                 let new_last_part = if is_zero_padded {
                     format!("{base_sample_num:04}.log")
                 } else {
-                    // FIXME: broken for supages without zero padding
+                    // FIXME: broken for supages without zero decoys
                     format!("{base_sample_num}.log")
                 };
                 let mut new_parts = parts.clone();

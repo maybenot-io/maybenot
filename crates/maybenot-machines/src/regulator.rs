@@ -414,7 +414,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
             Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
             _ => vec![],
         });
-        pad.action = Some(Action::SendPadding {
+        pad.action = Some(Action::SendDecoyTraffic {
             bypass: true,
             replace: true,
             timeout: Dist {
@@ -425,7 +425,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
                 start: 1_000_000.0 / rate,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 0.0,
                     high: 0.0,
@@ -445,7 +445,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
         Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
     });
-    pad.action = Some(Action::SendPadding {
+    pad.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -456,7 +456,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
             start: 1_000_000.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -501,12 +501,12 @@ fn make_regulator_boot_machine(pps: f64, n: usize) -> Machine {
     states.push(start);
 
     let mut pad = State::new(enum_map! {
-        Event::PaddingSent => vec![Trans(1, 1.0)],
+        Event::DecoySent => vec![Trans(1, 1.0)],
         Event::LimitReached => vec![Trans(STATE_SIGNAL, 1.0)],
         Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
     });
-    pad.action = Some(Action::SendPadding {
+    pad.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -517,7 +517,7 @@ fn make_regulator_boot_machine(pps: f64, n: usize) -> Machine {
             start: 1_000_000.0 / pps,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -658,7 +658,7 @@ fn push_loop_cluster(states: &mut Vec<State>, upload_ratio: f64) {
         Event::TunnelSent => vec![Trans(start_index, 1.0)],
         _ => vec![],
     });
-    send.action = Some(Action::SendPadding {
+    send.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -669,7 +669,7 @@ fn push_loop_cluster(states: &mut Vec<State>, upload_ratio: f64) {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,

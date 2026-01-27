@@ -28,7 +28,7 @@ fn gen_simple_netflow_machine(low_ms: usize, high_ms: usize) -> Machine {
        Event::TunnelSent => vec![Trans(1, 1.0)],
        _ => vec![],
     });
-    s1.action = Some(Action::SendPadding {
+    s1.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -40,7 +40,7 @@ fn gen_simple_netflow_machine(low_ms: usize, high_ms: usize) -> Machine {
             start: 1.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,

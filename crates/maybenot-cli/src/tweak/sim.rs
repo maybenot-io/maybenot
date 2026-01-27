@@ -367,9 +367,9 @@ fn sim_dataset<R: RngCore>(
                             .unwrap_or(false),
                         only_client_events: true,
                         only_network_activity: true,
-                        max_padding_frac_client: setup.client.max_padding_frac,
+                        max_decoy_frac_client: setup.client.max_decoy_frac,
                         max_blocking_frac_client: setup.client.max_blocking_frac,
-                        max_padding_frac_server: setup.server.max_padding_frac,
+                        max_decoy_frac_server: setup.server.max_decoy_frac,
                         max_blocking_frac_server: setup.server.max_blocking_frac,
                         insecure_rng_seed: Some(rng.next_u64()),
                         client_integration: c_integration.clone(),
@@ -401,7 +401,7 @@ fn sim_dataset<R: RngCore>(
                     match t.event {
                         TriggerEvent::TunnelRecv => {
                             n += 1;
-                            if t.contains_padding {
+                            if t.contains_decoy {
                                 s.push_str(&format!("{ts},rp,514\n"));
                             } else {
                                 s.push_str(&format!("{ts},rn,514\n"));
@@ -409,7 +409,7 @@ fn sim_dataset<R: RngCore>(
                         }
                         TriggerEvent::TunnelSent => {
                             n += 1;
-                            if t.contains_padding {
+                            if t.contains_decoy {
                                 s.push_str(&format!("{ts},sp,514\n"));
                             } else {
                                 s.push_str(&format!("{ts},sn,514\n"));

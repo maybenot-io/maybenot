@@ -44,7 +44,7 @@ impl MachineId {
 struct MachineRuntime<T: crate::time::Instant> {
     current_state: usize,
     state_limit: u64,
-    padding_sent: u64,
+    decoys_sent: u64,
     normal_sent: u64,
     blocking_duration: T::Duration,
     machine_start: T,
@@ -73,7 +73,7 @@ enum SignalTarget {
 /// An instance of the [`Framework`] repeatedly takes as *input* one or more
 /// [`TriggerEvent`] describing the encrypted traffic going over an encrypted
 /// channel, and produces as *output* zero or more [`TriggerAction`], such as to
-/// *send padding* traffic or *block outgoing* traffic. One or more [`Machine`]
+/// *send decoy* traffic or *block outgoing* traffic. One or more [`Machine`]
 /// determine what [`TriggerAction`] to take based on [`TriggerEvent`].
 #[derive(Clone, Debug)]
 pub struct Framework<M, R, T = std::time::Instant>
@@ -91,10 +91,10 @@ where
     // state (size independent of number of states in the machine).
     machines: M,
     runtime: Vec<MachineRuntime<T>>,
-    // padding accounting
-    max_padding_frac: f64,
+    // decoy accounting
+    max_decoy_frac: f64,
     normal_sent_packets: u64,
-    padding_sent_packets: u64,
+    decoys_sent_packets: u64,
     // blocking accounting
     max_blocking_frac: f64,
     blocking_duration: T::Duration,
@@ -115,26 +115,28 @@ where
 {
     /// Create a new framework instance with zero or more [`Machine`].
     ///
-    /// The max padding/blocking fractions are enforced as a total across all machines.
-    /// The only way those limits can be violated are through
-    /// [`Machine::allowed_padding_packets`] and
+    /// The max decoys/blocking fractions are enforced as a total across all
+    /// machines. The only way those limits can be violated are through
+    /// [`Machine::allowed_decoy_packets`] and
     /// [`Machine::allowed_blocked_microsec`], respectively.
     ///
-    /// The current time is handed to the framework here (and later in [`Self::trigger_events()`])
-    /// to make some types of use cases of the framework easier (weird machines and
-    /// for simulation). The generic time type also allows for using custom time sources.
-    /// This can for example improve performance.
+    /// The current time is handed to the framework here (and later in
+    /// [`Self::trigger_events()`]) to make some types of use cases of the
+    /// framework easier (weird machines and for simulation). The generic time
+    /// type also allows for using custom time sources. This can for example
+    /// improve performance.
     ///
-    /// Returns an error on any invalid [`Machine`] or limits not being fractions [0.0, 1.0].
+    /// Returns an error on any invalid [`Machine`] or limits not being
+    /// fractions [0.0, 1.0].
     pub fn new(
         machines: M,
-        max_padding_frac: f64,
+        max_decoy_frac: f64,
         max_blocking_frac: f64,
         current_time: T,
         rng: R,
     ) -> Result<Self, Error> {
-        if !(0.0..=1.0).contains(&max_padding_frac) {
-            Err(Error::PaddingLimit)?;
+        if !(0.0..=1.0).contains(&max_decoy_frac) {
+            Err(Error::DecoyLimit)?;
         }
         if !(0.0..=1.0).contains(&max_blocking_frac) {
             Err(Error::BlockingLimit)?;
@@ -146,7 +148,7 @@ where
             runtime.push(MachineRuntime {
                 current_state: 0,
                 state_limit: 0,
-                padding_sent: 0,
+                decoys_sent: 0,
                 normal_sent: 0,
                 blocking_duration: T::Duration::zero(),
                 machine_start: current_time,
@@ -166,12 +168,12 @@ where
             current_time,
             rng,
             max_blocking_frac,
-            max_padding_frac,
+            max_decoy_frac,
             framework_start: current_time,
             blocking_active: false,
             blocking_started: current_time,
             blocking_duration: T::Duration::zero(),
-            padding_sent_packets: 0,
+            decoys_sent_packets: 0,
             normal_sent_packets: 0,
             signal_pending: None,
             counter_zeroed_once: (false, false),
@@ -282,10 +284,10 @@ where
                     self.transition(mi, Event::NormalRecv);
                 }
             }
-            TriggerEvent::PaddingRecv => {
+            TriggerEvent::DecoyRecv => {
                 // no special accounting needed
                 for mi in 0..self.runtime.len() {
-                    self.transition(mi, Event::PaddingRecv);
+                    self.transition(mi, Event::DecoyRecv);
                 }
             }
             TriggerEvent::TunnelRecv => {
@@ -303,15 +305,15 @@ where
                     self.transition(mi, Event::NormalSent);
                 }
             }
-            TriggerEvent::PaddingSent { machine } => {
-                self.padding_sent_packets = self.padding_sent_packets.saturating_add(1);
+            TriggerEvent::DecoySent { machine } => {
+                self.decoys_sent_packets = self.decoys_sent_packets.saturating_add(1);
 
                 let mi = machine.into_raw();
                 if mi >= self.runtime.len() {
                     return;
                 }
-                self.runtime[mi].padding_sent = self.runtime[mi].padding_sent.saturating_add(1);
-                if self.transition(mi, Event::PaddingSent) == StateChange::Unchanged
+                self.runtime[mi].decoys_sent = self.runtime[mi].decoys_sent.saturating_add(1);
+                if self.transition(mi, Event::DecoySent) == StateChange::Unchanged
                     && self.runtime[mi].current_state != STATE_END
                 {
                     // decrement only makes sense if we didn't change state
@@ -319,7 +321,7 @@ where
                 }
             }
             TriggerEvent::TunnelSent => {
-                // accounting is based on normal/padding sent, not tunnel
+                // accounting is based on normal/decoy sent, not tunnel
                 for mi in 0..self.runtime.len() {
                     self.transition(mi, Event::TunnelSent);
                 }
@@ -545,11 +547,11 @@ where
                     machine: index,
                     timer,
                 }),
-                Action::SendPadding {
+                Action::SendDecoyTraffic {
                     bypass, replace, ..
-                } => Some(TriggerAction::SendPadding {
+                } => Some(TriggerAction::SendDecoyTraffic {
                     timeout: T::Duration::from_micros(action.sample_timeout(&mut self.rng)),
-                    amount: action.sample_amount(&mut self.rng),
+                    n: action.sample_decoy_n(&mut self.rng),
                     bypass,
                     replace,
                     machine: index,
@@ -598,7 +600,7 @@ where
 
         match action {
             Action::BlockOutgoing { .. } => self.below_limit_blocking(runtime, machine),
-            Action::SendPadding { .. } => self.below_limit_padding(runtime, machine),
+            Action::SendDecoyTraffic { .. } => self.below_limit_decoys(runtime, machine),
             Action::UpdateTimer { .. } => runtime.state_limit > 0,
             _ => true,
         }
@@ -666,30 +668,30 @@ where
         runtime.state_limit > 0
     }
 
-    fn below_limit_padding(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
-        // no limits apply if not made up padding count
-        if runtime.padding_sent < machine.allowed_padding_packets {
+    fn below_limit_decoys(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
+        // no limits apply if not made up decoy count
+        if runtime.decoys_sent < machine.allowed_decoy_packets {
             return runtime.state_limit > 0;
         }
 
         // hit machine limits?
-        if machine.max_padding_frac > 0.0 {
-            let total = runtime.normal_sent + runtime.padding_sent;
+        if machine.max_decoy_frac > 0.0 {
+            let total = runtime.normal_sent + runtime.decoys_sent;
             if total == 0 {
                 return true;
             }
-            if runtime.padding_sent as f64 / total as f64 >= machine.max_padding_frac {
+            if runtime.decoys_sent as f64 / total as f64 >= machine.max_decoy_frac {
                 return false;
             }
         }
 
         // hit global limits?
-        if self.max_padding_frac > 0.0 {
-            let total = self.padding_sent_packets + self.normal_sent_packets;
+        if self.max_decoy_frac > 0.0 {
+            let total = self.decoys_sent_packets + self.normal_sent_packets;
             if total == 0 {
                 return true;
             }
-            if self.padding_sent_packets as f64 / total as f64 >= self.max_padding_frac {
+            if self.decoys_sent_packets as f64 / total as f64 >= self.max_decoy_frac {
                 return false;
             }
         }
@@ -740,12 +742,12 @@ mod tests {
         // plan: create a machine that swaps between two states, trigger one
         // then multiple events and check the resulting actions
 
-        // state 0: go to state 1 on PaddingSent, pad after 10 usec
+        // state 0: go to state 1 on DecoySent, pad after 10 usec
         let mut s0 = State::new(enum_map! {
-            Event::PaddingSent => vec![Trans(1, 1.0)],
+            Event::DecoySent => vec![Trans(1, 1.0)],
         _ => vec![],
         });
-        s0.action = Some(Action::SendPadding {
+        s0.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -756,7 +758,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -767,12 +769,12 @@ mod tests {
             limit: None,
         });
 
-        // state 1: go to state 0 on PaddingRecv, pad after 1 usec
+        // state 1: go to state 0 on DecoyRecv, pad after 1 usec
         let mut s1 = State::new(enum_map! {
-            Event::PaddingRecv => vec![Trans(0, 1.0)],
+            Event::DecoyRecv => vec![Trans(0, 1.0)],
         _ => vec![],
         });
-        s1.action = Some(Action::SendPadding {
+        s1.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -784,7 +786,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -825,16 +827,16 @@ mod tests {
 
         // trigger transition to next state
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
         );
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(1),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -844,7 +846,7 @@ mod tests {
         // increase time, trigger event, make sure no further action
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
@@ -852,12 +854,12 @@ mod tests {
         assert_eq!(f.actions[0], None);
 
         // go back to state 0
-        _ = f.trigger_events(&[TriggerEvent::PaddingRecv], current_time);
+        _ = f.trigger_events(&[TriggerEvent::DecoyRecv], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(10),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -868,18 +870,18 @@ mod tests {
         for _ in 0..10 {
             _ = f.trigger_events(
                 &[
-                    TriggerEvent::PaddingSent {
+                    TriggerEvent::DecoySent {
                         machine: MachineId(0),
                     },
-                    TriggerEvent::PaddingRecv,
+                    TriggerEvent::DecoyRecv,
                 ],
                 current_time,
             );
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::SendPadding {
+                Some(TriggerAction::SendDecoyTraffic {
                     timeout: Duration::from_micros(10),
-                    amount: 1,
+                    n: 1,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -892,19 +894,19 @@ mod tests {
             if i % 2 == 0 {
                 _ = f.trigger_events(
                     &[
-                        TriggerEvent::PaddingRecv,
-                        TriggerEvent::PaddingSent {
+                        TriggerEvent::DecoyRecv,
+                        TriggerEvent::DecoySent {
                             machine: MachineId(0),
                         },
-                        TriggerEvent::PaddingRecv,
+                        TriggerEvent::DecoyRecv,
                     ],
                     current_time,
                 );
                 assert_eq!(
                     f.actions[0],
-                    Some(TriggerAction::SendPadding {
+                    Some(TriggerAction::SendDecoyTraffic {
                         timeout: Duration::from_micros(10),
-                        amount: 1,
+                        n: 1,
                         bypass: false,
                         replace: false,
                         machine: MachineId(0),
@@ -913,11 +915,11 @@ mod tests {
             } else {
                 _ = f.trigger_events(
                     &[
-                        TriggerEvent::PaddingSent {
+                        TriggerEvent::DecoySent {
                             machine: MachineId(0),
                         },
-                        TriggerEvent::PaddingRecv,
-                        TriggerEvent::PaddingSent {
+                        TriggerEvent::DecoyRecv,
+                        TriggerEvent::DecoySent {
                             machine: MachineId(0),
                         },
                     ],
@@ -925,9 +927,9 @@ mod tests {
                 );
                 assert_eq!(
                     f.actions[0],
-                    Some(TriggerAction::SendPadding {
+                    Some(TriggerAction::SendDecoyTraffic {
                         timeout: Duration::from_micros(1),
-                        amount: 1,
+                        n: 1,
                         bypass: false,
                         replace: false,
                         machine: MachineId(0),
@@ -1014,14 +1016,14 @@ mod tests {
 
     #[test]
     fn timer_machine() {
-        // a machine that sets the timer to 1 ms after PaddingSent
+        // a machine that sets the timer to 1 ms after DecoySent
 
         // state 0
         let mut s0 = State::new(enum_map! {
-                 Event::PaddingSent => vec![Trans(1, 1.0)],
+                 Event::DecoySent => vec![Trans(1, 1.0)],
              _ => vec![],
         });
-        s0.action = Some(Action::SendPadding {
+        s0.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1033,7 +1035,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -1070,7 +1072,7 @@ mod tests {
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1093,9 +1095,9 @@ mod tests {
         );
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(1),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -1105,12 +1107,12 @@ mod tests {
 
     #[test]
     fn counter_machine() {
-        // count PaddingSent - NormalSent with counter A
+        // count DecoySent - NormalSent with counter A
         // pad and increment counter B by 4 on CounterZero
 
         // state 0
         let mut s0 = State::new(enum_map! {
-            Event::PaddingSent => vec![Trans(1, 1.0)],
+            Event::DecoySent => vec![Trans(1, 1.0)],
             Event::CounterZero => vec![Trans(2, 1.0)],
         _ => vec![],
         });
@@ -1126,10 +1128,10 @@ mod tests {
         // state 2
         let mut s2 = State::new(enum_map! {
             Event::NormalSent => vec![Trans(0, 1.0)],
-            Event::PaddingSent => vec![Trans(1, 1.0)],
+            Event::DecoySent => vec![Trans(1, 1.0)],
         _ => vec![],
         });
-        s2.action = Some(Action::SendPadding {
+        s2.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1140,7 +1142,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -1173,7 +1175,7 @@ mod tests {
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1185,9 +1187,9 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(2),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -1253,7 +1255,7 @@ mod tests {
             Event::NormalRecv => vec![Trans(1, 1.0)],
         _ => vec![],
         });
-        s2.action = Some(Action::SendPadding {
+        s2.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1264,7 +1266,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -1365,7 +1367,7 @@ mod tests {
         // state 0
         let mut s0 = State::new(enum_map! {
            Event::NormalSent => vec![Trans(0, 1.0)],
-           Event::PaddingSent => vec![Trans(1, 1.0)],
+           Event::DecoySent => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s0.counter = (
@@ -1444,7 +1446,7 @@ mod tests {
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1468,7 +1470,7 @@ mod tests {
         // state 0
         let mut s0 = State::new(enum_map! {
            Event::NormalSent => vec![Trans(0, 1.0)],
-           Event::PaddingSent => vec![Trans(1, 1.0)],
+           Event::DecoySent => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s0.counter = (
@@ -1549,7 +1551,7 @@ mod tests {
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1568,7 +1570,7 @@ mod tests {
         // state 0
         let mut s0 = State::new(enum_map! {
            Event::NormalSent => vec![Trans(0, 1.0)],
-           Event::PaddingSent => vec![Trans(1, 1.0)],
+           Event::DecoySent => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s0.counter = (
@@ -1581,7 +1583,7 @@ mod tests {
            Event::CounterZero => vec![Trans(2, 1.0)], // the "chain reaction"
            _ => vec![],
         });
-        s1.action = Some(Action::SendPadding {
+        s1.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1592,7 +1594,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -1612,7 +1614,7 @@ mod tests {
            Event::CounterZero => vec![Trans(3, 1.0)],
            _ => vec![],
         });
-        s2.action = Some(Action::SendPadding {
+        s2.action = Some(Action::SendDecoyTraffic {
             bypass: true,
             replace: false,
             timeout: Dist {
@@ -1623,7 +1625,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -1671,16 +1673,16 @@ mod tests {
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
         );
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(67),
-                amount: 1,
+                n: 1,
                 bypass: true,
                 replace: false,
                 machine: MachineId(0),
@@ -1697,7 +1699,7 @@ mod tests {
         // state 0
         let mut s0 = State::new(enum_map! {
            Event::NormalSent => vec![Trans(0, 1.0)],
-           Event::PaddingSent => vec![Trans(1, 1.0)],
+           Event::DecoySent => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s0.counter = (
@@ -1727,7 +1729,7 @@ mod tests {
 
         // state 1
         let mut s1 = State::new(enum_map! {
-           Event::PaddingSent => vec![Trans(2, 1.0)],
+           Event::DecoySent => vec![Trans(2, 1.0)],
            _ => vec![],
         });
         s1.counter = (
@@ -1762,7 +1764,7 @@ mod tests {
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1773,7 +1775,7 @@ mod tests {
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1791,7 +1793,7 @@ mod tests {
         // state 0, counters (2, 1)
         let mut s0 = State::new(enum_map! {
            Event::NormalSent => vec![Trans(0, 1.0)],
-           Event::PaddingSent => vec![Trans(1, 1.0)],
+           Event::DecoySent => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s0.counter = (
@@ -1812,11 +1814,11 @@ mod tests {
         // state 1, diff (-1, 0)
         let mut s1 = State::new(enum_map! {
            Event::CounterZero => vec![Trans(2, 1.0)],
-           Event::PaddingSent => vec![Trans(1, 1.0)],
+           Event::DecoySent => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s1.counter = (Some(Counter::new(Operation::Decrement)), None);
-        s1.action = Some(Action::SendPadding {
+        s1.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1827,7 +1829,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -1864,7 +1866,7 @@ mod tests {
         assert_eq!(f.runtime[0].counter_b, 1);
 
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1875,7 +1877,7 @@ mod tests {
         assert_eq!(f.runtime[0].state_limit, 2);
 
         _ = f.trigger_events(
-            &[TriggerEvent::PaddingSent {
+            &[TriggerEvent::DecoySent {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1930,7 +1932,7 @@ mod tests {
         let mut state_pad = State::new(enum_map! {
             _ => vec![],
         });
-        state_pad.action = Some(Action::SendPadding {
+        state_pad.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -1941,7 +1943,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -1999,7 +2001,7 @@ mod tests {
         let mut s1 = State::new(enum_map! {
            _ => vec![],
         });
-        s1.action = Some(Action::SendPadding {
+        s1.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2010,7 +2012,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -2033,9 +2035,9 @@ mod tests {
         assert_eq!(f.actions[0], None);
         assert_eq!(
             f.actions[1],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(2),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(1),
@@ -2058,7 +2060,7 @@ mod tests {
         let mut s1 = State::new(enum_map! {
            _ => vec![],
         });
-        s1.action = Some(Action::SendPadding {
+        s1.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2069,7 +2071,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -2091,9 +2093,9 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(2),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -2101,9 +2103,9 @@ mod tests {
         );
         assert_eq!(
             f.actions[1],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(2),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(1),
@@ -2130,7 +2132,7 @@ mod tests {
         let mut s1 = State::new(enum_map! {
            _ => vec![],
         });
-        s1.action = Some(Action::SendPadding {
+        s1.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2141,7 +2143,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -2163,9 +2165,9 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(2),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -2175,21 +2177,20 @@ mod tests {
     }
 
     #[test]
-    fn machine_max_padding_frac() {
-        // We create a machine that should be allowed to send 100 padding
-        // packets before machine padding limits are applied, then the machine
-        // should be limited from sending any padding until at least 100
-        // normal packets have been sent, given the set max padding fraction
-        // of 0.5.
+    fn machine_max_decoy_frac() {
+        // We create a machine that should be allowed to send 100 decoy packets
+        // before machine decoy limits are applied, then the machine should be
+        // limited from sending any decoy until at least 100 normal packets have
+        // been sent, given the set max decoy fraction of 0.5.
 
         // state 0
         let mut s0 = State::new(enum_map! {
             // we use sent for checking limits and recv as an event to check
             // without adding bytes sent
-            Event::PaddingSent | Event::NormalSent | Event::NormalRecv => vec![Trans(0, 1.0)],
+            Event::DecoySent | Event::NormalSent | Event::NormalRecv => vec![Trans(0, 1.0)],
             _ => vec![],
         });
-        s0.action = Some(Action::SendPadding {
+        s0.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2200,7 +2201,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -2221,13 +2222,13 @@ mod tests {
         // transition to get the loop going
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
 
-        // we expect 100 padding actions
+        // we expect 100 decoy actions
         for _ in 0..100 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::SendPadding {
+                Some(TriggerAction::SendDecoyTraffic {
                     timeout: Duration::from_micros(2),
-                    amount: 1,
+                    n: 1,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -2235,7 +2236,7 @@ mod tests {
             );
 
             _ = f.trigger_events(
-                &[TriggerEvent::PaddingSent {
+                &[TriggerEvent::DecoySent {
                     machine: MachineId(0),
                 }],
                 current_time,
@@ -2249,7 +2250,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
         assert_eq!(f.actions[0], None);
 
-        // verify that no padding is scheduled until we've sent the same amount
+        // verify that no decoy is scheduled until we've sent the same amount
         // of bytes
         for _ in 0..100 {
             _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
@@ -2261,9 +2262,9 @@ mod tests {
 
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(2),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -2272,18 +2273,19 @@ mod tests {
     }
 
     #[test]
-    fn framework_max_padding_frac() {
-        // to test the global limits of the framework we create two machines with
-        // the same allowed padding, where both machines pad in parallel
+    fn framework_max_decoy_frac() {
+        // to test the global limits of the framework we create two machines
+        // with the same allowed decoy, where both machines send decoys in
+        // parallel
 
         // state 0
         let mut s0 = State::new(enum_map! {
             // we use sent for checking limits and recv as an event to check
             // without adding bytes sent
-            Event::PaddingSent | Event::NormalSent | Event::NormalRecv => vec![Trans(0, 1.0)],
+            Event::DecoySent | Event::NormalSent | Event::NormalRecv => vec![Trans(0, 1.0)],
         _ => vec![],
         });
-        s0.action = Some(Action::SendPadding {
+        s0.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2294,7 +2296,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -2309,23 +2311,23 @@ mod tests {
         let m1 = Machine::new(100, 0.0, 0, 0.0, vec![s0]).unwrap();
         let m2 = m1.clone();
 
-        // NOTE 0.5 max_padding_frac below
+        // NOTE 0.5 max_decoy_frac below
         let current_time = Instant::now();
         let machines = vec![m1, m2];
         let mut f = Framework::new(&machines, 0.5, 0.0, current_time, rand::rng()).unwrap();
 
         // we have two machines that each can send 100 packets before their own
         // or any framework limits are applied (by design, see
-        // allowed_padding_packets) trigger transition to get the loop going
+        // allowed_decoy_packets) trigger transition to get the loop going
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
 
-        // we expect 100 padding actions per machine
+        // we expect 100 decoy actions per machine
         for _ in 0..100 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::SendPadding {
+                Some(TriggerAction::SendDecoyTraffic {
                     timeout: Duration::from_micros(2),
-                    amount: 1,
+                    n: 1,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -2333,9 +2335,9 @@ mod tests {
             );
             assert_eq!(
                 f.actions[1],
-                Some(TriggerAction::SendPadding {
+                Some(TriggerAction::SendDecoyTraffic {
                     timeout: Duration::from_micros(2),
-                    amount: 1,
+                    n: 1,
                     bypass: false,
                     replace: false,
                     machine: MachineId(1),
@@ -2343,10 +2345,10 @@ mod tests {
             );
             _ = f.trigger_events(
                 &[
-                    TriggerEvent::PaddingSent {
+                    TriggerEvent::DecoySent {
                         machine: MachineId(0),
                     },
-                    TriggerEvent::PaddingSent {
+                    TriggerEvent::DecoySent {
                         machine: MachineId(1),
                     },
                     TriggerEvent::TunnelSent,
@@ -2367,12 +2369,12 @@ mod tests {
         assert_eq!(f.actions[1], None);
 
         // in sync?
-        assert_eq!(f.runtime[0].padding_sent, f.runtime[1].padding_sent);
-        assert_eq!(f.runtime[0].padding_sent, 100);
+        assert_eq!(f.runtime[0].decoys_sent, f.runtime[1].decoys_sent);
+        assert_eq!(f.runtime[0].decoys_sent, 100);
 
-        // OK, so we've sent in total 2*100*mtu of padding using two machines. This
-        // means that we should need to send at least 2*100*mtu + 1 bytes before
-        // padding is scheduled again
+        // OK, so we've sent in total 2*100 decoys using two machines. This
+        // means that we should need to send at least 2*100 + 1 packets before a
+        // decoy is scheduled again
         for _ in 0..200 {
             _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
             assert_eq!(f.actions[0], None);
@@ -2384,9 +2386,9 @@ mod tests {
 
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(2),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(0),
@@ -2394,9 +2396,9 @@ mod tests {
         );
         assert_eq!(
             f.actions[1],
-            Some(TriggerAction::SendPadding {
+            Some(TriggerAction::SendDecoyTraffic {
                 timeout: Duration::from_micros(2),
-                amount: 1,
+                n: 1,
                 bypass: false,
                 replace: false,
                 machine: MachineId(1),
@@ -2764,8 +2766,8 @@ mod tests {
 
     #[test]
     fn framework_machine_sampled_limit() {
-        // we create a machine that samples a padding limit of 4 padding sent,
-        // then should be prevented from padding further by transitioning to
+        // we create a machine that samples a decoy limit of 4 decoys sent, then
+        // should be prevented from sending further decoys by transitioning to
         // self
 
         // state 0
@@ -2776,10 +2778,10 @@ mod tests {
 
         // state 1
         let mut s1 = State::new(enum_map! {
-            Event::PaddingSent => vec![Trans(1, 1.0)],
+            Event::DecoySent => vec![Trans(1, 1.0)],
         _ => vec![],
         });
-        s1.action = Some(Action::SendPadding {
+        s1.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2790,7 +2792,7 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 1.0,
                     high: 1.0,
@@ -2815,18 +2817,18 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        // trigger self to start the padding
+        // trigger self to start the decoy sending
         _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
 
         assert_eq!(f.runtime[0].state_limit, 4);
 
-        // verify that we can send 4 padding
+        // verify that we can send 4 decoys
         for _ in 0..4 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::SendPadding {
+                Some(TriggerAction::SendDecoyTraffic {
                     timeout: Duration::from_micros(1),
-                    amount: 1,
+                    n: 1,
                     bypass: false,
                     replace: false,
                     machine: MachineId(0),
@@ -2834,18 +2836,18 @@ mod tests {
             );
             current_time = current_time.add(Duration::from_micros(1));
             _ = f.trigger_events(
-                &[TriggerEvent::PaddingSent {
+                &[TriggerEvent::DecoySent {
                     machine: MachineId(0),
                 }],
                 current_time,
             );
         }
 
-        // padding accounting correct
-        assert_eq!(f.runtime[0].padding_sent, 4);
+        // decoy accounting correct
+        assert_eq!(f.runtime[0].decoys_sent, 4);
         assert_eq!(f.runtime[0].normal_sent, 1);
 
-        // limit should be reached after 4 padding, blocking next action
+        // limit should be reached after 4 decoys, blocking next action
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].state_limit, 0);
     }

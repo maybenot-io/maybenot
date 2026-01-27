@@ -342,10 +342,10 @@ mod tests {
         states.push(start_state);
 
         let mut padding_state = State::new(enum_map! {
-            Event::PaddingSent => vec![Trans(0, 1.0)],
+            Event::DecoySent => vec![Trans(0, 1.0)],
             _ => vec![],
         });
-        padding_state.action = Some(Action::SendPadding {
+        padding_state.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -356,7 +356,7 @@ mod tests {
                 start: 5_000_000.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 0.0,
                     high: 0.0,
@@ -387,10 +387,10 @@ mod tests {
         states.push(start_state);
 
         let mut padding_state = State::new(enum_map! {
-            Event::PaddingSent => vec![Trans(1, 1.0)],
+            Event::DecoySent => vec![Trans(1, 1.0)],
             _ => vec![],
         });
-        padding_state.action = Some(Action::SendPadding {
+        padding_state.action = Some(Action::SendDecoyTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -401,7 +401,7 @@ mod tests {
                 start: 1_000_000.0,
                 max: 0.0,
             },
-            amount: Dist {
+            n: Dist {
                 dist: DistType::Uniform {
                     low: 0.0,
                     high: 0.0,

@@ -31,7 +31,7 @@ pub(crate) fn random_machine<R: Rng>(
     min_action_timeout: RangeInclusive<f64>,
     rng: &mut R,
 ) -> Machine {
-    let allowed_padding_packets = if fixed_budget {
+    let allowed_decoy_packets = if fixed_budget {
         let p = rng_range!(rng, count_point);
         rng.random_range(0..=p)
     } else {
@@ -43,7 +43,7 @@ pub(crate) fn random_machine<R: Rng>(
     } else {
         0
     };
-    let max_padding_frac = if frac_limit {
+    let max_decoy_frac = if frac_limit {
         round_f64(rng.random_range(0.0..=1.0))
     } else {
         0.0
@@ -69,8 +69,8 @@ pub(crate) fn random_machine<R: Rng>(
             .collect();
         if check_machine_states(&states) {
             let m = Machine::new(
-                allowed_padding_packets,
-                max_padding_frac,
+                allowed_decoy_packets,
+                max_decoy_frac,
                 allowed_blocked_microsec,
                 max_blocking_frac,
                 states,
@@ -114,12 +114,12 @@ pub fn random_state<R: Rng>(
         ))
     };
 
-    // enforce the minimum action timeout for blocking and padding actions
+    // enforce the minimum action timeout for blocking and decoy actions
     match action {
         Some(Action::BlockOutgoing {
             ref mut timeout, ..
         })
-        | Some(Action::SendPadding {
+        | Some(Action::SendDecoyTraffic {
             ref mut timeout, ..
         }) => {
             let min = rng_range!(rng, min_action_timeout);
@@ -145,7 +145,7 @@ pub fn random_state<R: Rng>(
 
     let action_has_limit = action.is_some()
         && match action.as_ref().unwrap() {
-            Action::SendPadding { limit, .. }
+            Action::SendDecoyTraffic { limit, .. }
             | Action::BlockOutgoing { limit, .. }
             | Action::UpdateTimer { limit, .. } => limit.is_some(),
             _ => false,
@@ -269,7 +269,7 @@ pub fn random_action<R: Rng>(
     if expressive && blocking {
         return match rng.random_range(0..4) {
             0 => random_action_cancel(rng),
-            1 => random_action_padding(count_point, duration_point, rng),
+            1 => random_action_decoy(count_point, duration_point, rng),
             2 => random_action_blocking(count_point, duration_point, expressive, rng),
             3 => random_action_timer(count_point, duration_point, rng),
             _ => unreachable!(),
@@ -278,19 +278,19 @@ pub fn random_action<R: Rng>(
     if expressive && !blocking {
         return match rng.random_range(0..3) {
             0 => random_action_cancel(rng),
-            1 => random_action_padding(count_point, duration_point, rng),
+            1 => random_action_decoy(count_point, duration_point, rng),
             2 => random_action_timer(count_point, duration_point, rng),
             _ => unreachable!(),
         };
     }
     if blocking {
         return match rng.random_range(0..2) {
-            0 => random_action_padding(count_point, duration_point, rng),
+            0 => random_action_decoy(count_point, duration_point, rng),
             1 => random_action_blocking(count_point, duration_point, expressive, rng),
             _ => unreachable!(),
         };
     }
-    random_action_padding(count_point, duration_point, rng)
+    random_action_decoy(count_point, duration_point, rng)
 }
 
 fn random_action_cancel<R: Rng>(rng: &mut R) -> Action {
@@ -306,13 +306,13 @@ fn random_action_cancel<R: Rng>(rng: &mut R) -> Action {
     }
 }
 
-fn random_action_padding<R: Rng>(count_point: u64, duration_point: f64, rng: &mut R) -> Action {
-    Action::SendPadding {
+fn random_action_decoy<R: Rng>(count_point: u64, duration_point: f64, rng: &mut R) -> Action {
+    Action::SendDecoyTraffic {
         bypass: rng.random_bool(0.5),
         replace: rng.random_bool(0.5),
         timeout: random_timeout(duration_point, rng),
         // TODO/FIXME: randomize this later properly
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,

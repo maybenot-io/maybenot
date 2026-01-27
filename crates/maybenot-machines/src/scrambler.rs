@@ -89,10 +89,10 @@ pub fn scrambler_client() -> Vec<Machine> {
 
     let mut padding = State::new(enum_map! {
         // PaddingSent --> CONST (100%)
-        Event::PaddingSent => vec![Trans(2, 1.0)],
+        Event::DecoySent => vec![Trans(2, 1.0)],
        _ => vec![],
     });
-    padding.action = Some(Action::SendPadding {
+    padding.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -103,7 +103,7 @@ pub fn scrambler_client() -> Vec<Machine> {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -191,12 +191,12 @@ fn generate_block_state() -> State {
 fn generate_min_state(interval: f64, min_count: f64) -> State {
     let mut min = State::new(enum_map! {
         // PaddingSent --> MIN (100%)
-        Event::PaddingSent => vec![Trans(MIN_STATE_INDEX, 1.0)],
+        Event::DecoySent => vec![Trans(MIN_STATE_INDEX, 1.0)],
         // LimitReached --> R_1 (100%)
         Event::LimitReached => vec![Trans(RIGHT_STATE_INDEX, 1.0)],
        _ => vec![],
     });
-    min.action = Some(Action::SendPadding {
+    min.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -207,7 +207,7 @@ fn generate_min_state(interval: f64, min_count: f64) -> State {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -233,7 +233,7 @@ fn generate_left_state(index: usize, interval: f64, min_trail: f64, max_trail: f
     let mut left = if index == 0 {
         State::new(enum_map! {
             // PaddingSent --> L_{index} (100%)
-            Event::PaddingSent => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
+            Event::DecoySent => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
             // NormalSent --> R_{index} (100%)
             Event::NormalSent => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
             // LimitReached --> START (100%)
@@ -245,7 +245,7 @@ fn generate_left_state(index: usize, interval: f64, min_trail: f64, max_trail: f
     } else {
         State::new(enum_map! {
             // PaddingSent --> L_{index} (100%)
-            Event::PaddingSent => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
+            Event::DecoySent => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
             // NormalSent --> R_{index} (100%)
             Event::NormalSent => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
             // LimitReached --> START (100%)
@@ -254,7 +254,7 @@ fn generate_left_state(index: usize, interval: f64, min_trail: f64, max_trail: f
         })
     };
 
-    left.action = Some(Action::SendPadding {
+    left.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -265,7 +265,7 @@ fn generate_left_state(index: usize, interval: f64, min_trail: f64, max_trail: f
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -291,7 +291,7 @@ fn generate_right_state(index: usize, interval: f64, min_trail: f64, max_trail: 
     let mut right = if index == 0 {
         State::new(enum_map! {
             // PaddingSent --> R_{index} (100%)
-            Event::PaddingSent => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
+            Event::DecoySent => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
             // NormalSent --> L_{index} (100%)
             Event::NormalSent => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
             // LimitReached --> START (100%)
@@ -303,7 +303,7 @@ fn generate_right_state(index: usize, interval: f64, min_trail: f64, max_trail: 
     } else {
         State::new(enum_map! {
             // PaddingSent --> R_{index} (100%)
-            Event::PaddingSent => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
+            Event::DecoySent => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
             // NormalSent --> L_{index} (100%)
             Event::NormalSent => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
             // LimitReached --> START (100%)
@@ -312,7 +312,7 @@ fn generate_right_state(index: usize, interval: f64, min_trail: f64, max_trail: 
         })
     };
 
-    right.action = Some(Action::SendPadding {
+    right.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -323,7 +323,7 @@ fn generate_right_state(index: usize, interval: f64, min_trail: f64, max_trail: 
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -367,7 +367,7 @@ fn generate_count_left_state(count: f64) -> State {
        _ => vec![],
     });
 
-    left.action = Some(Action::SendPadding {
+    left.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -378,7 +378,7 @@ fn generate_count_left_state(count: f64) -> State {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -411,7 +411,7 @@ fn generate_count_right_state(count: f64) -> State {
        _ => vec![],
     });
 
-    right.action = Some(Action::SendPadding {
+    right.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -422,7 +422,7 @@ fn generate_count_right_state(count: f64) -> State {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,

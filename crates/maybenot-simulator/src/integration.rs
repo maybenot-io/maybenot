@@ -7,12 +7,12 @@ use std::{collections::HashMap, error::Error, time::Duration};
 #[derive(Clone, Debug)]
 pub struct Integration {
     /// The *action* delay is the time between the integration taking action and
-    /// the action happening. For example, if a padding packet is to be sent,
-    /// user space might need to signal to kernel space to craft one. NOTE: we
-    /// assume that the PaddingSent event is triggered directly as padding is
-    /// sent from Maybenot, while we assume that the BlockingBegin event is
-    /// triggered when the blocking actually begins in the protocol and the
-    /// event is transported with a reporting delay.
+    /// the action happening. For example, if a decoy packet is to be sent, user
+    /// space might need to signal to kernel space to craft one. NOTE: we assume
+    /// that the DecoySent event is triggered directly as decoy is sent from
+    /// Maybenot, while we assume that the BlockingBegin event is triggered when
+    /// the blocking actually begins in the protocol and the event is
+    /// transported with a reporting delay.
     pub action_delay: BinDist,
     /// The *reporting* delay is the time between an event being created by the
     /// integrated protocol and the event being reported (trigger_events) to
@@ -23,7 +23,7 @@ pub struct Integration {
     /// a scheduled action. For example, suppose an action is scheduled for time
     /// T. In that case, the trigger delay is added to T. This is important for
     /// capturing async integrations, where a zero timeout on an action to send
-    /// padding would still take some (tiny) time to execute.
+    /// decoy would still take some (tiny) time to execute.
     pub trigger_delay: BinDist,
 }
 

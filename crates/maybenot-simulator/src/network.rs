@@ -12,7 +12,7 @@ use maybenot::{Machine, TriggerEvent};
 
 use crate::{
     RngSource, SimEvent, SimState,
-    delay::{agg_delay_on_padding_bypass_replace, should_delayed_packet_prop_agg_delay},
+    delay::{agg_delay_on_decoy_bypass_replace, should_delayed_packet_prop_agg_delay},
     queue::SimQueue,
 };
 
@@ -249,7 +249,7 @@ impl WindowCount {
 // This is the only place where the simulator simulates the entire network
 // between the client and the server.
 //
-// Queued normal or padding packets create the corresponding sent packet events.
+// Queued normal or decoy packets create the corresponding sent packet events.
 // Here, we could simulate the egress queue of the network stack. We assume that
 // it is always possible to turn a queued packet into a sent packet, but that
 // sending a packet can be blocked (dealt with by the simulation of blocking in
@@ -259,8 +259,8 @@ impl WindowCount {
 // other side, simulating the network up until the point where the packet is
 // received. We current do not have a receiver-side queue. TODO?
 //
-// For sending padding, in principle we treat it like a normal packet, but we
-// need to consider the replace flag.
+// For sending decoy traffic, in principle we treat it like a normal packet, but
+// we need to consider the replace flag.
 //
 // Returns true if there was network activity (i.e., a packet was sent or
 // received), false otherwise.
@@ -283,7 +283,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 time: next.time,
                 integration_delay: next.integration_delay,
                 client: next.client,
-                contains_padding: false,
+                contains_decoy: false,
                 bypass: false,
                 replace: false,
                 debug_note: None,
@@ -291,25 +291,25 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
             false
         }
         // here we simulate sending the packet into the tunnel
-        TriggerEvent::PaddingSent { .. } => {
+        TriggerEvent::DecoySent { .. } => {
             if next.replace {
                 // replace flag is set: if we have a normal packet queued up /
-                // blocked, we can replace the padding with that FIXME: here be
+                // blocked, we can replace the decoy with that FIXME: here be
                 // bugs related to integration delays
                 if let (Some(queued), qid) =
                     sq.peek_blocking(state.blocking_bypassable, next.client)
                 {
                     if queued.client == next.client
                         && TriggerEvent::TunnelSent == queued.event
-                        && !queued.contains_padding
+                        && !queued.contains_decoy
                     {
                         // two options:
-                        // 1. the padding has the bypass flag set, so we need to
+                        // 1. the decoy has the bypass flag set, so we need to
                         //    propagate the flag to the queued packet
                         // 2. the bypass flag is not set, which is also the case
                         //    for normal packets, so we do nothing
                         if !next.bypass {
-                            debug!("\treplaced padding sent with blocked queued normal @{side}");
+                            debug!("\treplaced decoy sent with blocked queued normal @{side}");
                             return false;
                         }
 
@@ -330,10 +330,10 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                         entry.bypass = true;
                         entry.replace = false;
                         debug!(
-                            "\treplaced bypassable padding sent with blocked queued normal TunnelSent @{side}"
+                            "\treplaced bypassable decoy sent with blocked queued normal TunnelSent @{side}"
                         );
                         // queue any aggregate delay caused by the blocking
-                        if let Some(block_duration) = agg_delay_on_padding_bypass_replace(
+                        if let Some(block_duration) = agg_delay_on_decoy_bypass_replace(
                             sq,
                             next.client,
                             *current_time,
@@ -358,7 +358,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 time: next.time,
                 integration_delay: next.integration_delay,
                 client: next.client,
-                contains_padding: true,
+                contains_decoy: true,
                 bypass: next.bypass,
                 replace: next.replace,
                 debug_note: None,
@@ -383,7 +383,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 }
             }
 
-            if !next.contains_padding {
+            if !next.contains_decoy {
                 // The time the event was reported to us is in next.time. We have to
                 // remove the reporting delay locally, then add a network delay and
                 // a reporting delay (at the recipient) for the recipient.
@@ -404,7 +404,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     time: reported,
                     integration_delay: reporting_delay,
                     client: !next.client,
-                    contains_padding: false,
+                    contains_decoy: false,
                     bypass: false,
                     replace: false,
                     debug_note: None,
@@ -417,7 +417,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 return true;
             }
 
-            // padding, less complicated: action delay + network + recipient
+            // decoy, less complicated: action delay + network + recipient
             // reporting delay
             let reported = next.time + next.integration_delay + network_delay + reporting_delay;
             sq.push_sim(SimEvent {
@@ -425,7 +425,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 time: reported,
                 integration_delay: reporting_delay,
                 client: !next.client,
-                contains_padding: true,
+                contains_decoy: true,
                 bypass: false,
                 replace: false,
                 debug_note: None,
@@ -438,11 +438,11 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
             true
         }
         TriggerEvent::TunnelRecv => {
-            // spawn NormalRecv or PaddingRecv
-            if next.contains_padding {
-                debug!("\tqueue {:#?}", TriggerEvent::PaddingRecv);
+            // spawn NormalRecv or DecoyRecv
+            if next.contains_decoy {
+                debug!("\tqueue {:#?}", TriggerEvent::DecoyRecv);
                 sq.push(
-                    TriggerEvent::PaddingRecv,
+                    TriggerEvent::DecoyRecv,
                     next.client,
                     true,
                     next.time,

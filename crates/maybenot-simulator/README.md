@@ -47,10 +47,10 @@ let network = Network::new(Duration::from_millis(10), None);
 // the delay to generate a queue of events at the client and server in such
 // a way that the client is ensured to get the packets in the same order and
 // at the same time as in the raw trace.
-let mut input_trace = parse_trace(raw_trace, &network);
-// A simple machine that sends one padding packet 20 milliseconds after the
+let mut input_trace = parse_trace(raw_trace, network);
+// A simple machine that sends one decoy packet 20 milliseconds after the
 // first normal packet is sent.
-let m = "02eNp1ibEJAEAIA5Nf7B3N0v1cSESwEL0m5A6YvBqSgP7WeXfM5UoBW7ICYg==";
+let m = "02eNp9ycEJACAMQ9EfF6ujeXQ/F3EEEcFDafsuIQl47YUkGPbnW2NzdWrbsucAyNsDkQ==";
 let m = Machine::from_str(m).unwrap();
 // Run the simulator with the machine at the client. Run the simulation up
 // until 100 packets have been recorded (total, client and server).
@@ -62,9 +62,9 @@ trace
     .filter(|p| p.client)
     .for_each(|p| match p.event {
         TriggerEvent::TunnelSent => {
-            if p.contains_padding {
+            if p.contains_decoy {
                 println!(
-                    "sent a padding packet at {} ms",
+                    "sent a decoy packet at {} ms",
                     (p.time - starting_time).as_millis()
                 );
             } else {
@@ -75,9 +75,9 @@ trace
             }
         }
         TriggerEvent::TunnelRecv => {
-            if p.contains_padding {
+            if p.contains_decoy {
                 println!(
-                    "received a padding packet at {} ms",
+                    "received a decoy packet at {} ms",
                     (p.time - starting_time).as_millis()
                 );
             } else {
@@ -89,22 +89,19 @@ trace
         }
         _ => {}
     });
-```
 
-Produces the following output:
-
-```bash
-sent a normal packet at 0 ms
-received a normal packet at 19 ms
-sent a padding packet at 20 ms
-sent a normal packet at 183 ms
-received a normal packet at 243 ms
-sent a normal packet at 1696 ms
-sent a normal packet at 2047 ms
-received a normal packet at 2055 ms
-sent a normal packet at 9401 ms
-sent a normal packet at 9401 ms
-received a normal packet at 9420 ms
+// Output:
+// sent a normal packet at 0 ms
+// received a normal packet at 19 ms
+// sent a decoy packet at 20 ms
+// sent a normal packet at 183 ms
+// received a normal packet at 243 ms
+// sent a normal packet at 1696 ms
+// sent a normal packet at 2047 ms
+// received a normal packet at 2055 ms
+// sent a normal packet at 9401 ms
+// sent a normal packet at 9401 ms
+// received a normal packet at 9420 ms
 ```
 
 ## Key Limitations

@@ -26,7 +26,7 @@ fn get_test_machine() -> Machine {
     let mut s1 = State::new(enum_map! {
         _ => vec![],
     });
-    s1.action = Some(Action::SendPadding {
+    s1.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -37,7 +37,7 @@ fn get_test_machine() -> Machine {
             start: 5.0 * 1000.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -103,7 +103,7 @@ fn get_0ms_delay_dist() -> BinDist {
 #[test_log::test]
 fn test_action_delay() {
     // action delay should be visible in the network trace we get from the
-    // simulator, by simply delaying padding packets by the action delay or
+    // simulator, by simply delaying decoy packets by the action delay or
     // delaying blocking to start/stop by the action delay
 
     let integration = Integration {
@@ -121,7 +121,7 @@ fn test_action_delay() {
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
     assert!(base_trace[1].event.is_event(Event::TunnelSent));
-    assert!(base_trace[1].contains_padding);
+    assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
         integration.action_delay()
@@ -130,7 +130,7 @@ fn test_action_delay() {
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
     assert!(delayed_trace_server[2].event.is_event(Event::TunnelRecv));
-    assert!(delayed_trace_server[2].contains_padding);
+    assert!(delayed_trace_server[2].contains_decoy);
     // note below that first recv is 5ms in
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
@@ -155,7 +155,7 @@ fn test_action_delay() {
 fn test_reporting_delay() {
     // reporting delay should be indirectly visible in the network trace we get
     // from the simulator, because events reported by the simulator will have a
-    // delay, resulting actions will be delayed, and the resulting padding
+    // delay, resulting actions will be delayed, and the resulting decoy
     // packets will therefore be delayed in the network trace
 
     let integration = Integration {
@@ -173,7 +173,7 @@ fn test_reporting_delay() {
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
     assert!(base_trace[1].event.is_event(Event::TunnelSent));
-    assert!(base_trace[1].contains_padding);
+    assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
         integration.reporting_delay()
@@ -182,7 +182,7 @@ fn test_reporting_delay() {
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
     assert!(delayed_trace_server[2].event.is_event(Event::TunnelRecv));
-    assert!(delayed_trace_server[2].contains_padding);
+    assert!(delayed_trace_server[2].contains_decoy);
     // note below that first recv is 5ms in
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
@@ -207,7 +207,7 @@ fn test_reporting_delay() {
 #[test_log::test]
 fn test_trigger_delay() {
     // trigger delay should be visible in the network trace we get from the
-    // simulator, by simply delaying padding packets by the trigger delay
+    // simulator, by simply delaying decoy packets by the trigger delay
 
     let integration = Integration {
         action_delay: get_0ms_delay_dist(),
@@ -225,7 +225,7 @@ fn test_trigger_delay() {
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
     assert!(base_trace[1].event.is_event(Event::TunnelSent));
-    assert!(base_trace[1].contains_padding);
+    assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
         integration.trigger_delay()
@@ -234,7 +234,7 @@ fn test_trigger_delay() {
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
     assert!(delayed_trace_server[2].event.is_event(Event::TunnelRecv));
-    assert!(delayed_trace_server[2].contains_padding);
+    assert!(delayed_trace_server[2].contains_decoy);
     // note below that first recv is 5ms in
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
@@ -273,7 +273,7 @@ fn test_action_and_reporting_delay() {
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
     assert!(base_trace[1].event.is_event(Event::TunnelSent));
-    assert!(base_trace[1].contains_padding);
+    assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
         integration.action_delay() + integration.reporting_delay()
@@ -320,7 +320,7 @@ fn test_action_reporting_and_delay() {
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
     assert!(base_trace[1].event.is_event(Event::TunnelSent));
-    assert!(base_trace[1].contains_padding);
+    assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
         integration.action_delay() + integration.reporting_delay() + integration.trigger_delay()

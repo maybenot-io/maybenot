@@ -43,7 +43,7 @@
 //! // at the same time as in the raw trace.
 //! let mut input_trace = parse_trace(raw_trace, network);
 //!
-//! // A simple machine that sends one padding packet 20 milliseconds after the
+//! // A simple machine that sends one decoy packet 20 milliseconds after the
 //! // first normal packet is sent.
 //! let m = "02eNp9ycEJACAMQ9EfF6ujeXQ/F3EEEcFDafsuIQl47YUkGPbnW2NzdWrbsucAyNsDkQ==";
 //! let m = Machine::from_str(m).unwrap();
@@ -59,9 +59,9 @@
 //!     .filter(|p| p.client)
 //!     .for_each(|p| match p.event {
 //!         TriggerEvent::TunnelSent => {
-//!             if p.contains_padding {
+//!             if p.contains_decoy {
 //!                 println!(
-//!                     "sent a padding packet at {} ms",
+//!                     "sent a decoy packet at {} ms",
 //!                     (p.time - starting_time).as_millis()
 //!                 );
 //!             } else {
@@ -72,9 +72,9 @@
 //!             }
 //!         }
 //!         TriggerEvent::TunnelRecv => {
-//!             if p.contains_padding {
+//!             if p.contains_decoy {
 //!                 println!(
-//!                     "received a padding packet at {} ms",
+//!                     "received a decoy packet at {} ms",
 //!                     (p.time - starting_time).as_millis()
 //!                 );
 //!             } else {
@@ -91,7 +91,7 @@
 //! // Output:
 //! // sent a normal packet at 0 ms
 //! // received a normal packet at 19 ms
-//! // sent a padding packet at 20 ms
+//! // sent a decoy packet at 20 ms
 //! // sent a normal packet at 183 ms
 //! // received a normal packet at 243 ms
 //! // sent a normal packet at 1696 ms
@@ -179,8 +179,8 @@ pub struct SimEvent {
     pub integration_delay: Duration,
     /// flag to track if the event is from the client
     pub client: bool,
-    /// flag to track padding or normal packet
-    pub contains_padding: bool,
+    /// flag to track decoy or normal packet
+    pub contains_decoy: bool,
     /// internal flag to mark event as bypass
     bypass: bool,
     /// internal flag to mark event as replace
@@ -192,13 +192,13 @@ pub struct SimEvent {
 /// Helper function to convert a TriggerEvent to a usize for sorting purposes.
 fn event_to_usize(e: &TriggerEvent) -> usize {
     match e {
-        // tunnel before normal before padding
+        // tunnel before normal before decoy
         TriggerEvent::TunnelSent => 0,
         TriggerEvent::NormalSent => 1,
-        TriggerEvent::PaddingSent { .. } => 2,
+        TriggerEvent::DecoySent { .. } => 2,
         TriggerEvent::TunnelRecv => 3,
         TriggerEvent::NormalRecv => 4,
-        TriggerEvent::PaddingRecv => 5,
+        TriggerEvent::DecoyRecv => 5,
         // begin before end
         TriggerEvent::BlockingBegin { .. } => 6,
         TriggerEvent::BlockingEnd => 7,
@@ -256,7 +256,7 @@ where
     pub fn new(
         machines: M,
         current_time: Instant,
-        max_padding_frac: f64,
+        max_decoy_frac: f64,
         max_blocking_frac: f64,
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
@@ -273,7 +273,7 @@ where
         Self {
             framework: Framework::new(
                 machines,
-                max_padding_frac,
+                max_decoy_frac,
                 max_blocking_frac,
                 current_time,
                 rng,
@@ -322,9 +322,9 @@ where
 /// If max_trace_length is > 0, the simulator will stop after max_trace_length
 /// events have been *simulated* by the simulator and added to the simulating
 /// output trace. Note that some machines may schedule infinite actions (e.g.,
-/// schedule new padding after sending padding), so the simulator may never
-/// stop. Use [`sim_advanced`] to set the maximum number of iterations to run
-/// the simulator for and other advanced settings.
+/// schedule new decoy packet after sending a decoy packet), so the simulator
+/// may never stop. Use [`sim_advanced`] to set the maximum number of iterations
+/// to run the simulator for and other advanced settings.
 ///
 /// If only_network_activity is true, the simulator will only append events that
 /// are related to network activity (i.e., packets sent and received) to the
@@ -362,15 +362,15 @@ pub struct SimulatorArgs {
     /// If true, only events that represent network packets are returned in the
     /// output trace.
     pub only_network_activity: bool,
-    /// The maximum fraction of padding for the client's instance of the
+    /// The maximum fraction of decoy packets for the client's instance of the
     /// Maybenot framework.
-    pub max_padding_frac_client: f64,
+    pub max_decoy_frac_client: f64,
     /// The maximum fraction of blocking for the client's instance of the
     /// Maybenot framework.
     pub max_blocking_frac_client: f64,
-    /// The maximum fraction of padding for the server's instance of the
+    /// The maximum fraction of decoy packets for the server's instance of the
     /// Maybenot framework.
-    pub max_padding_frac_server: f64,
+    pub max_decoy_frac_server: f64,
     /// The maximum fraction of blocking for the server's instance of the
     /// Maybenot framework.
     pub max_blocking_frac_server: f64,
@@ -392,9 +392,9 @@ impl SimulatorArgs {
             continue_after_all_normal_packets_processed: false,
             only_client_events: false,
             only_network_activity,
-            max_padding_frac_client: 0.0,
+            max_decoy_frac_client: 0.0,
             max_blocking_frac_client: 0.0,
-            max_padding_frac_server: 0.0,
+            max_decoy_frac_server: 0.0,
             max_blocking_frac_server: 0.0,
             insecure_rng_seed: None,
             client_integration: None,
@@ -403,9 +403,9 @@ impl SimulatorArgs {
     }
 }
 
-/// Like [`sim`], but allows to (i) set the maximum padding and blocking
-/// fractions for the client and server, (ii) specify the maximum number of
-/// iterations to run the simulator for, and (iii) only returning client events.
+/// Like [`sim`], but allows to (i) set the maximum decoy and blocking fractions
+/// for the client and server, (ii) specify the maximum number of iterations to
+/// run the simulator for, and (iii) only returning client events.
 pub fn sim_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
@@ -427,7 +427,7 @@ pub fn sim_advanced(
     let mut client = SimState::new(
         machines_client,
         current_time,
-        args.max_padding_frac_client,
+        args.max_decoy_frac_client,
         args.max_blocking_frac_client,
         args.clone().client_integration,
         args.insecure_rng_seed,
@@ -435,7 +435,7 @@ pub fn sim_advanced(
     let mut server = SimState::new(
         machines_server,
         current_time,
-        args.max_padding_frac_server,
+        args.max_decoy_frac_server,
         args.max_blocking_frac_server,
         args.clone().server_integration,
         // if we have an insecure seed, we use the next number in the sequence
@@ -523,20 +523,20 @@ pub fn sim_advanced(
                     // remove the reporting delay
                     n.time -= n.integration_delay;
                 }
-                TriggerEvent::PaddingSent { .. } => {
-                    // padding packet adds the action delay
+                TriggerEvent::DecoySent { .. } => {
+                    // decoy packet adds the action delay
                     n.time += n.integration_delay;
                 }
                 TriggerEvent::TunnelSent => {
-                    if n.contains_padding {
-                        // padding packet adds the action delay
+                    if n.contains_decoy {
+                        // decoy packet adds the action delay
                         n.time += n.integration_delay;
                     } else {
                         // normal packet removes the reporting delay
                         n.time -= n.integration_delay;
                     }
                 }
-                TriggerEvent::TunnelRecv | TriggerEvent::PaddingRecv | TriggerEvent::NormalRecv => {
+                TriggerEvent::TunnelRecv | TriggerEvent::DecoyRecv | TriggerEvent::NormalRecv => {
                     // remove the reporting delay
                     n.time -= n.integration_delay;
                 }
@@ -690,7 +690,7 @@ fn pick_next<M: AsRef<[Machine]>>(
             integration_delay: delay,
             bypass: false,
             replace: false,
-            contains_padding: false,
+            contains_decoy: false,
             debug_note: None,
         };
         if delay > Duration::default() {
@@ -797,7 +797,7 @@ fn do_internal_timer<M: AsRef<[Machine]>>(
         integration_delay: Duration::from_micros(0), // TODO: is this correct?
         bypass: false,
         replace: false,
-        contains_padding: false,
+        contains_decoy: false,
         debug_note: None,
     })
 }
@@ -850,9 +850,9 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
             // this should never happen, bug
             panic!("bug: update timer action in scheduled action");
         }
-        TriggerAction::SendPadding {
+        TriggerAction::SendDecoyTraffic {
             timeout: _,
-            amount,
+            n: amount,
             bypass,
             replace,
             machine,
@@ -867,13 +867,13 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
                 };
 
                 r.push(SimEvent {
-                    event: TriggerEvent::PaddingSent { machine },
+                    event: TriggerEvent::DecoySent { machine },
                     time: a.time,
                     integration_delay: action_delay,
                     client: is_client,
                     bypass,
                     replace,
-                    contains_padding: true,
+                    contains_decoy: true,
                     debug_note: None,
                 });
             }
@@ -919,7 +919,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
                 client: is_client,
                 bypass: event_bypass,
                 replace: false,
-                contains_padding: false,
+                contains_decoy: false,
                 debug_note: None,
             }])
         }
@@ -958,15 +958,15 @@ fn trigger_update<M: AsRef<[Machine]>>(
                     }
                 }
             }
-            TriggerAction::SendPadding {
+            TriggerAction::SendDecoyTraffic {
                 timeout,
-                amount,
+                n,
                 bypass: _,
                 replace: _,
                 machine,
             } => {
                 debug!(
-                    "\ttrigger_update(): send padding action {amount:?} {timeout:?} {machine:?}"
+                    "\ttrigger_update(): send decoy traffic action {n:?} {timeout:?} {machine:?}"
                 );
                 state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
                     action: action.clone(),
@@ -1008,7 +1008,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                         integration_delay: Duration::from_micros(0), // TODO: is this correct?
                         bypass: false,
                         replace: false,
-                        contains_padding: false,
+                        contains_decoy: false,
                         debug_note: None,
                     });
                 }

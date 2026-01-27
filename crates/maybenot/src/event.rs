@@ -12,19 +12,19 @@ use std::slice::Iter;
 /// An Event may trigger a [`State`](crate::state) transition.
 #[derive(Debug, Enum, Eq, Hash, PartialEq, Clone, Copy, Serialize, Deserialize)]
 pub enum Event {
-    /// NormalRecv is when we received a normal, non-padding packet.
+    /// NormalRecv is when we received a normal, non-decoy packet.
     NormalRecv,
-    /// PaddingRecv is when we received a padding packet.
-    PaddingRecv,
+    /// DecoyRecv is when we received a decoy packet.
+    DecoyRecv,
     /// TunnelRecv is when we received a packet in the tunnel: because it is
-    /// encrypted, we do not know if it is a normal or padding packet yet.
+    /// encrypted, we do not know if it is a normal or decoy packet yet.
     TunnelRecv,
-    /// NormalSent is when we sent a normal, non-padding packet.
+    /// NormalSent is when we sent a normal, non-decoy packet.
     NormalSent,
-    /// PaddingSent is when we sent a padding packet.
-    PaddingSent,
+    /// DecoySent is when we sent a decoy packet.
+    DecoySent,
     /// TunnelSent is when we sent a packet in the tunnel: because it is now
-    /// encrypted, we do not know if it is a normal or padding packet anymore.
+    /// encrypted, we do not know if it is a normal or decoy packet anymore.
     TunnelSent,
     /// BlockingBegin is when blocking started.
     BlockingBegin,
@@ -52,10 +52,10 @@ impl Event {
     pub fn iter() -> Iter<'static, Event> {
         static EVENTS: [Event; EVENT_NUM] = [
             NormalRecv,
-            PaddingRecv,
+            DecoyRecv,
             TunnelRecv,
             NormalSent,
-            PaddingSent,
+            DecoySent,
             TunnelSent,
             BlockingBegin,
             BlockingEnd,
@@ -77,17 +77,17 @@ impl Event {
 /// Represents an event to be triggered in the framework.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TriggerEvent {
-    /// Received non-padding packet.
+    /// Received non-decoy packet.
     ///
-    /// This event should be triggered once for each incoming non-padding
+    /// This event should be triggered once for each incoming non-decoy
     /// packet, after `TunnelRecv`, as soon as we have identified the packet as
-    /// non-padding.
+    /// non-decoy.
     NormalRecv,
-    /// Received padding packet.
+    /// Received decoy packet.
     ///
-    /// This event should be triggered once for each incoming padding packet,
-    /// after `TunnelRecv`, as soon as we have identified the packet as padding.
-    PaddingRecv,
+    /// This event should be triggered once for each incoming decoy packet,
+    /// after `TunnelRecv`, as soon as we have identified the packet as a decoy.
+    DecoyRecv,
     /// Received a complete packet in the tunnel.
     ///
     /// This event should be triggered once for each incoming packet of any
@@ -96,21 +96,21 @@ pub enum TriggerEvent {
     ///
     /// (No event should be generated for a partially read packet.)
     TunnelRecv,
-    /// Sent non-padding packet.
+    /// Sent non-decoy packet.
     ///
-    /// This event should be triggered once for each outgoing non-padding
+    /// This event should be triggered once for each outgoing non-decoy
     /// packet, as soon as we have decided put it on any internal queue.
     NormalSent,
-    /// Sent padding packet.
+    /// Sent decoy packet.
     ///
-    /// This event should be triggered once for each outgoing padding packet, as
+    /// This event should be triggered once for each outgoing decoy packet, as
     /// soon as we have decided put it on any internal queue.
-    PaddingSent { machine: MachineId },
+    DecoySent { machine: MachineId },
     /// Sent packet in the tunnel.
     ///
     /// This event should be triggered once for each outgoing packet of any
-    /// type, after that packet's `NormalSent` or `PaddingSent` event, as close
-    /// as possible to the time when it is actually written to the network.
+    /// type, after that packet's `NormalSent` or `DecoySent` event, as close as
+    /// possible to the time when it is actually written to the network.
     TunnelSent,
     /// Blocking of outgoing traffic started by the action from a machine.
     ///
@@ -140,9 +140,9 @@ impl TriggerEvent {
     pub fn is_event(&self, e: Event) -> bool {
         match self {
             TriggerEvent::NormalRecv => e == Event::NormalRecv,
-            TriggerEvent::PaddingRecv => e == Event::PaddingRecv,
+            TriggerEvent::DecoyRecv => e == Event::DecoyRecv,
             TriggerEvent::NormalSent => e == Event::NormalSent,
-            TriggerEvent::PaddingSent { .. } => e == Event::PaddingSent,
+            TriggerEvent::DecoySent { .. } => e == Event::DecoySent,
             TriggerEvent::BlockingBegin { .. } => e == Event::BlockingBegin,
             TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
             TriggerEvent::TimerBegin { .. } => e == Event::TimerBegin,
@@ -158,10 +158,10 @@ impl fmt::Display for TriggerEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TriggerEvent::NormalRecv => write!(f, "rn"),
-            TriggerEvent::PaddingRecv => write!(f, "rp"),
+            TriggerEvent::DecoyRecv => write!(f, "rp"),
             TriggerEvent::TunnelRecv => write!(f, "rt"),
             TriggerEvent::NormalSent => write!(f, "sn"),
-            TriggerEvent::PaddingSent { .. } => write!(f, "sp"),
+            TriggerEvent::DecoySent { .. } => write!(f, "sp"),
             TriggerEvent::TunnelSent => write!(f, "st"),
             TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
             TriggerEvent::BlockingEnd => write!(f, "be"),
@@ -177,9 +177,11 @@ mod tests {
     #[test]
     fn v1_events() {
         assert_eq!(Event::NormalRecv.to_string(), "NormalRecv");
-        assert_eq!(Event::PaddingRecv.to_string(), "PaddingRecv");
+        // PaddingRecv
+        assert_eq!(Event::DecoyRecv.to_string(), "DecoyRecv");
         assert_eq!(Event::NormalSent.to_string(), "NormalSent");
-        assert_eq!(Event::PaddingSent.to_string(), "PaddingSent");
+        // PaddingSent
+        assert_eq!(Event::DecoySent.to_string(), "DecoySent");
         assert_eq!(Event::BlockingBegin.to_string(), "BlockingBegin");
         assert_eq!(Event::BlockingEnd.to_string(), "BlockingEnd");
         assert_eq!(Event::LimitReached.to_string(), "LimitReached");

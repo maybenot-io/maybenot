@@ -102,8 +102,8 @@ fn update_budgets<R: RngCore>(
     for (name, range) in budgets {
         match name.as_str() {
             "abs_pad" => {
-                if machine.allowed_padding_packets == 0 || !soft {
-                    machine.allowed_padding_packets = rng.random_range(range).round() as u64;
+                if machine.allowed_decoy_packets == 0 || !soft {
+                    machine.allowed_decoy_packets = rng.random_range(range).round() as u64;
                 }
             }
             "abs_block" => {
@@ -112,8 +112,8 @@ fn update_budgets<R: RngCore>(
                 }
             }
             "max_pad" => {
-                if machine.max_padding_frac == 0.0 || !soft {
-                    machine.max_padding_frac = rng.random_range(range).clamp(0.0, 1.0);
+                if machine.max_decoy_frac == 0.0 || !soft {
+                    machine.max_decoy_frac = rng.random_range(range).clamp(0.0, 1.0);
                 }
             }
             "max_block" => {

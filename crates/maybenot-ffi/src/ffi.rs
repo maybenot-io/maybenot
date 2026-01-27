@@ -32,7 +32,7 @@ pub extern "C" fn maybenot_version() -> *const c_char {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn maybenot_start(
     machines_str: *const c_char,
-    max_padding_frac: f64,
+    max_decoy_frac: f64,
     max_blocking_frac: f64,
     out: *mut MaybeUninit<*mut MaybenotFramework>,
 ) -> MaybenotResult {
@@ -47,11 +47,11 @@ pub unsafe extern "C" fn maybenot_start(
         return MaybenotResult::MachineStringNotUtf8;
     };
 
-    let framework =
-        match MaybenotFramework::start(machines_str, max_padding_frac, max_blocking_frac) {
-            Ok(framework) => framework,
-            Err(e) => return e,
-        };
+    let framework = match MaybenotFramework::start(machines_str, max_decoy_frac, max_blocking_frac)
+    {
+        Ok(framework) => framework,
+        Err(e) => return e,
+    };
 
     // framework MUST be Sync if we are going to hand out references to it over FFI.
     // we can assert this at compile time:

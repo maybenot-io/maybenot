@@ -43,7 +43,7 @@
 //! // - A vector of zero or more machines.
 //! // - Max fractions prevent machines from causing too much overhead: note
 //! // that machines can be defined to be allowed a fixed amount of
-//! // padding/blocking, bypassing these limits until having used up their
+//! // decoy/blocking, bypassing these limits until having used up their
 //! // allowed budgets. This means that it is possible to create machines
 //! // that trigger actions to block outgoing traffic indefinitely and/or
 //! // send a lot of outgoing traffic.
@@ -51,7 +51,7 @@
 //! // below. This is exposed mainly for testing purposes (can also be used
 //! // to make the creation of some odd types of machines easier).
 //! // - A random number generator. Typically, this should be a secure
-// random number generator, like the one provided by the `rand` crate.
+//! // random number generator, like the one provided by the `rand` crate.
 //! //
 //! // The framework validates all machines (like ::From_str() above) and
 //! // verifies that the fractions are fractions, so it can return an error.
@@ -96,9 +96,9 @@
 //!                 // Cancel the specified timer (action, internal, or
 //!                 // both) for the machine in question.
 //!             }
-//!             TriggerAction::SendPadding {
+//!             TriggerAction::SendDecoyTraffic {
 //!                 timeout: _,
-//!                 amount: _,
+//!                 n: _,
 //!                 bypass: _,
 //!                 replace: _,
 //!                 machine: _,
@@ -106,27 +106,27 @@
 //!                 // Set the action timer with the specified timeout. On
 //!                 // expiry, do the following:
 //!                 //
-//!                 // 1. Send the specified amount of padding.
-//!                 // 2. Trigger TriggerEvent::PaddingSent { machine:
+//!                 // 1. Send the specified amount of decoy.
+//!                 // 2. Trigger TriggerEvent::DecoySent { machine:
 //!                 //    machine } after each packet has been sent.
 //!                 //
-//!                 // If bypass is true, then the padding MUST be sent even
+//!                 // If bypass is true, then the decoy MUST be sent even
 //!                 // if there is active blocking of outgoing traffic AND
 //!                 // the active blocking had the bypass flag set. If the
 //!                 // active blocking had bypass set to false, then the
-//!                 // padding MUST NOT be sent. This is to support
+//!                 // decoy MUST NOT be sent. This is to support
 //!                 // completely fail-closed defenses.
 //!                 //
-//!                 // If replace is true, then the padding MAY be replaced
+//!                 // If replace is true, then the decoy MAY be replaced
 //!                 // by other packet(s). The other packets could be
 //!                 // encrypted packets already queued but not already sent
-//!                 // in the tunnel, containing either padding or normal
+//!                 // in the tunnel, containing either decoy or normal
 //!                 // data (ideally, the user of the framework cannot tell,
 //!                 // because encrypted). The other data could also be
 //!                 // normal data about to be turned into normal packet(s)
-//!                 // and sent. Regardless of if the padding is replaced or
-//!                 // not, the event should still be triggered (step 2).
-//!                 // If enqueued normal data sent instead of padding, then
+//!                 // and sent. Regardless of if the decoy is replaced or
+//!                 // not, the event should still be triggered (steps 2).
+//!                 // If enqueued normal data sent instead of decoy, then
 //!                 // the NormalSent event should be triggered as well.
 //!                 //
 //!                 // Above, note the use case of having bypass and replace
@@ -139,7 +139,7 @@
 //!                 // very frequently so make effort to make it efficient
 //!                 // (typically, efficient machines will always have
 //!                 // something scheduled but try to minimize actual
-//!                 // padding sent).
+//!                 // decoy sent).
 //!             }
 //!             TriggerAction::BlockOutgoing {
 //!                 timeout: _,
@@ -150,7 +150,7 @@
 //!             } => {
 //!                 // Set an action timer with the specified timeout,
 //!                 // overwriting any existing action timer for the machine
-//!                 // (be it to block or to send padding). On expiry, do
+//!                 // (be it to block or to send decoy). On expiry, do
 //!                 // the following (all or nothing):
 //!                 //
 //!                 // 1. If no blocking is currently taking place (globally
@@ -176,7 +176,7 @@
 //!                 // If bypass is true and blocking was activated,
 //!                 // extended, or replaced in step 1, then a bypass flag
 //!                 // MUST be set and be available to check as part of
-//!                 // dealing with TriggerAction::SendPadding actions (see
+//!                 // dealing with TriggerAction::SendDecoys actions (see
 //!                 // above).
 //!             }
 //!             TriggerAction::UpdateTimer {
@@ -209,7 +209,7 @@
 //! ### Packets
 //!
 //! We assume that all traffic is sent in "packets" of uniform size, which may
-//! either be padding or non-padding ("normal").
+//! either be decoy or non-decoy ("normal").
 //!
 //! ### Tunnels
 //!
@@ -217,7 +217,7 @@
 //! way to or from the network.
 //!
 //! In the incoming direction, when we receive a packet, it is first queued on
-//! the tunnel, and then eventually processed to find out whether it is padding
+//! the tunnel, and then eventually processed to find out whether it is decoy
 //! or not.
 //!
 //! In the outgoing direction, when we generate a packet, it is encrypted ASAP,
@@ -232,10 +232,10 @@
 //!   [`TriggerAction::UpdateTimer`] and [`TriggerAction::Cancel`]. If it
 //!   expires, you will need to trigger [`TriggerEvent::TimerEnd`].
 //! - A single "action" timer, which the machine will manage via
-//!   [`TriggerAction::SendPadding`], [`TriggerAction::BlockOutgoing`], and
+//!   [`TriggerAction::SendDecoys`], [`TriggerAction::BlockOutgoing`], and
 //!   [`TriggerAction::Cancel`].
 //!   - An action to be taken if and when the "action" timer expires. This
-//!     action may be "begin blocking for a certain Duration" or "Send a padding
+//!     action may be "begin blocking for a certain Duration" or "Send a decoy
 //!     packet". (There are additional flags associated with these actions.)
 //!
 //! Additionally, for the [`Framework`] itself, you will need to track:
@@ -244,7 +244,7 @@
 //!
 //! ### Blocking
 //!
-//! In addition to sending padding, a Maybenot [`Machine`] can tell the
+//! In addition to sending decoy, a Maybenot [`Machine`] can tell the
 //! application to temporarily _block_ traffic.
 //!
 //! While traffic is blocked on a connection, no packets should ordinarily be
@@ -252,21 +252,21 @@
 //! should be queued.
 //!
 //! Traffic blocking may be "bypassable" or "non-bypassable". This difference
-//! affects whether padding packets marked with the "bypass" flag can still be
+//! affects whether decoy packets marked with the "bypass" flag can still be
 //! sent while the blocking is in effect.
 //!
 //! By cases:
 //!
-//! | Blocking       | Padding         | Action         |
+//! | Blocking       | Decoy           | Action         |
 //! | -------------- | --------------- | -------------- |
-//! | non-bypassable | none            | queue padding  |
-//! |                | bypass          | queue padding  |
-//! |                | replace         | queue padding if queue is empty |
-//! |                | bypass, replace | queue padding if queue is empty
-//! | bypassable     | none            | queue padding  |
-//! |                | bypass          | send padding immediately |
-//! |                | replace         | queue padding if queue is empty |
-//! |                | bypass, replace | send packet from queue immediately, or padding if queue is empty |
+//! | non-bypassable | none            | queue decoy  |
+//! |                | bypass          | queue decoy  |
+//! |                | replace         | queue decoy if queue is empty |
+//! |                | bypass, replace | queue decoy if queue is empty
+//! | bypassable     | none            | queue decoy  |
+//! |                | bypass          | send decoy immediately |
+//! |                | replace         | queue decoy if queue is empty |
+//! |                | bypass, replace | send packet from queue immediately, or decoy if queue is empty |
 
 pub mod action;
 pub mod constants;
@@ -320,7 +320,7 @@ mod tests {
         // - A vector of zero or more machines.
         // - Max fractions prevent machines from causing too much overhead: note
         // that machines can be defined to be allowed a fixed amount of
-        // padding/blocking, bypassing these limits until having used up their
+        // decoy/blocking, bypassing these limits until having used up their
         // allowed budgets. This means that it is possible to create machines
         // that trigger actions to block outgoing traffic indefinitely and/or
         // send a lot of outgoing traffic.
@@ -373,9 +373,9 @@ mod tests {
                         // Cancel the specified timer (action, internal, or
                         // both) for the machine in question.
                     }
-                    TriggerAction::SendPadding {
+                    TriggerAction::SendDecoyTraffic {
                         timeout: _,
-                        amount: _,
+                        n: _,
                         bypass: _,
                         replace: _,
                         machine: _,
@@ -383,27 +383,27 @@ mod tests {
                         // Set the action timer with the specified timeout. On
                         // expiry, do the following:
                         //
-                        // 1. Send the specified amount of padding.
-                        // 2. Trigger TriggerEvent::PaddingSent { machine:
+                        // 1. Send the specified amount of decoy.
+                        // 2. Trigger TriggerEvent::DecoySent { machine:
                         //    machine } after each packet has been sent.
                         //
-                        // If bypass is true, then the padding MUST be sent even
+                        // If bypass is true, then the decoy MUST be sent even
                         // if there is active blocking of outgoing traffic AND
                         // the active blocking had the bypass flag set. If the
                         // active blocking had bypass set to false, then the
-                        // padding MUST NOT be sent. This is to support
+                        // decoy MUST NOT be sent. This is to support
                         // completely fail-closed defenses.
                         //
-                        // If replace is true, then the padding MAY be replaced
+                        // If replace is true, then the decoy MAY be replaced
                         // by other packet(s). The other packets could be
                         // encrypted packets already queued but not already sent
-                        // in the tunnel, containing either padding or normal
+                        // in the tunnel, containing either decoy or normal
                         // data (ideally, the user of the framework cannot tell,
                         // because encrypted). The other data could also be
                         // normal data about to be turned into normal packet(s)
-                        // and sent. Regardless of if the padding is replaced or
+                        // and sent. Regardless of if the decoy is replaced or
                         // not, the event should still be triggered (steps 2).
-                        // If enqueued normal data sent instead of padding, then
+                        // If enqueued normal data sent instead of decoy, then
                         // the NormalSent event should be triggered as well.
                         //
                         // Above, note the use case of having bypass and replace
@@ -416,7 +416,7 @@ mod tests {
                         // very frequently so make effort to make it efficient
                         // (typically, efficient machines will always have
                         // something scheduled but try to minimize actual
-                        // padding sent).
+                        // decoy sent).
                     }
                     TriggerAction::BlockOutgoing {
                         timeout: _,
@@ -427,7 +427,7 @@ mod tests {
                     } => {
                         // Set an action timer with the specified timeout,
                         // overwriting any existing action timer for the machine
-                        // (be it to block or to send padding). On expiry, do
+                        // (be it to block or to send decoy). On expiry, do
                         // the following (all or nothing):
                         //
                         // 1. If no blocking is currently taking place (globally
@@ -453,7 +453,7 @@ mod tests {
                         // If bypass is true and blocking was activated,
                         // extended, or replaced in step 1, then a bypass flag
                         // MUST be set and be available to check as part of
-                        // dealing with TriggerAction::SendPadding actions (see
+                        // dealing with TriggerAction::SendDecoys actions (see
                         // above).
                     }
                     TriggerAction::UpdateTimer {

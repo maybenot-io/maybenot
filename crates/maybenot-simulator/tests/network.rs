@@ -105,7 +105,7 @@ fn test_blocking_packet_reordering() {
     // blocks all outgoing traffic at the client (after the first packet) and
     // then attempts to send one packet for every 3 received packets. If there
     // is real traffic queued up (from the blocking), real traffic will be sent,
-    // otherwise, a padding packet is sent.
+    // otherwise, a decoy packet is sent.
 
     // The trace is the first 40 cells (out of 5092) from a trace part of the
     // "BigEnough" dataset by Mathews et al., "SoK: A Critical Evaluation of
@@ -180,7 +180,7 @@ fn test_blocking_packet_reordering() {
     // a send is blocked again
     assert!(client_trace[3].event.is_event(Event::TunnelRecv));
     assert!(client_trace[4].event.is_event(Event::TunnelSent));
-    assert!(!client_trace[4].contains_padding);
+    assert!(!client_trace[4].contains_decoy);
 
     // two sends are blocked and queued up starting at 700ms
 
@@ -190,10 +190,10 @@ fn test_blocking_packet_reordering() {
         // likely in practice)
         assert!(event.event.is_event(Event::TunnelRecv));
     }
-    // the ratio3 machine only has time to trigger padding once, now sending the
-    // packet queued at 430ms
+    // the ratio3 machine only has time to trigger a decoy packet once, now
+    // sending the packet queued at 430ms
     assert!(client_trace[12].event.is_event(Event::TunnelSent));
-    assert!(!client_trace[12].contains_padding);
+    assert!(!client_trace[12].contains_decoy);
 
     for event in client_trace.iter().take(16).skip(13) {
         // 3 received packets, happening at the exact same time again
@@ -211,7 +211,7 @@ fn test_blocking_packet_reordering() {
     }
 
     assert!(client_trace[20].event.is_event(Event::TunnelSent));
-    assert!(!client_trace[20].contains_padding);
+    assert!(!client_trace[20].contains_decoy);
     assert!(client_trace[21].event.is_event(Event::TunnelRecv));
     assert!(client_trace[22].event.is_event(Event::TunnelRecv));
 
@@ -221,14 +221,14 @@ fn test_blocking_packet_reordering() {
     }
     // one sent is blocked
     assert!(client_trace[26].event.is_event(Event::TunnelSent));
-    assert!(!client_trace[26].contains_padding);
+    assert!(!client_trace[26].contains_decoy);
 
     // receive four packets at 3220ms
     for event in client_trace.iter().take(31).skip(27) {
         assert!(event.event.is_event(Event::TunnelRecv));
     }
     assert!(client_trace[31].event.is_event(Event::TunnelSent));
-    assert!(!client_trace[31].contains_padding);
+    assert!(!client_trace[31].contains_decoy);
 
     for event in client_trace.iter().take(35).skip(32) {
         assert!(event.event.is_event(Event::TunnelRecv));
@@ -287,10 +287,10 @@ fn ratio3_machine() -> Machine {
 
     // padding state n+2
     let mut padding_state = State::new(enum_map! {
-        Event::PaddingSent => vec![Trans(2, 1.0)],
+        Event::DecoySent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    padding_state.action = Some(Action::SendPadding {
+    padding_state.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -301,7 +301,7 @@ fn ratio3_machine() -> Machine {
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -347,7 +347,7 @@ fn blocking_machine(blocking_duration: DistType, padding_delay: DistType) -> Mac
     let mut s2 = State::new(enum_map! {
         _ => vec![],
     });
-    s2.action = Some(Action::SendPadding {
+    s2.action = Some(Action::SendDecoyTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -355,7 +355,7 @@ fn blocking_machine(blocking_duration: DistType, padding_delay: DistType) -> Mac
             start: 0.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -526,7 +526,7 @@ fn test_network_aggregate_blocking_many_packets_normal_no_delay() {
 }
 
 #[test_log::test]
-fn test_network_aggregate_padding_bypass_replace_one_packet() {
+fn test_network_aggregate_decoy_bypass_replace_one_packet() {
     // block for 100ms, pad after 5ms
     let m = blocking_machine(
         DistType::Uniform {
@@ -597,7 +597,7 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
 
     // machine only at client
     let base = "0,sn 1500,sn 2499,sn 40000,sn 40000,rn 41000,sn 41000,rn";
-    // the padding at 2000 sends packet blocked at 15000, but since 2499 is
+    // the decoy at 2000 sends packet blocked at 15000, but since 2499 is
     // within the 1000 microseconds window, no delay is added
     let result = "0,st 2000,st 40000,rt 41000,rt 100000,st 100000,st 100000,st";
     run_test_sim(
@@ -614,7 +614,7 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
 
     // machine at client and server
     let base = "0,sn 1500,sn 2499,sn 40000,sn 40000,rn 41000,sn 41500,rn 42499,rn";
-    // as above for the client, for the server the padding at 42000 sends packet
+    // as above for the client, for the server the decoy at 42000 sends packet
     // blocked at 415000, but since 42499 is within the 1000 microseconds
     // window, no delay is added
     let result = "0,st 2000,st 40000,rt 42000,rt 100000,st 100000,st 100000,st 140000,rt";
@@ -632,7 +632,7 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
 }
 
 #[test_log::test]
-fn test_network_aggregate_padding_bypass_replace_many_packets() {
+fn test_network_aggregate_decoy_bypass_replace_many_packets() {
     // block for 100ms, pad after 5ms
     let m = blocking_machine(
         DistType::Uniform {
@@ -679,7 +679,7 @@ fn test_network_aggregate_padding_bypass_replace_many_packets() {
 }
 
 #[test_log::test]
-fn test_network_aggregate_padding_bypass_replace_many_packets_window() {
+fn test_network_aggregate_decoy_bypass_replace_many_packets_window() {
     // block for 100ms, pad after 5ms
     let m = blocking_machine(
         DistType::Uniform {

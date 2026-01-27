@@ -37,7 +37,7 @@ pub fn break_pad_client() -> Vec<Machine> {
     ));
 
     // make pad state
-    states.extend(make_pad_state(
+    states.extend(make_decoy_state(
         states.len(),
         0,
         make_pareto(1.9667283364576538, 0.05282296143414936),
@@ -70,7 +70,7 @@ pub fn break_pad_server() -> Vec<Machine> {
     ));
 
     // make pad state
-    states.extend(make_pad_state(
+    states.extend(make_decoy_state(
         states.len(),
         0,
         make_pareto(7.009539453953314, -1.7523848634883286),
@@ -96,7 +96,7 @@ fn make_wait_states(start: usize, threshold: Dist) -> Vec<State> {
         Event::NormalSent => vec![Trans(start, 1.0)],
         // decrement the counter
         Event::TunnelRecv => vec![Trans(start+1, 1.0)],
-        // counter reaches zero, send padding
+        // counter reaches zero, send decoy
         Event::CounterZero => vec![Trans(start+2, 1.0)],
         _ => vec![],
     });
@@ -106,15 +106,15 @@ fn make_wait_states(start: usize, threshold: Dist) -> Vec<State> {
     states
 }
 
-fn make_pad_state(start: usize, done: usize, limit: Dist) -> Vec<State> {
+fn make_decoy_state(start: usize, done: usize, limit: Dist) -> Vec<State> {
     let mut states = vec![];
 
-    let mut pad_state = State::new(enum_map! {
-        Event::PaddingSent => vec![Trans(start, 1.0)],
+    let mut decoy_state = State::new(enum_map! {
+        Event::DecoySent => vec![Trans(start, 1.0)],
         Event::LimitReached => vec![Trans(done, 1.0)],
         _ => vec![],
     });
-    pad_state.action = Some(Action::SendPadding {
+    decoy_state.action = Some(Action::SendDecoyTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -126,7 +126,7 @@ fn make_pad_state(start: usize, done: usize, limit: Dist) -> Vec<State> {
             start: 1.0,
             max: 0.0,
         },
-        amount: Dist {
+        n: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
                 high: 0.0,
@@ -136,7 +136,7 @@ fn make_pad_state(start: usize, done: usize, limit: Dist) -> Vec<State> {
         },
         limit: Some(limit),
     });
-    states.push(pad_state);
+    states.push(decoy_state);
 
     states
 }
@@ -160,7 +160,7 @@ fn make_pareto(circpad_param1: f64, circpad_param2: f64) -> Dist {
 
     Dist {
         dist: DistType::Pareto { scale, shape },
-        // start has to be 1 to ensure we reach a limit in the padding state
+        // start has to be 1 to ensure we reach a limit in the decoy state
         start: 1.0,
         max: 0.0,
     }
