@@ -101,9 +101,7 @@ pub fn random_state<R: Rng>(
     }
 
     let transitions = match action {
-        Action::DecoyTraffic { limit: Some(_), .. } => {
-            random_transitions(num_states, true, rng)
-        }
+        Action::DecoyTraffic { limit: Some(_), .. } => random_transitions(num_states, true, rng),
         _ => random_transitions(num_states, false, rng),
     };
 
@@ -282,8 +280,8 @@ pub fn random_transitions<R: Rng>(
     // prevent dead machines)
     for e in [
         Event::NormalRecv,
-        Event::NormalSent,
-        Event::DecoySent,
+        Event::NormalQueued,
+        Event::DecoyQueued,
         Event::DecoyRecv,
         Event::LimitReached,
     ]

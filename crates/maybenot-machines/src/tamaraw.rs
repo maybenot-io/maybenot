@@ -25,7 +25,7 @@ fn make_padding_machine(p: f64) -> Machine {
     let mut states = vec![];
 
     let start = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     states.push(start);
@@ -59,7 +59,7 @@ fn make_padding_machine(p: f64) -> Machine {
 
     let mut padding = State::new(enum_map! {
         Event::BlockingEnd => vec![Trans(0, 1.0)],
-        Event::TunnelSent => vec![Trans(2, 1.0)],
+        Event::PacketSent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
     padding.action = Some(Action::DecoyTraffic {
@@ -103,8 +103,8 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
 
     // 1: set the L counter
     let mut set_counter = State::new(enum_map! {
-        Event::TunnelSent => vec![Trans(2, 1.0)],
-        Event::NormalSent => vec![Trans(3, 1.0)],
+        Event::PacketSent => vec![Trans(2, 1.0)],
+        Event::NormalQueued => vec![Trans(3, 1.0)],
         Event::TimerEnd => vec![Trans(4, 1.0)],
        _ => vec![],
     });
@@ -125,12 +125,12 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
     );
     states.push(set_counter);
 
-    // 2: dec counter on TunnelSent
+    // 2: dec counter on PacketSent
     let mut dec_counter = State::new(enum_map! {
         // refresh counter to count % L packets left for later
         Event::CounterZero=> vec![Trans(1, 1.0)],
-        Event::TunnelSent => vec![Trans(2, 1.0)],
-        Event::NormalSent => vec![Trans(3, 1.0)],
+        Event::PacketSent => vec![Trans(2, 1.0)],
+        Event::NormalQueued => vec![Trans(3, 1.0)],
         Event::TimerEnd => vec![Trans(4, 1.0)],
        _ => vec![],
     });
@@ -146,7 +146,7 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
 
     // 3: set the timer for the stop window
     let mut timer = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(3, 1.0)],
+        Event::NormalQueued => vec![Trans(3, 1.0)],
         Event::TimerEnd => vec![Trans(4, 1.0)],
        _ => vec![],
     });
@@ -166,7 +166,7 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
 
     // 4: tail state, decrement until zero to send % L total number of packets
     let mut tail = State::new(enum_map! {
-        Event::DecoySent=> vec![Trans(4, 1.0)],
+        Event::DecoyQueued=> vec![Trans(4, 1.0)],
         Event::CounterZero=> vec![Trans(5, 1.0)],
        _ => vec![],
     });

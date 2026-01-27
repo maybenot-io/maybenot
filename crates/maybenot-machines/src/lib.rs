@@ -336,13 +336,13 @@ mod tests {
         let mut states = vec![];
 
         let start_state = State::new(enum_map! {
-            Event::TunnelRecv => vec![Trans(1, 1.0)],
+            Event::PacketRecv => vec![Trans(1, 1.0)],
             _ => vec![],
         });
         states.push(start_state);
 
         let mut padding_state = State::new(enum_map! {
-            Event::DecoySent => vec![Trans(0, 1.0)],
+            Event::DecoyQueued => vec![Trans(0, 1.0)],
             _ => vec![],
         });
         padding_state.action = Some(Action::DecoyTraffic {
@@ -380,14 +380,14 @@ mod tests {
         let mut states = vec![];
 
         let start_state = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(1, 1.0)],
+            Event::NormalQueued => vec![Trans(1, 1.0)],
             Event::NormalRecv => vec![Trans(1, 1.0)],
             _ => vec![],
         });
         states.push(start_state);
 
         let mut padding_state = State::new(enum_map! {
-            Event::DecoySent => vec![Trans(1, 1.0)],
+            Event::DecoyQueued => vec![Trans(1, 1.0)],
             _ => vec![],
         });
         padding_state.action = Some(Action::DecoyTraffic {

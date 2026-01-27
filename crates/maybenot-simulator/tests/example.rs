@@ -12,7 +12,7 @@ use std::{str::FromStr, time::Duration};
 #[test_log::test]
 fn simple_machine_for_example() {
     let s0 = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
         _ => vec![],
     });
     let mut s1 = State::new(enum_map! {
@@ -88,7 +88,7 @@ fn simulator_example_use() {
         .into_iter()
         .filter(|p| p.client)
         .for_each(|p| match p.event {
-            TriggerEvent::TunnelSent => {
+            TriggerEvent::PacketSent => {
                 if p.contains_decoy {
                     println!(
                         "sent a decoy packet at {} ms",
@@ -101,7 +101,7 @@ fn simulator_example_use() {
                     );
                 }
             }
-            TriggerEvent::TunnelRecv => {
+            TriggerEvent::PacketRecv => {
                 if p.contains_decoy {
                     println!(
                         "received a decoy packet at {} ms",

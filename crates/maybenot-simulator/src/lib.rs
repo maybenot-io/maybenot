@@ -58,7 +58,7 @@
 //!     .into_iter()
 //!     .filter(|p| p.client)
 //!     .for_each(|p| match p.event {
-//!         TriggerEvent::TunnelSent => {
+//!         TriggerEvent::PacketSent => {
 //!             if p.contains_decoy {
 //!                 println!(
 //!                     "sent a decoy packet at {} ms",
@@ -71,7 +71,7 @@
 //!                 );
 //!             }
 //!         }
-//!         TriggerEvent::TunnelRecv => {
+//!         TriggerEvent::PacketRecv => {
 //!             if p.contains_decoy {
 //!                 println!(
 //!                     "received a decoy packet at {} ms",
@@ -192,11 +192,11 @@ pub struct SimEvent {
 /// Helper function to convert a TriggerEvent to a usize for sorting purposes.
 fn event_to_usize(e: &TriggerEvent) -> usize {
     match e {
-        // tunnel before normal before decoy
-        TriggerEvent::TunnelSent => 0,
-        TriggerEvent::NormalSent => 1,
-        TriggerEvent::DecoySent { .. } => 2,
-        TriggerEvent::TunnelRecv => 3,
+        // packet before normal before decoy
+        TriggerEvent::PacketSent => 0,
+        TriggerEvent::NormalQueued => 1,
+        TriggerEvent::DecoyQueued { .. } => 2,
+        TriggerEvent::PacketRecv => 3,
         TriggerEvent::NormalRecv => 4,
         TriggerEvent::DecoyRecv => 5,
         // begin before end
@@ -519,15 +519,15 @@ pub fn sim_advanced(
             // integration delays
             let mut n = next.clone();
             match next.event {
-                TriggerEvent::NormalSent => {
+                TriggerEvent::NormalQueued => {
                     // remove the reporting delay
                     n.time -= n.integration_delay;
                 }
-                TriggerEvent::DecoySent { .. } => {
+                TriggerEvent::DecoyQueued { .. } => {
                     // decoy packet adds the action delay
                     n.time += n.integration_delay;
                 }
-                TriggerEvent::TunnelSent => {
+                TriggerEvent::PacketSent => {
                     if n.contains_decoy {
                         // decoy packet adds the action delay
                         n.time += n.integration_delay;
@@ -536,7 +536,7 @@ pub fn sim_advanced(
                         n.time -= n.integration_delay;
                     }
                 }
-                TriggerEvent::TunnelRecv | TriggerEvent::DecoyRecv | TriggerEvent::NormalRecv => {
+                TriggerEvent::PacketRecv | TriggerEvent::DecoyRecv | TriggerEvent::NormalRecv => {
                     // remove the reporting delay
                     n.time -= n.integration_delay;
                 }
@@ -867,7 +867,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
                 };
 
                 r.push(SimEvent {
-                    event: TriggerEvent::DecoySent { machine },
+                    event: TriggerEvent::DecoyQueued { machine },
                     time: a.time,
                     integration_delay: action_delay,
                     client: is_client,
@@ -1059,14 +1059,15 @@ pub fn parse_trace_advanced(
             // both need to be updated below. Unfortunately, users of the
             // simulator would have to take this parsing into account as well.
             match parts[1] {
-                "s" | "sn" => {
+                // "send", "send normal", "queue normal"
+                "s" | "sn" | "nq" => {
                     // client sent at the given time
                     let reporting_delay = client
                         .map(Integration::reporting_delay)
                         .unwrap_or(Duration::from_micros(0));
                     let reported = timestamp + reporting_delay;
                     sq.push(
-                        TriggerEvent::NormalSent,
+                        TriggerEvent::NormalQueued,
                         true,
                         false,
                         reported,
@@ -1078,7 +1079,8 @@ pub fn parse_trace_advanced(
                         sent_max_pps = m;
                     }
                 }
-                "r" | "rn" => {
+                // "receive", "receive normal", "normal receive"
+                "r" | "rn" | "nr" => {
                     // sent by server delay time ago
                     let sent = timestamp - network.delay;
                     // but reported to the Maybenot framework at the server with delay
@@ -1087,7 +1089,7 @@ pub fn parse_trace_advanced(
                         .unwrap_or(Duration::from_micros(0));
                     let reported = sent + reporting_delay;
                     sq.push(
-                        TriggerEvent::NormalSent,
+                        TriggerEvent::NormalQueued,
                         false,
                         false,
                         reported,

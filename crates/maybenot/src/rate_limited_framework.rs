@@ -17,9 +17,9 @@ use std::time::Instant as StdInstant;
 /// A rate-limited wrapper around the Maybenot framework.
 ///
 /// This struct wraps a [`Framework`] and applies rate limiting to the actions
-/// returned by [`trigger_events`](Self::trigger_events). It uses a sliding window
-/// algorithm to track the rate of events and blocks actions when the rate exceeds
-/// the specified limit.
+/// returned by [`trigger_events`](Self::trigger_events). It uses a sliding
+/// window algorithm to track the rate of events and blocks actions when the
+/// rate exceeds the specified limit.
 ///
 /// The rate limiter tracks events across a 1-second sliding window, using the
 /// previous window's count and the current window's count to calculate the
@@ -36,7 +36,7 @@ use std::time::Instant as StdInstant;
 /// let framework = Framework::new(machines, 0.0, 0.0, Instant::now(), rand::rng())?;
 /// let mut rate_limited = RateLimitedFramework::new(framework);
 ///
-/// let events = [TriggerEvent::NormalSent];
+/// let events = [TriggerEvent::NormalQueued];
 /// let actions: Vec<_> = rate_limited
 ///     .trigger_events(&events, 10.0, Instant::now())
 ///     .collect();
@@ -188,7 +188,7 @@ mod tests {
 
     fn create_test_framework() -> Framework<Vec<Machine>, rand::rngs::ThreadRng, StdInstant> {
         let mut state = State::new(enum_map! {
-            Event::DecoySent => vec![Trans(0, 1.0)],
+            Event::DecoyQueued => vec![Trans(0, 1.0)],
         _ => vec![],
         });
         state.action = Some(Action::DecoyTraffic {
@@ -240,7 +240,7 @@ mod tests {
         let framework = create_test_framework();
         let mut rate_limited = RateLimitedFramework::new(framework);
 
-        let events = [TriggerEvent::DecoySent {
+        let events = [TriggerEvent::DecoyQueued {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 10.0;
@@ -258,7 +258,7 @@ mod tests {
         let framework = create_test_framework();
         let mut rate_limited = RateLimitedFramework::new(framework);
 
-        let events = [TriggerEvent::DecoySent {
+        let events = [TriggerEvent::DecoyQueued {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 0.5;
@@ -281,7 +281,7 @@ mod tests {
         rate_limited.prev = 2.0;
         rate_limited.current = 1.0;
 
-        let events = [TriggerEvent::DecoySent {
+        let events = [TriggerEvent::DecoyQueued {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 2.0;
@@ -300,7 +300,7 @@ mod tests {
         rate_limited.current = 5.0;
         let original_tick = rate_limited.tick;
 
-        let events = [TriggerEvent::DecoySent {
+        let events = [TriggerEvent::DecoyQueued {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 10.0;
@@ -322,7 +322,7 @@ mod tests {
 
         rate_limited.current = 5.0;
 
-        let events = [TriggerEvent::DecoySent {
+        let events = [TriggerEvent::DecoyQueued {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 10.0;
@@ -341,7 +341,7 @@ mod tests {
         let framework = create_test_framework();
         let mut rate_limited = RateLimitedFramework::new(framework);
 
-        let events = [TriggerEvent::DecoySent {
+        let events = [TriggerEvent::DecoyQueued {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 10.0;
@@ -365,7 +365,7 @@ mod tests {
         let framework = create_test_framework();
         let mut rate_limited = RateLimitedFramework::new(framework);
 
-        let events = [TriggerEvent::DecoySent {
+        let events = [TriggerEvent::DecoyQueued {
             machine: crate::MachineId::from_raw(0),
         }];
         let max_rate = 10.0;
@@ -386,7 +386,7 @@ mod tests {
 
         rate_limited.current = 2.0;
 
-        let events = [TriggerEvent::DecoySent {
+        let events = [TriggerEvent::DecoyQueued {
             machine: crate::MachineId::from_raw(0),
         }];
         let max_rate = 1.0;
@@ -408,7 +408,7 @@ mod tests {
         rate_limited.prev = 3.0;
         rate_limited.current = 1.0;
 
-        let events = [TriggerEvent::DecoySent {
+        let events = [TriggerEvent::DecoyQueued {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 2.5;
@@ -427,7 +427,7 @@ mod tests {
         let framework = create_test_framework();
         let mut rate_limited = RateLimitedFramework::new(framework);
 
-        let events = [TriggerEvent::DecoySent {
+        let events = [TriggerEvent::DecoyQueued {
             machine: MachineId::from_raw(0),
         }];
         let max_rate = 5.0;

@@ -61,7 +61,7 @@ trace
     .into_iter()
     .filter(|p| p.client)
     .for_each(|p| match p.event {
-        TriggerEvent::TunnelSent => {
+        TriggerEvent::PacketSent => {
             if p.contains_decoy {
                 println!(
                     "sent a decoy packet at {} ms",
@@ -74,7 +74,7 @@ trace
                 );
             }
         }
-        TriggerEvent::TunnelRecv => {
+        TriggerEvent::PacketRecv => {
             if p.contains_decoy {
                 println!(
                     "received a decoy packet at {} ms",

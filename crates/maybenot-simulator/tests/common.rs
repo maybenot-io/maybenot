@@ -68,21 +68,21 @@ pub fn make_sq(s: String, delay: Duration, starting_time: Instant, as_ms: bool) 
                 };
 
             match parts[1] {
-                "s" | "sn" => {
+                "s" | "nq" => {
                     // client sent at the given time
                     sq.push(
-                        TriggerEvent::NormalSent,
+                        TriggerEvent::NormalQueued,
                         true,
                         false,
                         timestamp,
                         integration_delay,
                     );
                 }
-                "r" | "rn" => {
+                "r" | "nr" => {
                     // sent by server delay time ago
                     let sent = timestamp - delay;
                     sq.push(
-                        TriggerEvent::NormalSent,
+                        TriggerEvent::NormalQueued,
                         false,
                         false,
                         sent,

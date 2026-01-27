@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn machine_name_generation() {
         let s0 = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(0, 1.0)],
+                 Event::DecoyQueued => vec![Trans(0, 1.0)],
              _ => vec![],
         });
 
@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn validate_machine_limits() {
         let s0 = State::new(enum_map! {
-               Event::DecoySent => vec![Trans(0, 1.0)],
+               Event::DecoyQueued => vec![Trans(0, 1.0)],
              _ => vec![],
         });
 
@@ -260,7 +260,7 @@ mod tests {
     fn validate_machine_states() {
         // out of bounds index
         let s0 = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(1, 1.0)],
+                 Event::DecoyQueued => vec![Trans(1, 1.0)],
              _ => vec![],
         });
         // machine with broken state
@@ -270,7 +270,7 @@ mod tests {
 
         // valid states should be allowed
         let s0 = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(0, 0.8)],
+                 Event::DecoyQueued => vec![Trans(0, 0.8)],
              _ => vec![],
         });
         let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0]);

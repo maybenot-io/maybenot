@@ -77,8 +77,8 @@ impl ConstraintsConfig {
             // trace by default
             if !self.include_after_last_normal.unwrap_or(false) {
                 let last_normal = trace.iter().rev().position(|event| {
-                    (matches!(event.event, TriggerEvent::TunnelSent)
-                        || matches!(event.event, TriggerEvent::TunnelRecv))
+                    (matches!(event.event, TriggerEvent::PacketSent)
+                        || matches!(event.event, TriggerEvent::PacketRecv))
                         && !event.contains_decoy
                 });
                 if let Some(last_normal) = last_normal {
@@ -201,10 +201,10 @@ fn check_load(stats: &[Stats], oh: &RangeInclusive<f64>, party: &str) -> Result<
 
 #[derive(Clone)]
 struct Stats {
-    /// sum of decoy packets sent (from TriggerEvent:TunnelSent with the decoy
+    /// sum of decoy packets sent (from TriggerEvent:PacketSent with the decoy
     /// flag)
     decoy: usize,
-    /// sum of normal packets sent (from TriggerEvent:TunnelSent without the
+    /// sum of normal packets sent (from TriggerEvent:PacketSent without the
     /// decoy flag)
     normal: usize,
     /// sum of blocking begin events
@@ -247,7 +247,7 @@ fn count_events(client: &mut Stats, server: &mut Stats, trace: &[SimEvent]) {
     // iterate over the trace and count the events for client and server
     for event in trace {
         match event.event {
-            TriggerEvent::TunnelSent => {
+            TriggerEvent::PacketSent => {
                 if event.contains_decoy {
                     if event.client {
                         client.decoy += 1;
@@ -299,7 +299,7 @@ fn get_durations(defended: &[SimEvent], base: &[Duration]) -> (Option<Duration>,
     let starting_time = defended[0].time;
     // the duration of the last normal sent packet in the defended trace for the client
     let defended_duration = defended.iter().rev().find_map(|event| {
-        if let TriggerEvent::TunnelSent = event.event {
+        if let TriggerEvent::PacketSent = event.event {
             if !event.contains_decoy && event.client {
                 return Some(event.time - starting_time);
             }
@@ -311,7 +311,7 @@ fn get_durations(defended: &[SimEvent], base: &[Duration]) -> (Option<Duration>,
     let defended_normal = defended
         .iter()
         .filter(|event| {
-            matches!(event.event, TriggerEvent::TunnelSent) && !event.contains_decoy && event.client
+            matches!(event.event, TriggerEvent::PacketSent) && !event.contains_decoy && event.client
         })
         .count();
 

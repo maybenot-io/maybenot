@@ -58,7 +58,7 @@ let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::rng()).unwrap();
 
 loop {
     // collect one or more events
-    let events = [TriggerEvent::NormalSent];
+    let events = [TriggerEvent::NormalQueued];
 
     // trigger events, schedule actions, at most one per machine
     for action in f.trigger_events(&events, Instant::now()) {

@@ -275,11 +275,11 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
     let side = if next.client { "client" } else { "server" };
 
     match next.event {
-        // here we simulate sending the packet into the tunnel
-        TriggerEvent::NormalSent => {
-            debug!("\tqueue {:#?}", TriggerEvent::TunnelSent);
+        // here we simulate sending the packet into the network
+        TriggerEvent::NormalQueued => {
+            debug!("\tqueue {:#?}", TriggerEvent::PacketSent);
             sq.push_sim(SimEvent {
-                event: TriggerEvent::TunnelSent,
+                event: TriggerEvent::PacketSent,
                 time: next.time,
                 integration_delay: next.integration_delay,
                 client: next.client,
@@ -290,8 +290,8 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
             });
             false
         }
-        // here we simulate sending the packet into the tunnel
-        TriggerEvent::DecoySent { .. } => {
+        // here we simulate sending the packet into the network
+        TriggerEvent::DecoyQueued { .. } => {
             if next.replace {
                 // replace flag is set: if we have a normal packet queued up /
                 // blocked, we can replace the decoy with that FIXME: here be
@@ -300,7 +300,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     sq.peek_blocking(state.blocking_bypassable, next.client)
                 {
                     if queued.client == next.client
-                        && TriggerEvent::TunnelSent == queued.event
+                        && TriggerEvent::PacketSent == queued.event
                         && !queued.contains_decoy
                     {
                         // two options:
@@ -330,7 +330,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                         entry.bypass = true;
                         entry.replace = false;
                         debug!(
-                            "\treplaced bypassable decoy sent with blocked queued normal TunnelSent @{side}"
+                            "\treplaced bypassable decoy sent with blocked queued normal PacketSent @{side}"
                         );
                         // queue any aggregate delay caused by the blocking
                         if let Some(block_duration) = agg_delay_on_decoy_bypass_replace(
@@ -352,9 +352,9 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 }
             }
             // nothing to replace with (or we're not replacing), so queue up
-            debug!("\tqueue {:#?}", TriggerEvent::TunnelSent);
+            debug!("\tqueue {:#?}", TriggerEvent::PacketSent);
             sq.push_sim(SimEvent {
-                event: TriggerEvent::TunnelSent,
+                event: TriggerEvent::PacketSent,
                 time: next.time,
                 integration_delay: next.integration_delay,
                 client: next.client,
@@ -365,7 +365,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
             });
             false
         }
-        TriggerEvent::TunnelSent => {
+        TriggerEvent::PacketSent => {
             let reporting_delay = recipient.reporting_delay();
             let (network_delay, baseline_delay) = network.sample(current_time, next.client);
             if let Some(pps_delay) = baseline_delay {
@@ -400,7 +400,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                     *current_time,
                 );
                 sq.push_sim(SimEvent {
-                    event: TriggerEvent::TunnelRecv,
+                    event: TriggerEvent::PacketRecv,
                     time: reported,
                     integration_delay: reporting_delay,
                     client: !next.client,
@@ -411,7 +411,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 });
                 debug!(
                     "\tqueue {:#?}, arriving at recipient in {:?}",
-                    TriggerEvent::TunnelRecv,
+                    TriggerEvent::PacketRecv,
                     reported - *current_time
                 );
                 return true;
@@ -421,7 +421,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
             // reporting delay
             let reported = next.time + next.integration_delay + network_delay + reporting_delay;
             sq.push_sim(SimEvent {
-                event: TriggerEvent::TunnelRecv,
+                event: TriggerEvent::PacketRecv,
                 time: reported,
                 integration_delay: reporting_delay,
                 client: !next.client,
@@ -432,12 +432,12 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
             });
             debug!(
                 "\tqueue {:#?}, arriving at recipient in {:?}",
-                TriggerEvent::TunnelRecv,
+                TriggerEvent::PacketRecv,
                 reported - *current_time
             );
             true
         }
-        TriggerEvent::TunnelRecv => {
+        TriggerEvent::PacketRecv => {
             // spawn NormalRecv or DecoyRecv
             if next.contains_decoy {
                 debug!("\tqueue {:#?}", TriggerEvent::DecoyRecv);

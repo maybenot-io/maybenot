@@ -290,22 +290,22 @@ where
                     self.transition(mi, Event::DecoyRecv);
                 }
             }
-            TriggerEvent::TunnelRecv => {
+            TriggerEvent::PacketRecv => {
                 // no special accounting needed
                 for mi in 0..self.runtime.len() {
-                    self.transition(mi, Event::TunnelRecv);
+                    self.transition(mi, Event::PacketRecv);
                 }
             }
-            TriggerEvent::NormalSent => {
+            TriggerEvent::NormalQueued => {
                 self.normal_sent_packets = self.normal_sent_packets.saturating_add(1);
 
                 for mi in 0..self.runtime.len() {
                     self.runtime[mi].normal_sent = self.runtime[mi].normal_sent.saturating_add(1);
 
-                    self.transition(mi, Event::NormalSent);
+                    self.transition(mi, Event::NormalQueued);
                 }
             }
-            TriggerEvent::DecoySent { machine } => {
+            TriggerEvent::DecoyQueued { machine } => {
                 self.decoys_sent_packets = self.decoys_sent_packets.saturating_add(1);
 
                 let mi = machine.into_raw();
@@ -313,17 +313,17 @@ where
                     return;
                 }
                 self.runtime[mi].decoys_sent = self.runtime[mi].decoys_sent.saturating_add(1);
-                if self.transition(mi, Event::DecoySent) == StateChange::Unchanged
+                if self.transition(mi, Event::DecoyQueued) == StateChange::Unchanged
                     && self.runtime[mi].current_state != STATE_END
                 {
                     // decrement only makes sense if we didn't change state
                     self.decrement_limit(mi);
                 }
             }
-            TriggerEvent::TunnelSent => {
-                // accounting is based on normal/decoy sent, not tunnel
+            TriggerEvent::PacketSent => {
+                // accounting is based on normal/decoy queued, not packet sent
                 for mi in 0..self.runtime.len() {
-                    self.transition(mi, Event::TunnelSent);
+                    self.transition(mi, Event::PacketSent);
                 }
             }
             TriggerEvent::BlockingBegin { machine } => {
@@ -742,9 +742,9 @@ mod tests {
         // plan: create a machine that swaps between two states, trigger one
         // then multiple events and check the resulting actions
 
-        // state 0: go to state 1 on DecoySent, pad after 10 usec
+        // state 0: go to state 1 on DecoyQueued, pad after 10 usec
         let mut s0 = State::new(enum_map! {
-            Event::DecoySent => vec![Trans(1, 1.0)],
+            Event::DecoyQueued => vec![Trans(1, 1.0)],
         _ => vec![],
         });
         s0.action = Some(Action::DecoyTraffic {
@@ -827,7 +827,7 @@ mod tests {
 
         // trigger transition to next state
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -846,7 +846,7 @@ mod tests {
         // increase time, trigger event, make sure no further action
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -870,7 +870,7 @@ mod tests {
         for _ in 0..10 {
             _ = f.trigger_events(
                 &[
-                    TriggerEvent::DecoySent {
+                    TriggerEvent::DecoyQueued {
                         machine: MachineId(0),
                     },
                     TriggerEvent::DecoyRecv,
@@ -895,7 +895,7 @@ mod tests {
                 _ = f.trigger_events(
                     &[
                         TriggerEvent::DecoyRecv,
-                        TriggerEvent::DecoySent {
+                        TriggerEvent::DecoyQueued {
                             machine: MachineId(0),
                         },
                         TriggerEvent::DecoyRecv,
@@ -915,11 +915,11 @@ mod tests {
             } else {
                 _ = f.trigger_events(
                     &[
-                        TriggerEvent::DecoySent {
+                        TriggerEvent::DecoyQueued {
                             machine: MachineId(0),
                         },
                         TriggerEvent::DecoyRecv,
-                        TriggerEvent::DecoySent {
+                        TriggerEvent::DecoyQueued {
                             machine: MachineId(0),
                         },
                     ],
@@ -941,11 +941,11 @@ mod tests {
 
     #[test]
     fn blocking_machine() {
-        // a machine that blocks for 10us, 1us after NormalSent
+        // a machine that blocks for 10us, 1us after NormalQueued
 
         // state 0
         let mut s0 = State::new(enum_map! {
-                 Event::NormalSent => vec![Trans(0, 1.0)],
+                 Event::NormalQueued => vec![Trans(0, 1.0)],
              _ => vec![],
         });
         s0.action = Some(Action::BlockOutgoing {
@@ -977,7 +977,7 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::BlockOutgoing {
@@ -1000,7 +1000,7 @@ mod tests {
 
         for _ in 0..10 {
             current_time = current_time.add(Duration::from_micros(1));
-            _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+            _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
             assert_eq!(
                 f.actions[0],
                 Some(TriggerAction::BlockOutgoing {
@@ -1016,11 +1016,11 @@ mod tests {
 
     #[test]
     fn timer_machine() {
-        // a machine that sets the timer to 1 ms after DecoySent
+        // a machine that sets the timer to 1 ms after DecoyQueued
 
         // state 0
         let mut s0 = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(1, 1.0)],
+                 Event::DecoyQueued => vec![Trans(1, 1.0)],
              _ => vec![],
         });
         s0.action = Some(Action::DecoyTraffic {
@@ -1072,7 +1072,7 @@ mod tests {
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1107,12 +1107,12 @@ mod tests {
 
     #[test]
     fn counter_machine() {
-        // count DecoySent - NormalSent with counter A
+        // count DecoyQueued - NormalQueued with counter A
         // pad and increment counter B by 4 on CounterZero
 
         // state 0
         let mut s0 = State::new(enum_map! {
-            Event::DecoySent => vec![Trans(1, 1.0)],
+            Event::DecoyQueued => vec![Trans(1, 1.0)],
             Event::CounterZero => vec![Trans(2, 1.0)],
         _ => vec![],
         });
@@ -1120,15 +1120,15 @@ mod tests {
 
         // state 1
         let mut s1 = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::NormalQueued => vec![Trans(0, 1.0)],
         _ => vec![],
         });
         s1.counter = (Some(Counter::new(Operation::Increment)), None);
 
         // state 2
         let mut s2 = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(0, 1.0)],
-            Event::DecoySent => vec![Trans(1, 1.0)],
+            Event::NormalQueued => vec![Trans(0, 1.0)],
+            Event::DecoyQueued => vec![Trans(1, 1.0)],
         _ => vec![],
         });
         s2.action = Some(Action::DecoyTraffic {
@@ -1175,7 +1175,7 @@ mod tests {
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1184,7 +1184,7 @@ mod tests {
         assert_eq!(f.runtime[0].counter_a, 1);
 
         current_time = current_time.add(Duration::from_micros(20));
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::DecoyTraffic {
@@ -1206,7 +1206,7 @@ mod tests {
 
         // state 0, decrement counter
         let mut s0 = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::NormalQueued => vec![Trans(0, 1.0)],
             Event::NormalRecv => vec![Trans(1, 1.0)],
             Event::CounterZero => vec![Trans(2, 1.0)],
         _ => vec![],
@@ -1229,7 +1229,7 @@ mod tests {
 
         // state 1, set counter
         let mut s1 = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::NormalQueued => vec![Trans(0, 1.0)],
             Event::NormalRecv => vec![Trans(1, 1.0)],
             Event::CounterZero => vec![Trans(2, 1.0)],
         _ => vec![],
@@ -1251,7 +1251,7 @@ mod tests {
 
         // state 2, pad
         let mut s2 = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::NormalQueued => vec![Trans(0, 1.0)],
             Event::NormalRecv => vec![Trans(1, 1.0)],
         _ => vec![],
         });
@@ -1285,7 +1285,7 @@ mod tests {
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         // decrement counter to 0
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_b, 0);
 
@@ -1302,7 +1302,7 @@ mod tests {
 
         // state 0, increment counter
         let mut s0 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(0, 1.0)],
+           Event::NormalQueued => vec![Trans(0, 1.0)],
            Event::NormalRecv => vec![Trans(1, 1.0)],
            _ => vec![],
         });
@@ -1324,7 +1324,7 @@ mod tests {
 
         // state 1, set counter
         let mut s1 = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::NormalQueued => vec![Trans(0, 1.0)],
             Event::NormalRecv => vec![Trans(1, 1.0)],
         _ => vec![],
         });
@@ -1355,7 +1355,7 @@ mod tests {
         assert_eq!(f.runtime[0].counter_a, u64::MAX);
 
         // try to increment counter by 1000
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(f.runtime[0].counter_a, u64::MAX);
     }
 
@@ -1366,8 +1366,8 @@ mod tests {
 
         // state 0
         let mut s0 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(0, 1.0)],
-           Event::DecoySent => vec![Trans(1, 1.0)],
+           Event::NormalQueued => vec![Trans(0, 1.0)],
+           Event::DecoyQueued => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s0.counter = (
@@ -1397,7 +1397,7 @@ mod tests {
 
         // state 1
         let mut s1 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(1, 1.0)],
+           Event::NormalQueued => vec![Trans(1, 1.0)],
            Event::CounterZero => vec![Trans(2, 1.0)],
            _ => vec![],
         });
@@ -1439,14 +1439,14 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_a, 44);
         assert_eq!(f.runtime[0].counter_b, 28);
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1456,7 +1456,7 @@ mod tests {
         assert_eq!(f.runtime[0].counter_b, 13);
 
         current_time = current_time.add(Duration::from_micros(20));
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_a, 0);
         assert_eq!(f.runtime[0].counter_b, 0);
@@ -1469,8 +1469,8 @@ mod tests {
 
         // state 0
         let mut s0 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(0, 1.0)],
-           Event::DecoySent => vec![Trans(1, 1.0)],
+           Event::NormalQueued => vec![Trans(0, 1.0)],
+           Event::DecoyQueued => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s0.counter = (
@@ -1544,14 +1544,14 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_a, 50);
         assert_eq!(f.runtime[0].counter_b, 50);
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1569,8 +1569,8 @@ mod tests {
 
         // state 0
         let mut s0 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(0, 1.0)],
-           Event::DecoySent => vec![Trans(1, 1.0)],
+           Event::NormalQueued => vec![Trans(0, 1.0)],
+           Event::DecoyQueued => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s0.counter = (
@@ -1666,14 +1666,14 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_a, 1);
         assert_eq!(f.runtime[0].counter_b, 1);
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1698,8 +1698,8 @@ mod tests {
 
         // state 0
         let mut s0 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(0, 1.0)],
-           Event::DecoySent => vec![Trans(1, 1.0)],
+           Event::NormalQueued => vec![Trans(0, 1.0)],
+           Event::DecoyQueued => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s0.counter = (
@@ -1729,7 +1729,7 @@ mod tests {
 
         // state 1
         let mut s1 = State::new(enum_map! {
-           Event::DecoySent => vec![Trans(2, 1.0)],
+           Event::DecoyQueued => vec![Trans(2, 1.0)],
            _ => vec![],
         });
         s1.counter = (
@@ -1757,14 +1757,14 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_a, 4);
         assert_eq!(f.runtime[0].counter_b, 13);
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1775,7 +1775,7 @@ mod tests {
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1792,8 +1792,8 @@ mod tests {
 
         // state 0, counters (2, 1)
         let mut s0 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(0, 1.0)],
-           Event::DecoySent => vec![Trans(1, 1.0)],
+           Event::NormalQueued => vec![Trans(0, 1.0)],
+           Event::DecoyQueued => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s0.counter = (
@@ -1814,7 +1814,7 @@ mod tests {
         // state 1, diff (-1, 0)
         let mut s1 = State::new(enum_map! {
            Event::CounterZero => vec![Trans(2, 1.0)],
-           Event::DecoySent => vec![Trans(1, 1.0)],
+           Event::DecoyQueued => vec![Trans(1, 1.0)],
            _ => vec![],
         });
         s1.counter = (Some(Counter::new(Operation::Decrement)), None);
@@ -1860,13 +1860,13 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].counter_a, 2);
         assert_eq!(f.runtime[0].counter_b, 1);
 
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1877,7 +1877,7 @@ mod tests {
         assert_eq!(f.runtime[0].state_limit, 2);
 
         _ = f.trigger_events(
-            &[TriggerEvent::DecoySent {
+            &[TriggerEvent::DecoyQueued {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1894,13 +1894,13 @@ mod tests {
     fn test_infinite_loop_counter() {
         // just to get started
         let s0 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(1, 1.0)],
+           Event::NormalQueued => vec![Trans(1, 1.0)],
            _ => vec![],
         });
 
         // set counter A to 1, B is 0
         let mut init = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(2, 1.0)],
+        Event::NormalQueued => vec![Trans(2, 1.0)],
         _ => vec![],
         });
         init.counter = (Some(Counter::new(Operation::Set)), None);
@@ -1966,14 +1966,14 @@ mod tests {
         let current_time = Instant::now();
         let mut f = Framework::new(machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
         // get into init state
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         // transition to state_a: this should not loop forever, but be limited
         // to one zeroing of each counter, get stuck in state_a (after having
         // zeroed counter b in state_b), then transition to state_pad, returning
         // one action
         assert_eq!(
             f.trigger_events(
-                &[TriggerEvent::NormalSent, TriggerEvent::NormalRecv],
+                &[TriggerEvent::NormalQueued, TriggerEvent::NormalRecv],
                 current_time
             )
             .count(),
@@ -1988,7 +1988,7 @@ mod tests {
 
         // state 0
         let s0_m0 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(STATE_SIGNAL, 1.0)],
+           Event::NormalQueued => vec![Trans(STATE_SIGNAL, 1.0)],
            Event::Signal => vec![Trans(1, 1.0)],
            _ => vec![],
         });
@@ -2031,7 +2031,7 @@ mod tests {
         let machines = vec![m0, m1];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(f.actions[0], None);
         assert_eq!(
             f.actions[1],
@@ -2051,7 +2051,7 @@ mod tests {
 
         // state 0
         let s0 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(STATE_SIGNAL, 1.0)],
+           Event::NormalQueued => vec![Trans(STATE_SIGNAL, 1.0)],
            Event::Signal => vec![Trans(1, 1.0)],
            _ => vec![],
         });
@@ -2090,7 +2090,7 @@ mod tests {
         let machines = vec![m0, m1];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::DecoyTraffic {
@@ -2119,7 +2119,7 @@ mod tests {
 
         // state 0
         let s0_m0 = State::new(enum_map! {
-           Event::NormalSent => vec![Trans(STATE_SIGNAL, 1.0)],
+           Event::NormalQueued => vec![Trans(STATE_SIGNAL, 1.0)],
            Event::Signal => vec![Trans(1, 1.0)],
            _ => vec![],
         });
@@ -2162,7 +2162,7 @@ mod tests {
         let machines = vec![m0, m1];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(
             f.actions[0],
             Some(TriggerAction::DecoyTraffic {
@@ -2187,7 +2187,7 @@ mod tests {
         let mut s0 = State::new(enum_map! {
             // we use sent for checking limits and recv as an event to check
             // without adding bytes sent
-            Event::DecoySent | Event::NormalSent | Event::NormalRecv => vec![Trans(0, 1.0)],
+            Event::DecoyQueued | Event::NormalQueued | Event::NormalRecv => vec![Trans(0, 1.0)],
             _ => vec![],
         });
         s0.action = Some(Action::DecoyTraffic {
@@ -2236,7 +2236,7 @@ mod tests {
             );
 
             _ = f.trigger_events(
-                &[TriggerEvent::DecoySent {
+                &[TriggerEvent::DecoyQueued {
                     machine: MachineId(0),
                 }],
                 current_time,
@@ -2253,12 +2253,12 @@ mod tests {
         // verify that no decoy is scheduled until we've sent the same amount
         // of bytes
         for _ in 0..100 {
-            _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+            _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
             assert_eq!(f.actions[0], None);
         }
 
         // send one byte of normal, putting us just over the limit
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
 
         assert_eq!(
             f.actions[0],
@@ -2282,7 +2282,7 @@ mod tests {
         let mut s0 = State::new(enum_map! {
             // we use sent for checking limits and recv as an event to check
             // without adding bytes sent
-            Event::DecoySent | Event::NormalSent | Event::NormalRecv => vec![Trans(0, 1.0)],
+            Event::DecoyQueued | Event::NormalQueued | Event::NormalRecv => vec![Trans(0, 1.0)],
         _ => vec![],
         });
         s0.action = Some(Action::DecoyTraffic {
@@ -2345,14 +2345,14 @@ mod tests {
             );
             _ = f.trigger_events(
                 &[
-                    TriggerEvent::DecoySent {
+                    TriggerEvent::DecoyQueued {
                         machine: MachineId(0),
                     },
-                    TriggerEvent::DecoySent {
+                    TriggerEvent::DecoyQueued {
                         machine: MachineId(1),
                     },
-                    TriggerEvent::TunnelSent,
-                    TriggerEvent::TunnelSent,
+                    TriggerEvent::PacketSent,
+                    TriggerEvent::PacketSent,
                 ],
                 current_time,
             );
@@ -2376,13 +2376,13 @@ mod tests {
         // means that we should need to send at least 2*100 + 1 packets before a
         // decoy is scheduled again
         for _ in 0..200 {
-            _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+            _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
             assert_eq!(f.actions[0], None);
             assert_eq!(f.actions[1], None);
         }
 
         // the last byte should tip it over
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
 
         assert_eq!(
             f.actions[0],
@@ -2662,7 +2662,7 @@ mod tests {
 
         // state 0, second machine
         let mut s0 = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(0, 1.0)],
+            Event::NormalQueued => vec![Trans(0, 1.0)],
         _ => vec![],
         });
         // block instantly for 1000us
@@ -2728,7 +2728,7 @@ mod tests {
         assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(2));
 
         // now cause machine 1 to start blocking
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
 
         // verify machine 1 blocks as expected
         assert_eq!(
@@ -2772,13 +2772,13 @@ mod tests {
 
         // state 0
         let s0 = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(1, 1.0)],
+            Event::NormalQueued => vec![Trans(1, 1.0)],
         _ => vec![],
         });
 
         // state 1
         let mut s1 = State::new(enum_map! {
-            Event::DecoySent => vec![Trans(1, 1.0)],
+            Event::DecoyQueued => vec![Trans(1, 1.0)],
         _ => vec![],
         });
         s1.action = Some(Action::DecoyTraffic {
@@ -2818,7 +2818,7 @@ mod tests {
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
         // trigger self to start the decoy sending
-        _ = f.trigger_events(&[TriggerEvent::NormalSent], current_time);
+        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
 
         assert_eq!(f.runtime[0].state_limit, 4);
 
@@ -2836,7 +2836,7 @@ mod tests {
             );
             current_time = current_time.add(Duration::from_micros(1));
             _ = f.trigger_events(
-                &[TriggerEvent::DecoySent {
+                &[TriggerEvent::DecoyQueued {
                     machine: MachineId(0),
                 }],
                 current_time,

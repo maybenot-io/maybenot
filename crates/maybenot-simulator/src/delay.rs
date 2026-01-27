@@ -14,11 +14,11 @@ pub fn agg_delay_on_blocking_expire(
     blocking_head: &SimEvent,
     aggregate_base_delay: Duration,
 ) -> Option<Duration> {
-    // how far into the future in the ingress queue (base events of NormalSent)
-    // to consider the blocking head event as part of a burst
+    // how far into the future in the ingress queue (base events of
+    // NormalQueued) to consider the blocking head event as part of a burst
     const BASE_WINDOW: Duration = Duration::from_millis(1);
     // the maximum duration of the hypothetical burst as part of the blocked
-    // (buffered) TunnelSent events
+    // (buffered) PacketSent events
     const BUFFER_WINDOW: Duration = Duration::from_millis(1);
 
     let (blocking, bypassable) = match is_client {

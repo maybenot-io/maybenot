@@ -54,7 +54,7 @@ pub fn transition_rng_source_benchmarks(c: &mut Criterion) {
 
     // create a state with several transition probabilities
     let state = State::new(enum_map! {
-        Event::TunnelSent => vec![
+        Event::PacketSent => vec![
             Trans(0, 0.1),
             Trans(1, 0.1),
             Trans(2, 0.1),
@@ -136,7 +136,7 @@ fn run_sim(
 
 fn sample_state<R: RngCore>(s: &State, rng: &mut R, n: usize) {
     for _ in 0..n {
-        s.sample_state(Event::TunnelSent, rng);
+        s.sample_state(Event::PacketSent, rng);
     }
 }
 

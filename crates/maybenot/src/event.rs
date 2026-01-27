@@ -16,16 +16,16 @@ pub enum Event {
     NormalRecv,
     /// DecoyRecv is when we received a decoy packet.
     DecoyRecv,
-    /// TunnelRecv is when we received a packet in the tunnel: because it is
-    /// encrypted, we do not know if it is a normal or decoy packet yet.
-    TunnelRecv,
-    /// NormalSent is when we sent a normal, non-decoy packet.
-    NormalSent,
-    /// DecoySent is when we sent a decoy packet.
-    DecoySent,
-    /// TunnelSent is when we sent a packet in the tunnel: because it is now
-    /// encrypted, we do not know if it is a normal or decoy packet anymore.
-    TunnelSent,
+    /// PacketRecv is when we received a packet: because it is encrypted, we do
+    /// not know if it is a normal or decoy packet yet.
+    PacketRecv,
+    /// NormalQueued is when we queued a normal, non-decoy packet.
+    NormalQueued,
+    /// DecoyQueued is when we queued a decoy packet.
+    DecoyQueued,
+    /// PacketSent is when we sent a packet: because it is encrypted, we do not
+    /// know if it is a normal or decoy packet.
+    PacketSent,
     /// BlockingBegin is when blocking started.
     BlockingBegin,
     /// BlockingEnd is when blocking ended.
@@ -53,10 +53,10 @@ impl Event {
         static EVENTS: [Event; EVENT_NUM] = [
             NormalRecv,
             DecoyRecv,
-            TunnelRecv,
-            NormalSent,
-            DecoySent,
-            TunnelSent,
+            PacketRecv,
+            NormalQueued,
+            DecoyQueued,
+            PacketSent,
             BlockingBegin,
             BlockingEnd,
             LimitReached,
@@ -80,38 +80,38 @@ pub enum TriggerEvent {
     /// Received non-decoy packet.
     ///
     /// This event should be triggered once for each incoming non-decoy
-    /// packet, after `TunnelRecv`, as soon as we have identified the packet as
+    /// packet, after `PacketRecv`, as soon as we have identified the packet as
     /// non-decoy.
     NormalRecv,
     /// Received decoy packet.
     ///
     /// This event should be triggered once for each incoming decoy packet,
-    /// after `TunnelRecv`, as soon as we have identified the packet as a decoy.
+    /// after `PacketRecv`, as soon as we have identified the packet as a decoy.
     DecoyRecv,
-    /// Received a complete packet in the tunnel.
+    /// Received a complete packet.
     ///
     /// This event should be triggered once for each incoming packet of any
     /// type, as soon as possible after the packet is received from the network,
     /// before the packet is queued, processed, or decrypted.
     ///
     /// (No event should be generated for a partially read packet.)
-    TunnelRecv,
+    PacketRecv,
     /// Sent non-decoy packet.
     ///
-    /// This event should be triggered once for each outgoing non-decoy
-    /// packet, as soon as we have decided put it on any internal queue.
-    NormalSent,
-    /// Sent decoy packet.
-    ///
-    /// This event should be triggered once for each outgoing decoy packet, as
-    /// soon as we have decided put it on any internal queue.
-    DecoySent { machine: MachineId },
-    /// Sent packet in the tunnel.
+    /// This event should be triggered once for each outgoing non-decoy packet,
+    /// as soon as we have decided put it on any egress queue.
+    NormalQueued,
+    /// Queued a decoy packet. This event should be triggered once for each
+    /// outgoing decoy packet, as soon as we have decided put it on any egress
+    /// queue.
+    DecoyQueued { machine: MachineId },
+    /// Sent a packet.
     ///
     /// This event should be triggered once for each outgoing packet of any
-    /// type, after that packet's `NormalSent` or `DecoySent` event, as close as
-    /// possible to the time when it is actually written to the network.
-    TunnelSent,
+    /// type, after that packet's `NormalQueued` or `DecoyQueued` event, as
+    /// close as possible to the time when the packet is actually written to the
+    /// network.
+    PacketSent,
     /// Blocking of outgoing traffic started by the action from a machine.
     ///
     /// This event should be triggered whenever the action timer for a
@@ -141,14 +141,14 @@ impl TriggerEvent {
         match self {
             TriggerEvent::NormalRecv => e == Event::NormalRecv,
             TriggerEvent::DecoyRecv => e == Event::DecoyRecv,
-            TriggerEvent::NormalSent => e == Event::NormalSent,
-            TriggerEvent::DecoySent { .. } => e == Event::DecoySent,
+            TriggerEvent::NormalQueued => e == Event::NormalQueued,
+            TriggerEvent::DecoyQueued { .. } => e == Event::DecoyQueued,
             TriggerEvent::BlockingBegin { .. } => e == Event::BlockingBegin,
             TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
             TriggerEvent::TimerBegin { .. } => e == Event::TimerBegin,
             TriggerEvent::TimerEnd { .. } => e == Event::TimerEnd,
-            TriggerEvent::TunnelSent => e == Event::TunnelSent,
-            TriggerEvent::TunnelRecv => e == Event::TunnelRecv,
+            TriggerEvent::PacketSent => e == Event::PacketSent,
+            TriggerEvent::PacketRecv => e == Event::PacketRecv,
         }
     }
 }
@@ -157,12 +157,12 @@ impl fmt::Display for TriggerEvent {
     // note that we don't share the private MachineId
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TriggerEvent::NormalRecv => write!(f, "rn"),
-            TriggerEvent::DecoyRecv => write!(f, "rd"),
-            TriggerEvent::TunnelRecv => write!(f, "rt"),
-            TriggerEvent::NormalSent => write!(f, "sn"),
-            TriggerEvent::DecoySent { .. } => write!(f, "sd"),
-            TriggerEvent::TunnelSent => write!(f, "st"),
+            TriggerEvent::NormalRecv => write!(f, "nr"),
+            TriggerEvent::NormalQueued => write!(f, "nq"),
+            TriggerEvent::DecoyRecv => write!(f, "dr"),
+            TriggerEvent::DecoyQueued { .. } => write!(f, "dq"),
+            TriggerEvent::PacketRecv => write!(f, "pr"),
+            TriggerEvent::PacketSent => write!(f, "ps"),
             TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
             TriggerEvent::BlockingEnd => write!(f, "be"),
             TriggerEvent::TimerBegin { .. } => write!(f, "tb"),
@@ -179,9 +179,10 @@ mod tests {
         assert_eq!(Event::NormalRecv.to_string(), "NormalRecv");
         // PaddingRecv
         assert_eq!(Event::DecoyRecv.to_string(), "DecoyRecv");
-        assert_eq!(Event::NormalSent.to_string(), "NormalSent");
+        // NormalSent
+        assert_eq!(Event::NormalQueued.to_string(), "NormalQueued");
         // PaddingSent
-        assert_eq!(Event::DecoySent.to_string(), "DecoySent");
+        assert_eq!(Event::DecoyQueued.to_string(), "DecoyQueued");
         assert_eq!(Event::BlockingBegin.to_string(), "BlockingBegin");
         assert_eq!(Event::BlockingEnd.to_string(), "BlockingEnd");
         assert_eq!(Event::LimitReached.to_string(), "LimitReached");
@@ -189,11 +190,15 @@ mod tests {
 
     #[test]
     fn v2_events() {
+        // TODO: expand events as we lock in v3 and write v2 parsing logic
+        // hidden behind a feature flag
         assert_eq!(Event::CounterZero.to_string(), "CounterZero");
         assert_eq!(Event::TimerBegin.to_string(), "TimerBegin");
         assert_eq!(Event::TimerEnd.to_string(), "TimerEnd");
-        assert_eq!(Event::TunnelRecv.to_string(), "TunnelRecv");
-        assert_eq!(Event::TunnelSent.to_string(), "TunnelSent");
+        // PacketRecv
+        assert_eq!(Event::PacketRecv.to_string(), "PacketRecv");
+        // PacketSent
+        assert_eq!(Event::PacketSent.to_string(), "PacketSent");
         assert_eq!(Event::Signal.to_string(), "Signal");
     }
 }

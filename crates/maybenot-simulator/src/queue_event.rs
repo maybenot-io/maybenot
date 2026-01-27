@@ -16,9 +16,10 @@ pub enum Queue {
 
 /// EventQueue represents the queue of events that are waiting to be processed
 /// in order (time-wise). The queue is split into four parts:
-/// - base: TriggerEvent::NormalSent events that are from the parsed base trace
-/// - blocking: TunnelSent events that may be blocked by blocking machines
-/// - bypassable: TunnelSent events that are blocked with bypassable blocking
+/// - base: TriggerEvent::NormalQueued events that are from the parsed base
+///   trace
+/// - blocking: PacketSent events that may be blocked by blocking machines
+/// - bypassable: PacketSent events that are blocked with bypassable blocking
 /// - internal: all other events
 #[derive(Debug, Clone)]
 pub struct EventQueue {
@@ -37,14 +38,14 @@ impl Default for EventQueue {
 impl EventQueue {
     pub fn new() -> EventQueue {
         EventQueue {
-            // TriggerEvent::NormalSent is the only event in the base trace
+            // TriggerEvent::NormalQueued is the only event in the base trace
             base: BinaryHeap::with_capacity(4096),
-            // TriggerEvent::TunnelSent is the only event that can be blocking
+            // TriggerEvent::PacketSent is the only event that can be blocking
             // or bypassable
             blocking: BinaryHeap::with_capacity(1024),
             bypassable: BinaryHeap::with_capacity(1024),
-            // all events that are not TriggerEvent::TunnelSent or
-            // TriggerEvent::NormalSent are internal
+            // all events that are not TriggerEvent::PacketSent or
+            // TriggerEvent::NormalQueued are internal
             internal: BinaryHeap::with_capacity(1024),
         }
     }
@@ -58,35 +59,35 @@ impl EventQueue {
     }
 
     /// Checks if there are no normal packets in the queue. This involves
-    /// checking the base queue for TriggerEvent::NormalSent events, the
-    /// blocking and bypassable queues for TriggerEvent::TunnelSent events
-    /// without the decoy flag, and the internal queue for any TunnelRecv
+    /// checking the base queue for TriggerEvent::NormalQueued events, the
+    /// blocking and bypassable queues for TriggerEvent::PacketSent events
+    /// without the decoy flag, and the internal queue for any PacketRecv
     /// without the decoy flag.
     pub fn no_normal_packets(&self) -> bool {
         self.base.is_empty()
             && self
                 .blocking
                 .iter()
-                .all(|e| e.event != TriggerEvent::TunnelSent && !e.contains_decoy)
+                .all(|e| e.event != TriggerEvent::PacketSent && !e.contains_decoy)
             && self
                 .bypassable
                 .iter()
-                .all(|e| e.event != TriggerEvent::TunnelSent && !e.contains_decoy)
+                .all(|e| e.event != TriggerEvent::PacketSent && !e.contains_decoy)
             && self
                 .internal
                 .iter()
-                .all(|e| e.event != TriggerEvent::TunnelRecv && !e.contains_decoy)
+                .all(|e| e.event != TriggerEvent::PacketRecv && !e.contains_decoy)
     }
 
     pub fn push(&mut self, item: SimEvent) {
         match item.event {
-            TriggerEvent::TunnelSent => match item.bypass {
+            TriggerEvent::PacketSent => match item.bypass {
                 true => self.bypassable.push(item),
                 false => self.blocking.push(item),
             },
             // from parse_trace_advanced(), the only place where we push
-            // TriggerEvent::NormalSent from a base trace
-            TriggerEvent::NormalSent => {
+            // TriggerEvent::NormalQueued from a base trace
+            TriggerEvent::NormalQueued => {
                 self.base.push(item);
             }
             _ => {

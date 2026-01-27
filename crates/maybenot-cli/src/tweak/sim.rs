@@ -399,7 +399,7 @@ fn sim_dataset<R: RngCore>(
                     let ts = &format!("{}", t.time.duration_since(starting_time).as_nanos());
 
                     match t.event {
-                        TriggerEvent::TunnelRecv => {
+                        TriggerEvent::PacketRecv => {
                             n += 1;
                             if t.contains_decoy {
                                 s.push_str(&format!("{ts},rd,514\n"));
@@ -407,7 +407,7 @@ fn sim_dataset<R: RngCore>(
                                 s.push_str(&format!("{ts},rn,514\n"));
                             }
                         }
-                        TriggerEvent::TunnelSent => {
+                        TriggerEvent::PacketSent => {
                             n += 1;
                             if t.contains_decoy {
                                 s.push_str(&format!("{ts},sd,514\n"));

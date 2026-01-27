@@ -19,7 +19,7 @@ use enum_map::enum_map;
 fn get_test_machine() -> Machine {
     // a simple machine that pads once after 5ms
     let s0 = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
         _ => vec![],
     });
 
@@ -120,7 +120,7 @@ fn test_action_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::TunnelSent));
+    assert!(base_trace[1].event.is_event(Event::PacketSent));
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -129,7 +129,7 @@ fn test_action_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(delayed_trace_server[2].event.is_event(Event::TunnelRecv));
+    assert!(delayed_trace_server[2].event.is_event(Event::PacketRecv));
     assert!(delayed_trace_server[2].contains_decoy);
     // note below that first recv is 5ms in
     assert_eq!(
@@ -172,7 +172,7 @@ fn test_reporting_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::TunnelSent));
+    assert!(base_trace[1].event.is_event(Event::PacketSent));
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -181,7 +181,7 @@ fn test_reporting_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(delayed_trace_server[2].event.is_event(Event::TunnelRecv));
+    assert!(delayed_trace_server[2].event.is_event(Event::PacketRecv));
     assert!(delayed_trace_server[2].contains_decoy);
     // note below that first recv is 5ms in
     assert_eq!(
@@ -224,7 +224,7 @@ fn test_trigger_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::TunnelSent));
+    assert!(base_trace[1].event.is_event(Event::PacketSent));
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -233,7 +233,7 @@ fn test_trigger_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(delayed_trace_server[2].event.is_event(Event::TunnelRecv));
+    assert!(delayed_trace_server[2].event.is_event(Event::PacketRecv));
     assert!(delayed_trace_server[2].contains_decoy);
     // note below that first recv is 5ms in
     assert_eq!(
@@ -272,7 +272,7 @@ fn test_action_and_reporting_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::TunnelSent));
+    assert!(base_trace[1].event.is_event(Event::PacketSent));
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -319,7 +319,7 @@ fn test_action_reporting_and_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::TunnelSent));
+    assert!(base_trace[1].event.is_event(Event::PacketSent));
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),

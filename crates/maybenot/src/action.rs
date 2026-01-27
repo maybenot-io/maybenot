@@ -44,7 +44,7 @@ pub enum Action {
     /// packets already queued to be sent at the time the decoy packet would be
     /// sent. This applies for data queued to be turned into normal (non-decoy)
     /// packets AND _any_ packet (decoy or normal) in the egress queue yet to be
-    /// sent (i.e., before the TunnelSent event is triggered). Such a packet
+    /// sent (i.e., before the PacketSent event is triggered). Such a packet
     /// could be in the queue due to ongoing blocking or just not being sent yet
     /// (e.g., due to CC). We assume that packets will be encrypted ASAP for the
     /// egress queue and we do not want to keep state around to distinguish
@@ -218,7 +218,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// packets already queued to be sent at the time the decoy packet would be
     /// sent. This applies for data queued to be turned into normal (non-decoy)
     /// packets AND _any_ packet (decoy or normal) in the egress queue yet to be
-    /// sent (i.e., before the TunnelSent event is triggered). Such a packet
+    /// sent (i.e., before the PacketSent event is triggered). Such a packet
     /// could be in the queue due to ongoing blocking or just not being sent yet
     /// (e.g., due to CC). We assume that packets will be encrypted ASAP for the
     /// egress queue and we do not want to keep state around to distinguish
@@ -231,13 +231,13 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// packet AND bypass the active blocking.
     ///
     /// For each decoy packet queued, a corresponding
-    /// [`TriggerEvent::DecoySent`](crate::TriggerEvent::DecoySent) event SHOULD
-    /// always be triggered, with a matching MachineId, even if the decoy packet
-    /// is replaced by another packet. (If the decoy packet is replaced by
-    /// queueing a _new_ normal packet, then a `NormalSent` should _also_ be
-    /// triggered, along with `DecoySent`.  If the decoy packet is "replaced" by
-    /// noting the presence of an already queued packet, then no additional
-    /// event besides `DecoySent` needs to be triggered.)
+    /// [`TriggerEvent::DecoyQueued`](crate::TriggerEvent::DecoyQueued) event
+    /// SHOULD always be triggered, with a matching MachineId, even if the decoy
+    /// packet is replaced by another packet. (If the decoy packet is replaced
+    /// by queueing a _new_ normal packet, then a `NormalQueued` should _also_
+    /// be triggered, along with `DecoyQueued`.  If the decoy packet is
+    /// "replaced" by noting the presence of an already queued packet, then no
+    /// additional event besides `DecoyQueued` needs to be triggered.)
     ///
     /// Note that, since only one action timer per machine can be pending at a
     /// time, this `SendDecoy` action should replace any currently pending

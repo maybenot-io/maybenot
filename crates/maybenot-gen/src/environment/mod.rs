@@ -162,7 +162,7 @@ impl Environment {
                 let starting_time = trace[0].time;
                 trace
                     .iter()
-                    .filter(|event| matches!(event.event, TriggerEvent::TunnelSent) && event.client)
+                    .filter(|event| matches!(event.event, TriggerEvent::PacketSent) && event.client)
                     .map(|event| event.time - starting_time)
                     .collect()
             })

@@ -9,7 +9,7 @@ pub struct Integration {
     /// The *action* delay is the time between the integration taking action and
     /// the action happening. For example, if a decoy packet is to be sent, user
     /// space might need to signal to kernel space to craft one. NOTE: we assume
-    /// that the DecoySent event is triggered directly as decoy is sent from
+    /// that the DecoyQueued event is triggered directly as decoy is sent from
     /// Maybenot, while we assume that the BlockingBegin event is triggered when
     /// the blocking actually begins in the protocol and the event is
     /// transported with a reporting delay.

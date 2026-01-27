@@ -59,7 +59,7 @@ fn test_network_bottleneck() {
     // for added_delay() due to 3 pps in the bottleneck, send 6 events right
     // away and verify increasing delay at the server when receiving the 4th to
     // 6th event
-    let input = "0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n0,sn\n";
+    let input = "0,nq\n0,nq\n0,nq\n0,nq\n0,nq\n0,nq\n";
     let network = Network::new(Duration::from_millis(3), Some(3));
     let mut sq = parse_trace(input, network);
     let args = SimulatorArgs::new(network, 20, true);
@@ -99,7 +99,7 @@ fn test_network_bottleneck() {
 fn test_blocking_packet_reordering() {
     // The purpose of this test is to test packet reordering in the simulator,
     // using bypassable blocking to create a constant-rate defense on one side
-    // of the tunnel, with significant simulated delays as a consequence.
+    // of the connection, with significant simulated delays as a consequence.
 
     // The constant-rate defense is a "ratio3 machine". The ratio3 machine
     // blocks all outgoing traffic at the client (after the first packet) and
@@ -173,13 +173,13 @@ fn test_blocking_packet_reordering() {
         .collect::<Vec<_>>();
     assert_eq!(client_trace.len(), 40);
 
-    assert!(client_trace[0].event.is_event(Event::TunnelRecv));
-    assert!(client_trace[1].event.is_event(Event::TunnelRecv));
+    assert!(client_trace[0].event.is_event(Event::PacketRecv));
+    assert!(client_trace[1].event.is_event(Event::PacketRecv));
     // the send is blocked
-    assert!(client_trace[2].event.is_event(Event::TunnelRecv));
+    assert!(client_trace[2].event.is_event(Event::PacketRecv));
     // a send is blocked again
-    assert!(client_trace[3].event.is_event(Event::TunnelRecv));
-    assert!(client_trace[4].event.is_event(Event::TunnelSent));
+    assert!(client_trace[3].event.is_event(Event::PacketRecv));
+    assert!(client_trace[4].event.is_event(Event::PacketSent));
     assert!(!client_trace[4].contains_decoy);
 
     // two sends are blocked and queued up starting at 700ms
@@ -188,50 +188,50 @@ fn test_blocking_packet_reordering() {
         // next, we have 7 received packets, happening at the exact same time
         // (thanks to the example trace aggressive truncation of timestamps, not
         // likely in practice)
-        assert!(event.event.is_event(Event::TunnelRecv));
+        assert!(event.event.is_event(Event::PacketRecv));
     }
     // the ratio3 machine only has time to trigger a decoy packet once, now
     // sending the packet queued at 430ms
-    assert!(client_trace[12].event.is_event(Event::TunnelSent));
+    assert!(client_trace[12].event.is_event(Event::PacketSent));
     assert!(!client_trace[12].contains_decoy);
 
     for event in client_trace.iter().take(16).skip(13) {
         // 3 received packets, happening at the exact same time again
-        assert!(event.event.is_event(Event::TunnelRecv));
+        assert!(event.event.is_event(Event::PacketRecv));
     }
 
-    assert!(client_trace[16].event.is_event(Event::TunnelSent));
+    assert!(client_trace[16].event.is_event(Event::PacketSent));
 
     // receive one packet at 1380ms
-    assert!(client_trace[17].event.is_event(Event::TunnelRecv));
+    assert!(client_trace[17].event.is_event(Event::PacketRecv));
 
     // receive two packets at 1680ms
     for event in client_trace.iter().take(20).skip(18) {
-        assert!(event.event.is_event(Event::TunnelRecv));
+        assert!(event.event.is_event(Event::PacketRecv));
     }
 
-    assert!(client_trace[20].event.is_event(Event::TunnelSent));
+    assert!(client_trace[20].event.is_event(Event::PacketSent));
     assert!(!client_trace[20].contains_decoy);
-    assert!(client_trace[21].event.is_event(Event::TunnelRecv));
-    assert!(client_trace[22].event.is_event(Event::TunnelRecv));
+    assert!(client_trace[21].event.is_event(Event::PacketRecv));
+    assert!(client_trace[22].event.is_event(Event::PacketRecv));
 
     // receive three packets at 2430ms
     for event in client_trace.iter().take(26).skip(23) {
-        assert!(event.event.is_event(Event::TunnelRecv));
+        assert!(event.event.is_event(Event::PacketRecv));
     }
     // one sent is blocked
-    assert!(client_trace[26].event.is_event(Event::TunnelSent));
+    assert!(client_trace[26].event.is_event(Event::PacketSent));
     assert!(!client_trace[26].contains_decoy);
 
     // receive four packets at 3220ms
     for event in client_trace.iter().take(31).skip(27) {
-        assert!(event.event.is_event(Event::TunnelRecv));
+        assert!(event.event.is_event(Event::PacketRecv));
     }
-    assert!(client_trace[31].event.is_event(Event::TunnelSent));
+    assert!(client_trace[31].event.is_event(Event::PacketSent));
     assert!(!client_trace[31].contains_decoy);
 
     for event in client_trace.iter().take(35).skip(32) {
-        assert!(event.event.is_event(Event::TunnelRecv));
+        assert!(event.event.is_event(Event::PacketRecv));
     }
 }
 
@@ -241,7 +241,7 @@ fn ratio3_machine() -> Machine {
 
     // start state 0
     let start_state = State::new(enum_map! {
-       Event::TunnelSent | Event::TunnelRecv => vec![Trans(1, 1.0)],
+       Event::PacketSent | Event::PacketRecv => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     states.push(start_state);
@@ -278,16 +278,16 @@ fn ratio3_machine() -> Machine {
     for i in 0..n {
         states.push(State::new(enum_map! {
            // to the next state
-           Event::TunnelRecv => vec![Trans(3+i, 1.0)],
+           Event::PacketRecv => vec![Trans(3+i, 1.0)],
            // something else let traffic through, back to counting
-           //Event::TunnelSent => vec![Trans(2, 1.0)],
+           //Event::PacketSent => vec![Trans(2, 1.0)],
            _ => vec![],
         }));
     }
 
     // padding state n+2
     let mut padding_state = State::new(enum_map! {
-        Event::DecoySent => vec![Trans(2, 1.0)],
+        Event::DecoyQueued => vec![Trans(2, 1.0)],
         _ => vec![],
     });
     padding_state.action = Some(Action::DecoyTraffic {
@@ -318,7 +318,7 @@ fn ratio3_machine() -> Machine {
 
 fn blocking_machine(blocking_duration: DistType, padding_delay: DistType) -> Machine {
     let s0 = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
         _ => vec![],
     });
 
@@ -384,11 +384,11 @@ fn test_network_aggregate_blocking_one_packet() {
     let delay = Duration::from_millis(10);
 
     // machine only at client
-    let base = "0,sn 1,sn 40,sn 40,rn 41,sn 41,rn";
+    let base = "0,nq 1,nq 40,nq 40,nr 41,nq 41,nr";
     // blocking at 0, delaying 1 by 4 until 5:
     // - delay goes into effect at 41 at client
     // - delay goes into effect at 31 at server
-    let result = "0,st 5,st 40,st 40,rt 45,st 45,rt";
+    let result = "0,ps 5,ps 40,ps 40,pr 45,ps 45,pr";
     run_test_sim(
         base,
         result,
@@ -402,14 +402,14 @@ fn test_network_aggregate_blocking_one_packet() {
     );
 
     // machine at client and server
-    let base = "0,sn 1,sn 30,rn 31,rn 40,sn 41,sn 41,rn 80,rn";
+    let base = "0,nq 1,nq 30,nr 31,nr 40,nq 41,nq 41,nr 80,nr";
     // @client: blocking at 0, delaying 1 by 4 until 5:
     // - delay goes into effect at 41 at client
     // - delay goes into effect at 31 at server
     // @server: blocking at 20, delaying 21 until 25
     // - delay goes into effect at 31 at client
     // - delay goes into effect at 61 at server
-    let result = "0,st 5,st 30,rt 35,rt 45,rt 48,st 49,st 88,rt";
+    let result = "0,ps 5,ps 30,pr 35,pr 45,pr 48,ps 49,ps 88,pr";
     run_test_sim(
         base,
         result,
@@ -439,11 +439,11 @@ fn test_network_aggregate_blocking_many_packets() {
     let delay = Duration::from_millis(10);
 
     // machine only at client
-    let base = "0,sn 1,sn 2,sn 2,sn 3,sn 40,sn 40,rn 42,sn 42,rn";
+    let base = "0,nq 1,nq 2,nq 2,nq 3,nq 40,nq 40,nr 42,nq 42,nr";
     // blocking at 0, delaying burst 1-2 by 3 (tail, window 1ms) until 5:
     // - delay goes into effect at 42 at client
     // - delay goes into effect at 32 at server
-    let result = "0,st 5,st 5,st 5,st 5,st 40,st 40,rt 45,st 45,rt";
+    let result = "0,ps 5,ps 5,ps 5,ps 5,ps 40,ps 40,pr 45,ps 45,pr";
     run_test_sim(
         base,
         result,
@@ -457,14 +457,14 @@ fn test_network_aggregate_blocking_many_packets() {
     );
 
     // machine at client and server
-    let base = "0,sn 1,sn 2,sn 2,sn 3,sn 29,rn 30,rn 31,rn 42,sn 80,rn";
+    let base = "0,nq 1,nq 2,nq 2,nq 3,nq 29,nr 30,nr 31,nr 42,nq 80,nr";
     // blocking at 0, delaying burst 1-2 by 3 (tail, window 1ms) until 5:
     // - delay goes into effect at 42 at client
     // - delay goes into effect at 32 at server
     // @server: blocking at 19, delaying 20-21 by 4 (tail, window 1ms) until 25
     // - delay goes into effect at 30 at client
     // - delay goes into effect at 60 at server
-    let result = "0,st 5,st 5,st 5,st 5,st 29,rt 34,rt 34,rt 49,st 87,rt";
+    let result = "0,ps 5,ps 5,ps 5,ps 5,ps 29,pr 34,pr 34,pr 49,ps 87,pr";
     run_test_sim(
         base,
         result,
@@ -494,9 +494,9 @@ fn test_network_aggregate_blocking_many_packets_normal_no_delay() {
     let delay = Duration::from_millis(10);
 
     // machine only at client
-    let base = "0,sn 4,sn 5,sn 45,sn 45,rn 47,sn 47,rn";
+    let base = "0,nq 4,nq 5,nq 45,nq 45,nr 47,nq 47,nr";
     // blocking at 0, delaying 4 BUT also 5 normal so no delay:
-    let result = "0,st 5,st 5,st 45,st 45,rt 47,st 47,rt";
+    let result = "0,ps 5,ps 5,ps 45,ps 45,pr 47,ps 47,pr";
     run_test_sim(
         base,
         result,
@@ -510,8 +510,8 @@ fn test_network_aggregate_blocking_many_packets_normal_no_delay() {
     );
 
     // machine at client and server
-    let base = "0,sn 4,sn 5,sn 45,sn 45,rn 47,sn 49,rn 50,rn";
-    let result = "0,st 5,st 5,st 45,st 45,rt 47,st 50,rt 50,rt";
+    let base = "0,nq 4,nq 5,nq 45,nq 45,nr 47,nq 49,nr 50,nr";
+    let result = "0,ps 5,ps 5,ps 45,ps 45,pr 47,ps 50,pr 50,pr";
     run_test_sim(
         base,
         result,
@@ -541,11 +541,11 @@ fn test_network_aggregate_decoy_bypass_replace_one_packet() {
     let delay = Duration::from_millis(10);
 
     // machine only at client
-    let base = "0,sn 1,sn 40,sn 40,rn 41,sn 41,rn";
+    let base = "0,nq 1,nq 40,nq 40,nr 41,nq 41,nr";
     // blocking at 0, delaying 1 by 4 until padding is sent at 5:
     // - delay goes into effect at 41 at client
     // - delay goes into effect at 31 at server
-    let result = "0,st 5,st 40,rt 45,rt 100,st 100,st";
+    let result = "0,ps 5,ps 40,pr 45,pr 100,ps 100,ps";
     run_test_sim(
         base,
         result,
@@ -559,14 +559,14 @@ fn test_network_aggregate_decoy_bypass_replace_one_packet() {
     );
 
     // machine at client and server
-    let base = "0,sn 1,sn 40,sn 40,rn 41,sn 41,rn 100,rn 100,sn";
-    // the 1,sn is delayed by 4
-    // the 100,rn is queued up at the server at 94
-    // the 40,sn is delayed until 100 (block expiry), resulting in 60 delay
-    // the 100,rn, queued up at server at 94, is sent when blocking expires at 130,
+    let base = "0,nq 1,nq 40,nq 40,nr 41,nq 41,nr 100,nr 100,nq";
+    // the 1,nq is delayed by 4
+    // the 100,nr is queued up at the server at 94
+    // the 40,nq is delayed until 100 (block expiry), resulting in 60 delay
+    // the 100,nr, queued up at server at 94, is sent when blocking expires at 130,
     // resulting in 36 delay
     // total delay: 36+4+60 = 100
-    let result = "0,st 5,st 40,rt 45,rt 100,st 100,st 140,rt 200,st";
+    let result = "0,ps 5,ps 40,pr 45,pr 100,ps 100,ps 140,pr 200,ps";
     run_test_sim(
         base,
         result,
@@ -596,10 +596,10 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
     let delay = Duration::from_millis(10);
 
     // machine only at client
-    let base = "0,sn 1500,sn 2499,sn 40000,sn 40000,rn 41000,sn 41000,rn";
+    let base = "0,nq 1500,nq 2499,nq 40000,nq 40000,nr 41000,nq 41000,nr";
     // the decoy at 2000 sends packet blocked at 15000, but since 2499 is
     // within the 1000 microseconds window, no delay is added
-    let result = "0,st 2000,st 40000,rt 41000,rt 100000,st 100000,st 100000,st";
+    let result = "0,ps 2000,ps 40000,pr 41000,pr 100000,ps 100000,ps 100000,ps";
     run_test_sim(
         base,
         result,
@@ -613,11 +613,11 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
     );
 
     // machine at client and server
-    let base = "0,sn 1500,sn 2499,sn 40000,sn 40000,rn 41000,sn 41500,rn 42499,rn";
+    let base = "0,nq 1500,nq 2499,nq 40000,nq 40000,nr 41000,nq 41500,nr 42499,nr";
     // as above for the client, for the server the decoy at 42000 sends packet
     // blocked at 415000, but since 42499 is within the 1000 microseconds
     // window, no delay is added
-    let result = "0,st 2000,st 40000,rt 42000,rt 100000,st 100000,st 100000,st 140000,rt";
+    let result = "0,ps 2000,ps 40000,pr 42000,pr 100000,ps 100000,ps 100000,ps 140000,pr";
     run_test_sim(
         base,
         result,
@@ -647,9 +647,9 @@ fn test_network_aggregate_decoy_bypass_replace_many_packets() {
     let delay = Duration::from_millis(10);
 
     // machine only at client
-    let base = "0,sn 1,sn 40,sn 40,rn 41,sn 41,rn";
+    let base = "0,nq 1,nq 40,nq 40,nr 41,nq 41,nr";
     // causes 4 delay by blocking 1 until 5, in effect at server at 31
-    let result = "0,st 5,st 40,rt 45,rt 100,st 100,st";
+    let result = "0,ps 5,ps 40,pr 45,pr 100,ps 100,ps";
     run_test_sim(
         base,
         result,
@@ -663,8 +663,8 @@ fn test_network_aggregate_decoy_bypass_replace_many_packets() {
     );
 
     // machine at client and server
-    let base = "0,sn 1,sn 40,sn 41,rn 42,sn 42,rn 50,rn 70,sn";
-    let result = "0,st 5,st 45,rt 50,rt 100,st 100,st 100,st 145,rt";
+    let base = "0,nq 1,nq 40,nq 41,nr 42,nq 42,nr 50,nr 70,nq";
+    let result = "0,ps 5,ps 45,pr 50,pr 100,ps 100,ps 100,ps 145,pr";
     run_test_sim(
         base,
         result,
@@ -694,8 +694,8 @@ fn test_network_aggregate_decoy_bypass_replace_many_packets_window() {
     let delay = Duration::from_millis(10);
 
     // machine only at client
-    let base = "0,sn 1,sn 2,sn 40,sn 40,rn 41,sn 41,rn";
-    let result = "0,st 5,st 40,rt 41,rt 100,st 100,st 100,st";
+    let base = "0,nq 1,nq 2,nq 40,nq 40,nr 41,nq 41,nr";
+    let result = "0,ps 5,ps 40,pr 41,pr 100,ps 100,ps 100,ps";
     run_test_sim(
         base,
         result,
@@ -709,8 +709,8 @@ fn test_network_aggregate_decoy_bypass_replace_many_packets_window() {
     );
 
     // machine at client and server
-    let base = "0,sn 1,sn 2,sn 40,sn 40,rn 41,sn 41,rn 42,rn";
-    let result = "0,st 5,st 40,rt 45,rt 100,st 100,st 100,st 140,rt";
+    let base = "0,nq 1,nq 2,nq 40,nq 40,nr 41,nq 41,nr 42,nr";
+    let result = "0,ps 5,ps 40,pr 45,pr 100,ps 100,ps 100,ps 140,pr";
     run_test_sim(
         base,
         result,

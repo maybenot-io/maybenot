@@ -19,13 +19,13 @@ pub fn simple_netflow() -> Machine {
 fn gen_simple_netflow_machine(low_ms: usize, high_ms: usize) -> Machine {
     // start state: on any packet, move to first state
     let s0 = State::new(enum_map! {
-       Event::TunnelSent | Event::TunnelRecv => vec![Trans(1, 1.0)],
+       Event::PacketSent | Event::PacketRecv => vec![Trans(1, 1.0)],
        _ => vec![],
     });
 
     // padding state: pad after a random delay of no activity
     let mut s1 = State::new(enum_map! {
-       Event::TunnelSent => vec![Trans(1, 1.0)],
+       Event::PacketSent => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     s1.action = Some(Action::DecoyTraffic {

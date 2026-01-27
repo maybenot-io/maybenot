@@ -37,7 +37,7 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
     }
 
     // easy: non-blocking event first
-    if !peek.event.is_event(Event::TunnelSent) {
+    if !peek.event.is_event(Event::PacketSent) {
         return (duration_since, queue, peek.client);
     }
 
@@ -54,19 +54,19 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
         return (duration_since, queue, peek.client);
     }
 
-    // peek is blocked but the event is a bypassable TunnelSent AND the blocking
+    // peek is blocked but the event is a bypassable PacketSent AND the blocking
     // is bypassable
     if (peek.client
         && client_blocking
         && client.blocking_bypassable
-        // bypassable TunnelSent is the result of replaced decoy traffic
-        && (peek.event.is_event(Event::TunnelSent))
+        // bypassable PacketSent is the result of replaced decoy traffic
+        && (peek.event.is_event(Event::PacketSent))
         && peek.bypass)
         || (!peek.client
             && server_blocking
             && server.blocking_bypassable
-            // bypassable TunnelSent is the result of replaced decoy traffic
-            && (peek.event.is_event(Event::TunnelSent))
+            // bypassable PacketSent is the result of replaced decoy traffic
+            && (peek.event.is_event(Event::PacketSent))
             && peek.bypass)
     {
         return (duration_since, queue, peek.client);

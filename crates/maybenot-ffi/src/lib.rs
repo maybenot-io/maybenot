@@ -57,11 +57,11 @@ pub struct MaybenotDuration {
 pub enum MaybenotEventType {
     NormalRecv = 0,
     DecoyRecv = 1,
-    TunnelRecv = 2,
+    PacketRecv = 2,
 
-    NormalSent = 3,
-    DecoySent = 4,
-    TunnelSent = 5,
+    NormalQueued = 3,
+    DecoyQueued = 4,
+    PacketSent = 5,
 
     BlockingBegin = 6,
     BlockingEnd = 7,
@@ -245,11 +245,11 @@ fn convert_event(event: MaybenotEvent) -> TriggerEvent {
     match event.event_type {
         MaybenotEventType::NormalRecv => TriggerEvent::NormalRecv,
         MaybenotEventType::DecoyRecv => TriggerEvent::DecoyRecv,
-        MaybenotEventType::TunnelRecv => TriggerEvent::TunnelRecv,
+        MaybenotEventType::PacketRecv => TriggerEvent::PacketRecv,
 
-        MaybenotEventType::NormalSent => TriggerEvent::NormalSent,
-        MaybenotEventType::DecoySent => TriggerEvent::DecoySent { machine },
-        MaybenotEventType::TunnelSent => TriggerEvent::TunnelSent,
+        MaybenotEventType::NormalQueued => TriggerEvent::NormalQueued,
+        MaybenotEventType::DecoyQueued => TriggerEvent::DecoyQueued { machine },
+        MaybenotEventType::PacketSent => TriggerEvent::PacketSent,
 
         MaybenotEventType::BlockingBegin => TriggerEvent::BlockingBegin { machine },
         MaybenotEventType::BlockingEnd => TriggerEvent::BlockingEnd,

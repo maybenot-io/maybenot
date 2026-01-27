@@ -37,14 +37,14 @@ pub fn interspace_client<R: RngCore>(rng: &mut R) -> Vec<Machine> {
 
     let mut padding = if rng.random_bool(0.5) {
         State::new(enum_map! {
-            Event::NormalSent => vec![Trans(1, 1.0)],
-            Event::DecoySent => vec![Trans(2, 1.0)],
+            Event::NormalQueued => vec![Trans(1, 1.0)],
+            Event::DecoyQueued => vec![Trans(2, 1.0)],
         _ => vec![],
         })
     } else {
         State::new(enum_map! {
-            Event::NormalSent => vec![Trans(1, 1.0)],
-            Event::DecoySent => vec![Trans(2, 1.0)],
+            Event::NormalQueued => vec![Trans(1, 1.0)],
+            Event::DecoyQueued => vec![Trans(2, 1.0)],
             Event::NormalRecv => vec![Trans(1, 1.0)],
         _ => vec![],
         })
@@ -104,14 +104,14 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     if rng.random_bool(0.5) {
         // wait: extend real burst
         let wait = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(2, 1.0)],
+            Event::NormalQueued => vec![Trans(2, 1.0)],
            _ => vec![],
         });
         states.push(wait);
     } else {
         // wait: inject a fake burst after a while
         let mut wait = State::new(enum_map! {
-            Event::DecoySent => vec![Trans(3, 1.0)],
+            Event::DecoyQueued => vec![Trans(3, 1.0)],
            _ => vec![],
         });
         // special log_logistic distribution parameters here, see
@@ -143,8 +143,8 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     }
 
     let mut extend = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
-        Event::DecoySent => vec![Trans(2, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
+        Event::DecoyQueued => vec![Trans(2, 1.0)],
        _ => vec![],
     });
     extend.action = Some(Action::DecoyTraffic {
@@ -164,8 +164,8 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     states.push(extend);
 
     let mut fake = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
-        Event::DecoySent => vec![Trans(3, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
+        Event::DecoyQueued => vec![Trans(3, 1.0)],
        _ => vec![],
     });
     fake.action = Some(Action::DecoyTraffic {
@@ -212,7 +212,7 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     states.push(s0);
 
     let mut s1 = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(2, 1.0)],
+        Event::NormalQueued => vec![Trans(2, 1.0)],
        _ => vec![],
     });
     s1.action = Some(Action::DecoyTraffic {
@@ -232,7 +232,7 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     states.push(s1);
 
     let mut s2 = State::new(enum_map! {
-        Event::DecoySent => vec![Trans(2, 1.0)],
+        Event::DecoyQueued => vec![Trans(2, 1.0)],
         Event::DecoyRecv => vec![Trans(3, 1.0)],
        _ => vec![],
     });
@@ -254,7 +254,7 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
 
     let mut s3 = State::new(enum_map! {
         Event::NormalRecv => vec![Trans(3, 1.0)],
-        Event::NormalSent => vec![Trans(0, 1.0)],
+        Event::NormalQueued => vec![Trans(0, 1.0)],
         Event::DecoyRecv => vec![Trans(2, 1.0)],
        _ => vec![],
     });

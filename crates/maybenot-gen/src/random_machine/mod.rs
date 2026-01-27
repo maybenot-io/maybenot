@@ -165,14 +165,14 @@ fn check_strongly_connected(states: &[State]) -> bool {
 // the events that are relevant for liveness checking
 const LIVENESS_EVENTS: [Event; 4] = [
     Event::NormalRecv,
-    Event::NormalSent,
-    Event::TunnelRecv,
-    Event::TunnelSent,
+    Event::NormalQueued,
+    Event::PacketRecv,
+    Event::PacketSent,
 ];
 
 fn check_liveness(states: &[State]) -> bool {
     // If a strongly connected graph based only on events that are guaranteed to
-    // happen (NormalRecv, NormalSent, TunnelRecv, TunnelSent) regardless of
+    // happen (NormalRecv, NormalQueued, PacketRecv, PacketSent) regardless of
     // what machines are running, then the machine is alive.
     let mut g = Graph::<usize, usize>::new();
 

@@ -53,7 +53,7 @@ pub fn scrambler_client() -> Vec<Machine> {
 
     let start = State::new(enum_map! {
         // NonPaddingSent/NonPaddingRecv --> BLOCK (100%)
-        Event::NormalSent => vec![Trans(1, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
         Event::NormalRecv => vec![Trans(1, 1.0)],
        _ => vec![],
     });
@@ -89,7 +89,7 @@ pub fn scrambler_client() -> Vec<Machine> {
 
     let mut padding = State::new(enum_map! {
         // PaddingSent --> CONST (100%)
-        Event::DecoySent => vec![Trans(2, 1.0)],
+        Event::DecoyQueued => vec![Trans(2, 1.0)],
        _ => vec![],
     });
     padding.action = Some(Action::DecoyTraffic {
@@ -149,8 +149,8 @@ fn generate_machine_one(interval: f64, min_count: f64, min_trail: f64, max_trail
 // Generate the START state for Machine #1.
 fn generate_start_state() -> State {
     State::new(enum_map! {
-        // NormalSent --> BLOCK (100%)
-        Event::NormalSent => vec![Trans(BLOCK_STATE_INDEX, 1.0)],
+        // NormalQueued --> BLOCK (100%)
+        Event::NormalQueued => vec![Trans(BLOCK_STATE_INDEX, 1.0)],
        _ => vec![],
     })
 }
@@ -191,7 +191,7 @@ fn generate_block_state() -> State {
 fn generate_min_state(interval: f64, min_count: f64) -> State {
     let mut min = State::new(enum_map! {
         // PaddingSent --> MIN (100%)
-        Event::DecoySent => vec![Trans(MIN_STATE_INDEX, 1.0)],
+        Event::DecoyQueued => vec![Trans(MIN_STATE_INDEX, 1.0)],
         // LimitReached --> R_1 (100%)
         Event::LimitReached => vec![Trans(RIGHT_STATE_INDEX, 1.0)],
        _ => vec![],
@@ -233,9 +233,9 @@ fn generate_left_state(index: usize, interval: f64, min_trail: f64, max_trail: f
     let mut left = if index == 0 {
         State::new(enum_map! {
             // PaddingSent --> L_{index} (100%)
-            Event::DecoySent => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
-            // NormalSent --> R_{index} (100%)
-            Event::NormalSent => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
+            Event::DecoyQueued => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
+            // NormalQueued --> R_{index} (100%)
+            Event::NormalQueued => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
             // LimitReached --> START (100%)
             Event::LimitReached => vec![Trans(START_STATE_INDEX, 1.0)],
             // BlockingBegin --> L_2 (if L_1)
@@ -245,9 +245,9 @@ fn generate_left_state(index: usize, interval: f64, min_trail: f64, max_trail: f
     } else {
         State::new(enum_map! {
             // PaddingSent --> L_{index} (100%)
-            Event::DecoySent => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
-            // NormalSent --> R_{index} (100%)
-            Event::NormalSent => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
+            Event::DecoyQueued => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
+            // NormalQueued --> R_{index} (100%)
+            Event::NormalQueued => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
             // LimitReached --> START (100%)
             Event::LimitReached => vec![Trans(START_STATE_INDEX, 1.0)],
            _ => vec![],
@@ -291,9 +291,9 @@ fn generate_right_state(index: usize, interval: f64, min_trail: f64, max_trail: 
     let mut right = if index == 0 {
         State::new(enum_map! {
             // PaddingSent --> R_{index} (100%)
-            Event::DecoySent => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
-            // NormalSent --> L_{index} (100%)
-            Event::NormalSent => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
+            Event::DecoyQueued => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
+            // NormalQueued --> L_{index} (100%)
+            Event::NormalQueued => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
             // LimitReached --> START (100%)
             Event::LimitReached => vec![Trans(START_STATE_INDEX, 1.0)],
             // BlockingBegin --> R_2 (if R_1)
@@ -303,9 +303,9 @@ fn generate_right_state(index: usize, interval: f64, min_trail: f64, max_trail: 
     } else {
         State::new(enum_map! {
             // PaddingSent --> R_{index} (100%)
-            Event::DecoySent => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
-            // NormalSent --> L_{index} (100%)
-            Event::NormalSent => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
+            Event::DecoyQueued => vec![Trans(RIGHT_STATE_INDEX + 2 * index, 1.0)],
+            // NormalQueued --> L_{index} (100%)
+            Event::NormalQueued => vec![Trans(LEFT_STATE_INDEX + 2 * index, 1.0)],
             // LimitReached --> START (100%)
             Event::LimitReached => vec![Trans(START_STATE_INDEX, 1.0)],
            _ => vec![],
@@ -358,8 +358,8 @@ fn generate_machine_two(min_count: f64) -> Machine {
 // Generate the L state for Machine #2.
 fn generate_count_left_state(count: f64) -> State {
     let mut left = State::new(enum_map! {
-        // NormalSent --> L (100%)
-        Event::NormalSent => vec![Trans(COUNT_LEFT_INDEX, 1.0)],
+        // NormalQueued --> L (100%)
+        Event::NormalQueued => vec![Trans(COUNT_LEFT_INDEX, 1.0)],
         // BlockingBegin --> R (100%)
         Event::BlockingBegin => vec![Trans(COUNT_RIGHT_INDEX, 1.0)],
         // LimitReached --> SIGNAL (100%)
@@ -402,8 +402,8 @@ fn generate_count_left_state(count: f64) -> State {
 // Generate the R state for Machine #2.
 fn generate_count_right_state(count: f64) -> State {
     let mut right = State::new(enum_map! {
-        // NormalSent --> R (100%)
-        Event::NormalSent => vec![Trans(COUNT_RIGHT_INDEX, 1.0)],
+        // NormalQueued --> R (100%)
+        Event::NormalQueued => vec![Trans(COUNT_RIGHT_INDEX, 1.0)],
         // BlockingBegin --> L (100%)
         Event::BlockingBegin => vec![Trans(COUNT_LEFT_INDEX, 1.0)],
         // LimitReached --> SIGNAL (100%)

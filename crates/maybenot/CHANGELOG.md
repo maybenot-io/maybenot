@@ -2,6 +2,19 @@
 
 Manually generated changelog, for now. We follow semantic versioning.
 
+## 3.0.0 - 2026-XX-XX
+
+- A padding packet is now a decoy packet. Fundamental conceptual change to allow
+  padding to only refer to padding packets to some length. The SendPadding
+  action is now a DecoyTraffic action with an additional parameters for sending
+  N decoy packets. This increases the expressiveness of actions.
+- Renamed events: s/NormalSent/NormalQueued and s/PaddingSent/DecoyQueued.
+  Emphasizes that normal/decoy packets are first queued before being sent over
+  the network.
+- Renamed events: s/TunnelSent/PacketSent and s/TunnelRecv/PacketRecv. With
+  packets first being queued, we can now get rid of the tunnel abstraction and
+  simply report when a packet is sent or received. Improves clarity.
+
 ## 2.2.2 - 2025-09-12
 
 - Limit `trigger_events` lifetime bounds to what is strictly necessary, thanks

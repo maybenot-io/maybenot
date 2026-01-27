@@ -18,7 +18,7 @@ pub fn break_pad_client() -> Vec<Machine> {
 
     // client starts on normal sent
     let start = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     states.push(start);
@@ -93,9 +93,9 @@ fn make_wait_states(start: usize, threshold: Dist) -> Vec<State> {
     // countdown to zero
     let mut countdown = State::new(enum_map! {
         // reset the counter
-        Event::NormalSent => vec![Trans(start, 1.0)],
+        Event::NormalQueued => vec![Trans(start, 1.0)],
         // decrement the counter
-        Event::TunnelRecv => vec![Trans(start+1, 1.0)],
+        Event::PacketRecv => vec![Trans(start+1, 1.0)],
         // counter reaches zero, send decoy
         Event::CounterZero => vec![Trans(start+2, 1.0)],
         _ => vec![],
@@ -110,7 +110,7 @@ fn make_decoy_state(start: usize, done: usize, limit: Dist) -> Vec<State> {
     let mut states = vec![];
 
     let mut decoy_state = State::new(enum_map! {
-        Event::DecoySent => vec![Trans(start, 1.0)],
+        Event::DecoyQueued => vec![Trans(start, 1.0)],
         Event::LimitReached => vec![Trans(done, 1.0)],
         _ => vec![],
     });

@@ -20,10 +20,10 @@ use maybenot::{
 // same time, or blocking ending resulting in many events at the exact same
 // time. The Maybenot simulator deals with different events with different
 // priorities, in general, prioritizing events that relate to the protected
-// tunnel higher than actions from machines. This, especially in conjunction
-// with counters potentially missing things due to encoding different things in
-// different states is a PAIN to debug. This is the root of some seemingly odd
-// machines here.
+// network tunnel higher than actions from machines. This, especially in
+// conjunction with counters potentially missing things due to encoding
+// different things in different states is a PAIN to debug. This is the root of
+// some seemingly odd machines here.
 pub fn regulator_client(u: f64, c: f64) -> Vec<Machine> {
     vec![
         // machine that blocks outgoing with bypass replace then stops itself
@@ -183,9 +183,9 @@ fn make_regulator_budget_machine(budget: f64) -> Machine {
     // 1: sample budget
     let mut setup = State::new(enum_map! {
         // increment on normal sent
-        Event::NormalSent => vec![Trans(2, 1.0)],
-        // decrement on tunnel sent
-        Event::TunnelSent => vec![Trans(3, 1.0)],
+        Event::NormalQueued => vec![Trans(2, 1.0)],
+        // decrement on packet sent
+        Event::PacketSent => vec![Trans(3, 1.0)],
         _ => vec![],
     });
     setup.counter = (
@@ -206,18 +206,18 @@ fn make_regulator_budget_machine(budget: f64) -> Machine {
 
     // 2: increment on normal queued
     let mut dec = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(2, 1.0)],
-        Event::TunnelSent => vec![Trans(3, 1.0)],
+        Event::NormalQueued => vec![Trans(2, 1.0)],
+        Event::PacketSent => vec![Trans(3, 1.0)],
         Event::CounterZero => vec![Trans(4, 1.0)],
         _ => vec![],
     });
     dec.counter = (Some(Counter::new(Operation::Increment)), None);
     states.push(dec);
 
-    // 3: decrement on tunnel sent
+    // 3: decrement on packet sent
     let mut dec = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(2, 1.0)],
-        Event::TunnelSent => vec![Trans(3, 1.0)],
+        Event::NormalQueued => vec![Trans(2, 1.0)],
+        Event::PacketSent => vec![Trans(3, 1.0)],
         Event::CounterZero => vec![Trans(4, 1.0)],
         _ => vec![],
     });
@@ -318,7 +318,7 @@ fn make_regulator_surge_machine(r: f64, d: f64, threshold: f64, num_bins: usize)
         // 1: set counter A on this bin's threshold
         let mut setup = State::new(enum_map! {
             // get to the dec state
-            Event::NormalSent => vec![Trans(start +2, 1.0)],
+            Event::NormalQueued => vec![Trans(start +2, 1.0)],
             // always there events
             Event::TimerEnd  => vec![Trans(next_bin, 1.0)],
             Event::CounterZero => vec![Trans(STATE_SIGNAL, 1.0)],
@@ -343,7 +343,7 @@ fn make_regulator_surge_machine(r: f64, d: f64, threshold: f64, num_bins: usize)
 
         // 2: decrement counter A on every normal packet
         let mut dec = State::new(enum_map! {
-            Event::NormalSent => vec![Trans(start +2, 1.0)],
+            Event::NormalQueued => vec![Trans(start +2, 1.0)],
             // always there events
             Event::TimerEnd  => vec![Trans(next_bin, 1.0)],
             Event::CounterZero => vec![Trans(STATE_SIGNAL, 1.0)],
@@ -357,7 +357,7 @@ fn make_regulator_surge_machine(r: f64, d: f64, threshold: f64, num_bins: usize)
     // last state that signals directly on a NormalSent (this will happen above
     // for the tail bins)
     let tail = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(STATE_SIGNAL, 1.0)],
+        Event::NormalQueued => vec![Trans(STATE_SIGNAL, 1.0)],
         Event::Signal => vec![Trans(restart, 1.0)],
         _ => vec![],
     });
@@ -408,7 +408,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
 
         // padding at rate until timer expires
         let mut pad = State::new(enum_map! {
-            Event::TunnelSent => vec![Trans(start +1, 1.0)],
+            Event::PacketSent => vec![Trans(start +1, 1.0)],
             Event::TimerEnd  => vec![Trans(start +2, 1.0)],
             Event::Signal => vec![Trans(restart, 1.0)],
             Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
@@ -440,7 +440,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
 
     // last state that pads at 1 PPS forever
     let mut pad = State::new(enum_map! {
-        Event::TunnelSent => vec![Trans(states.len(), 1.0)],
+        Event::PacketSent => vec![Trans(states.len(), 1.0)],
         Event::Signal => vec![Trans(restart, 1.0)],
         Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
@@ -501,7 +501,7 @@ fn make_regulator_boot_machine(pps: f64, n: usize) -> Machine {
     states.push(start);
 
     let mut pad = State::new(enum_map! {
-        Event::DecoySent => vec![Trans(1, 1.0)],
+        Event::DecoyQueued => vec![Trans(1, 1.0)],
         Event::LimitReached => vec![Trans(STATE_SIGNAL, 1.0)],
         Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
@@ -547,7 +547,7 @@ fn make_regulator_seal_machine() -> Machine {
 
     // start state (0)
     let start = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     states.push(start);
@@ -590,14 +590,14 @@ fn make_regulator_loop_machine(upload_ratio: f64) -> Machine {
 
     // start state (0)
     let start = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     states.push(start);
 
     // init state (1)
     let mut init = State::new(enum_map! {
-        Event::TunnelRecv => vec![Trans(2, 1.0)],
+        Event::PacketRecv => vec![Trans(2, 1.0)],
         _ => vec![],
     });
     init.counter = (
@@ -631,7 +631,7 @@ fn push_loop_cluster(states: &mut Vec<State>, upload_ratio: f64) {
 
     // base state (+0), wait for upload_ratio.floor() packets
     let mut transitions = enum_map! {
-        Event::TunnelRecv => vec![Trans(start_index, 1.0)],
+        Event::PacketRecv => vec![Trans(start_index, 1.0)],
         Event::CounterZero => vec![Trans(start_index + 2, 1.0 - prob_wait_extra)],
         _ => vec![],
     };
@@ -648,14 +648,14 @@ fn push_loop_cluster(states: &mut Vec<State>, upload_ratio: f64) {
 
     // extra state (+1), wait for an additional packet
     let extra = State::new(enum_map! {
-        Event::TunnelRecv => vec![Trans(start_index + 2, 1.0)],
+        Event::PacketRecv => vec![Trans(start_index + 2, 1.0)],
         _ => vec![],
     });
     states.push(extra);
 
     // send state (+2)
     let mut send = State::new(enum_map! {
-        Event::TunnelSent => vec![Trans(start_index, 1.0)],
+        Event::PacketSent => vec![Trans(start_index, 1.0)],
         _ => vec![],
     });
     send.action = Some(Action::DecoyTraffic {
@@ -702,7 +702,7 @@ fn make_regulator_client_queue_machine(c: f64) -> Machine {
 
     // wait for a normal packet to get queued, cancel any timer
     let mut start = State::new(enum_map! {
-        Event::NormalSent => vec![Trans(1, 1.0)],
+        Event::NormalQueued => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     start.action = Some(Action::Cancel { timer: Timer::All });
@@ -711,7 +711,7 @@ fn make_regulator_client_queue_machine(c: f64) -> Machine {
     // 1: start a timer for C seconds
     let mut timer = State::new(enum_map! {
         // if we send a packet, reset the timer
-        Event::TunnelSent  => vec![Trans(1, 1.0)],
+        Event::PacketSent  => vec![Trans(1, 1.0)],
         Event::TimerEnd  => vec![Trans(2, 1.0)],
 
         _ => vec![],

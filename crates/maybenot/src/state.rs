@@ -52,15 +52,16 @@ impl State {
     /// use maybenot::event::*;
     /// use enum_map::enum_map;
     /// let state = State::new(enum_map! {
-    ///     Event::DecoySent => vec![Trans(1, 1.0)],
+    ///     Event::DecoyQueued => vec![Trans(1, 1.0)],
     ///     Event::CounterZero => vec![Trans(2, 1.0)],
     ///     _ => vec![],
     /// });
     /// ```
-    /// This creates a state that transitions to state 1 on [`Event::DecoySent`]
-    /// and to state 2 on [`Event::CounterZero`], both with 100% probability.
-    /// All other events will not cause a transition. Note that state indexes
-    /// are 0-based and determined by the order in which states are added to the
+    /// This creates a state that transitions to state 1 on
+    /// [`Event::DecoyDecoyQueuedSent`] and to state 2 on
+    /// [`Event::CounterZero`], both with 100% probability. All other events
+    /// will not cause a transition. Note that state indexes are 0-based and
+    /// determined by the order in which states are added to the
     /// [`Machine`](crate::Machine).
     pub fn new(t: EnumMap<Event, Vec<Trans>>) -> Self {
         const ARRAY_NO_TRANS: Option<Vec<Trans>> = None;
@@ -234,14 +235,17 @@ mod tests {
     fn serialization() {
         // Ensure that sampling works after deserialization
         let s0 = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(6, 1.0)],
+                 Event::DecoyQueued => vec![Trans(6, 1.0)],
              _ => vec![],
         });
 
         let s0 = bincode::serialize(&s0).unwrap();
         let s0: State = bincode::deserialize(&s0).unwrap();
 
-        assert_eq!(s0.sample_state(Event::DecoySent, &mut rand::rng()), Some(6));
+        assert_eq!(
+            s0.sample_state(Event::DecoyQueued, &mut rand::rng()),
+            Some(6)
+        );
     }
 
     #[test]
@@ -251,7 +255,7 @@ mod tests {
 
         // out of bounds index
         let s = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(num_states, 1.0)],
+                 Event::DecoyQueued => vec![Trans(num_states, 1.0)],
              _ => vec![],
         });
         let r = s.validate(num_states);
@@ -260,7 +264,7 @@ mod tests {
 
         // try setting one probability too high
         let s = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(0, 1.1)],
+                 Event::DecoyQueued => vec![Trans(0, 1.1)],
              _ => vec![],
         });
         let r = s.validate(num_states);
@@ -269,7 +273,7 @@ mod tests {
 
         // try setting total probability too high
         let s = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(0, 0.5), Trans(1, 0.6)],
+                 Event::DecoyQueued => vec![Trans(0, 0.5), Trans(1, 0.6)],
              _ => vec![],
         });
         let r = s.validate(num_states);
@@ -278,7 +282,7 @@ mod tests {
 
         // try specifying duplicate transitions
         let s = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(0, 0.4), Trans(0, 0.6)],
+                 Event::DecoyQueued => vec![Trans(0, 0.4), Trans(0, 0.6)],
              _ => vec![],
         });
         let r = s.validate(num_states);
@@ -287,7 +291,7 @@ mod tests {
 
         // valid transitions should be allowed
         let s = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(0, 0.4), Trans(STATE_END, 0.3)],
+                 Event::DecoyQueued => vec![Trans(0, 0.4), Trans(STATE_END, 0.3)],
              _ => vec![],
         });
         let r = s.validate(num_states);
@@ -301,7 +305,7 @@ mod tests {
 
         // valid actions should be allowed
         let mut s = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(0, 1.0)],
+                 Event::DecoyQueued => vec![Trans(0, 1.0)],
              _ => vec![],
         });
         s.action = Some(Action::DecoyTraffic {
@@ -365,7 +369,7 @@ mod tests {
 
         // valid counter updates should be allowed
         let mut s = State::new(enum_map! {
-                 Event::DecoySent => vec![Trans(0, 1.0)],
+                 Event::DecoyQueued => vec![Trans(0, 1.0)],
              _ => vec![],
         });
         s.counter = (Some(Counter::new(Operation::Increment)), None);

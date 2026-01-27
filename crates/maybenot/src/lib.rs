@@ -68,7 +68,7 @@
 //!     // bottleneck. If you have to consider dropping events, it is better
 //!     // to drop older events than newer. Ideally, it should be possible
 //!     // to process all events one-by-one.
-//!     let events = [TriggerEvent::NormalSent];
+//!     let events = [TriggerEvent::NormalQueued];
 //!
 //!     // Trigger the event(s) in the framework. This takes linear time
 //!     // with the number of events but is very fast (time should be
@@ -107,7 +107,7 @@
 //!                 // expiry, do the following:
 //!                 //
 //!                 // 1. Send the specified amount of decoy.
-//!                 // 2. Trigger TriggerEvent::DecoySent { machine:
+//!                 // 2. Trigger TriggerEvent::DecoyQueued { machine:
 //!                 //    machine } after each packet has been sent.
 //!                 //
 //!                 // If bypass is true, then the decoy MUST be sent even
@@ -120,14 +120,14 @@
 //!                 // If replace is true, then the decoy MAY be replaced
 //!                 // by other packet(s). The other packets could be
 //!                 // encrypted packets already queued but not already sent
-//!                 // in the tunnel, containing either decoy or normal
+//!                 // over the network, containing either decoy or normal
 //!                 // data (ideally, the user of the framework cannot tell,
 //!                 // because encrypted). The other data could also be
 //!                 // normal data about to be turned into normal packet(s)
 //!                 // and sent. Regardless of if the decoy is replaced or
 //!                 // not, the event should still be triggered (steps 2).
 //!                 // If enqueued normal data sent instead of decoy, then
-//!                 // the NormalSent event should be triggered as well.
+//!                 // the NormalQueued event should be triggered as well.
 //!                 //
 //!                 // Above, note the use case of having bypass and replace
 //!                 // set to true. This is to support constant-rate
@@ -211,17 +211,16 @@
 //! We assume that all traffic is sent in "packets" of uniform size, which may
 //! either be decoy or non-decoy ("normal").
 //!
-//! ### Tunnels
+//! ### Egress queue
 //!
-//! We assume that incoming and outgoing traffic is queued in a "tunnel" on its
-//! way to or from the network.
+//! We assume that outgoing packets are "queued" before they are sent over the
+//! network.
 //!
-//! In the incoming direction, when we receive a packet, it is first queued on
-//! the tunnel, and then eventually processed to find out whether it is decoy
-//! or not.
+//! In the incoming direction, we first receive a packet, which is then
+//! eventually processed/decrypted to find out whether it is decoy or not.
 //!
 //! In the outgoing direction, when we generate a packet, it is encrypted ASAP,
-//! queued on the tunnel, and eventually transmitted on the network.
+//! egress queued, and eventually transmitted on the network.
 //!
 //! ### Framework state, and per-machine state.
 //!
@@ -345,7 +344,7 @@ mod tests {
             // bottleneck. If you have to consider dropping events, it is better
             // to drop older events than newer. Ideally, it should be possible
             // to process all events one-by-one.
-            let events = [TriggerEvent::NormalSent];
+            let events = [TriggerEvent::NormalQueued];
 
             // Trigger the event(s) in the framework. This takes linear time
             // with the number of events but is very fast (time should be
@@ -384,27 +383,27 @@ mod tests {
                         // expiry, do the following:
                         //
                         // 1. Send the specified amount of decoy.
-                        // 2. Trigger TriggerEvent::DecoySent { machine:
+                        // 2. Trigger TriggerEvent::DecoyQueued { machine:
                         //    machine } after each packet has been sent.
                         //
                         // If bypass is true, then the decoy MUST be sent even
                         // if there is active blocking of outgoing traffic AND
                         // the active blocking had the bypass flag set. If the
                         // active blocking had bypass set to false, then the
-                        // decoy MUST NOT be sent. This is to support
-                        // completely fail-closed defenses.
+                        // decoy MUST NOT be sent. This is to support completely
+                        // fail-closed defenses.
                         //
-                        // If replace is true, then the decoy MAY be replaced
-                        // by other packet(s). The other packets could be
-                        // encrypted packets already queued but not already sent
-                        // in the tunnel, containing either decoy or normal
-                        // data (ideally, the user of the framework cannot tell,
+                        // If replace is true, then the decoy MAY be replaced by
+                        // other packet(s). The other packets could be encrypted
+                        // packets already queued but not already sent to the
+                        // network, containing either decoy or normal data
+                        // (ideally, the user of the framework cannot tell,
                         // because encrypted). The other data could also be
                         // normal data about to be turned into normal packet(s)
                         // and sent. Regardless of if the decoy is replaced or
                         // not, the event should still be triggered (steps 2).
                         // If enqueued normal data sent instead of decoy, then
-                        // the NormalSent event should be triggered as well.
+                        // the NormalQueued event should be triggered as well.
                         //
                         // Above, note the use case of having bypass and replace
                         // set to true. This is to support constant-rate
@@ -415,8 +414,8 @@ mod tests {
                         // overwrite it with the new timer. This will happen
                         // very frequently so make effort to make it efficient
                         // (typically, efficient machines will always have
-                        // something scheduled but try to minimize actual
-                        // decoy sent).
+                        // something scheduled but try to minimize actual decoy
+                        // sent).
                     }
                     TriggerAction::BlockOutgoing {
                         timeout: _,
