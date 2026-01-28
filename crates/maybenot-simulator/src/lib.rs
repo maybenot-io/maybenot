@@ -874,6 +874,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
         }
         TriggerAction::DelayTraffic {
             timeout: _,
+            n: _, // FIXME/TODO: leaving broken since we've got a simulator v3 rework on the way
             duration,
             bypass,
             replace,
@@ -968,6 +969,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
             }
             TriggerAction::DelayTraffic {
                 timeout,
+                n: _, // TODO/FIXME: to fix in simulator v3
                 duration: _,
                 bypass: _,
                 replace: _,

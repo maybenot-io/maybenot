@@ -262,6 +262,14 @@ fn ratio3_machine() -> Machine {
             start: 0.0,
             max: 0.0,
         },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
+            max: 0.0,
+        },
         duration: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
@@ -335,6 +343,14 @@ fn delay_machine(delay_duration: DistType, padding_delay: DistType) -> Machine {
                 high: 0.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
             max: 0.0,
         },
         duration: Dist {

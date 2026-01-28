@@ -561,6 +561,7 @@ where
                     bypass, replace, ..
                 } => Some(TriggerAction::DelayTraffic {
                     timeout: T::Duration::from_micros(action.sample_timeout(&mut self.rng)),
+                    n: action.sample_delay_n(&mut self.rng),
                     duration: T::Duration::from_micros(action.sample_duration(&mut self.rng)),
                     bypass,
                     replace,
@@ -960,6 +961,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            n: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: 1_000.0,
+                max: 0.0,
+            },
             duration: Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
@@ -983,6 +992,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(1),
+                n: 1_000,
                 duration: Duration::from_micros(10),
                 bypass: false,
                 replace: false,
@@ -1006,6 +1016,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::DelayTraffic {
                     timeout: Duration::from_micros(1),
+                    n: 1_000,
                     duration: Duration::from_micros(10),
                     bypass: false,
                     replace: false,
@@ -2430,6 +2441,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            n: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: 1_000.0,
+                max: 0.0,
+            },
             duration: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
@@ -2457,6 +2476,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::DelayTraffic {
                     timeout: Duration::from_micros(2),
+                    n: 1_000,
                     duration: Duration::from_micros(2),
                     bypass: false,
                     replace: false,
@@ -2474,6 +2494,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::DelayTraffic {
                     timeout: Duration::from_micros(2),
+                    n: 1_000,
                     duration: Duration::from_micros(2),
                     bypass: false,
                     replace: false,
@@ -2505,6 +2526,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(2),
+                n: 1_000,
                 duration: Duration::from_micros(2),
                 bypass: false,
                 replace: false,
@@ -2538,6 +2560,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            n: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: 1_000.0,
+                max: 0.0,
+            },
             duration: Dist {
                 dist: DistType::Uniform {
                     low: 2.0,
@@ -2566,6 +2596,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::DelayTraffic {
                     timeout: Duration::from_micros(2),
+                    n: 1_000,
                     duration: Duration::from_micros(2),
                     bypass: false,
                     replace: false,
@@ -2583,6 +2614,7 @@ mod tests {
                 f.actions[0],
                 Some(TriggerAction::DelayTraffic {
                     timeout: Duration::from_micros(2),
+                    n: 1_000,
                     duration: Duration::from_micros(2),
                     bypass: false,
                     replace: false,
@@ -2614,6 +2646,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(2),
+                n: 1_000,
                 duration: Duration::from_micros(2),
                 bypass: false,
                 replace: false,
@@ -2644,6 +2677,14 @@ mod tests {
                     high: 2.0,
                 },
                 start: 0.0,
+                max: 0.0,
+            },
+            n: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: 1_000.0,
                 max: 0.0,
             },
             duration: Dist {
@@ -2678,6 +2719,14 @@ mod tests {
                 start: 0.0,
                 max: 0.0,
             },
+            n: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: 1_000.0,
+                max: 0.0,
+            },
             duration: Dist {
                 dist: DistType::Uniform {
                     low: 1000.0,
@@ -2704,6 +2753,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(2),
+                n: 1_000,
                 duration: Duration::from_micros(2),
                 bypass: false,
                 replace: true,
@@ -2735,6 +2785,7 @@ mod tests {
             f.actions[1],
             Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(0),
+                n: 1_000,
                 duration: Duration::from_micros(1000),
                 bypass: false,
                 replace: false,
@@ -2756,6 +2807,7 @@ mod tests {
             f.actions[0],
             Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(2),
+                n: 1_000,
                 duration: Duration::from_micros(2),
                 bypass: false,
                 replace: true,

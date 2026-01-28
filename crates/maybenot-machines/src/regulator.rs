@@ -1,6 +1,7 @@
 //! An implementation of "RegulaTor: A Straightforward Website Fingerprinting
 //! Defense" by Holland and Hopper, PETS 2022.
 
+use core::f64;
 use std::vec;
 
 use enum_map::enum_map;
@@ -118,6 +119,14 @@ fn make_regulator_block_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine
                 start: 0.0,
                 max: 0.0,
             },
+            n: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: f64::MAX,
+                max: 0.0,
+            },
             duration: Dist {
                 dist: DistType::Uniform {
                     low: 0.0,
@@ -147,6 +156,14 @@ fn make_regulator_block_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine
                 high: 0.0,
             },
             start: 1_000_000_000.0,
+            max: 0.0,
+        },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
             max: 0.0,
         },
         duration: Dist {
@@ -240,6 +257,14 @@ fn make_regulator_budget_machine(budget: f64) -> Machine {
                 high: 0.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
             max: 0.0,
         },
         duration: Dist {
@@ -568,6 +593,14 @@ fn make_regulator_seal_machine() -> Machine {
             start: 0.0,
             max: 0.0,
         },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
+            max: 0.0,
+        },
         duration: Dist {
             dist: DistType::Uniform {
                 low: MAX_SAMPLED_DELAY_DURATION,
@@ -746,6 +779,14 @@ fn make_regulator_client_queue_machine(c: f64) -> Machine {
             start: 0.0,
             max: 0.0,
         },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
+            max: 0.0,
+        },
         duration: Dist {
             dist: DistType::Uniform {
                 low: 0.0,
@@ -772,6 +813,14 @@ fn make_regulator_client_queue_machine(c: f64) -> Machine {
                 high: 0.0,
             },
             start: 1.0,
+            max: 0.0,
+        },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
             max: 0.0,
         },
         duration: Dist {

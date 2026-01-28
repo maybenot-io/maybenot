@@ -7,7 +7,7 @@ Manually generated changelog, for now. We follow semantic versioning.
 - A padding packet is now a decoy packet. Fundamental conceptual change to allow
   padding to only refer to padding packets to some length. The SendPadding
   action is now a DecoyTraffic action with an additional parameters for sending
-  N decoy packets. This increases the expressiveness of actions.
+  N decoy packets. This increases the expressiveness of the decoy action.
 - When sending N > 1 decoy packets with the replace flag set, for a queue of Q
   queued packets, if N > Q, then N-Q new decoy packets should be created. Do not
   keep state on packets counted towards replace or not across actions.
@@ -21,6 +21,10 @@ Manually generated changelog, for now. We follow semantic versioning.
   simply report when a packet is sent or received. Improves clarity.
 - Renamed the blocking action to a delay traffic action, emphasizing that
   (outgoing) traffic is only temporarily delayed.
+- The delay traffic action now includes an additional parameter, N, specifying
+  the maximum number of packets to delay. The delay now ends on either the
+  maximum number of packets delayed OR the delay duration expiring, whichever
+  happens first. This increases the expressiveness of the delay action.
 
 ## 2.2.2 - 2025-09-12
 

@@ -23,6 +23,11 @@ pub const MAX_SAMPLED_TIMER_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0
 /// day in microseconds.
 pub const MAX_SAMPLED_DELAY_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 
+/// The maximum sampled number of delayed packets in a [`State`](crate::state),
+/// currently set to the maximum possible value to make constant-rate defenses
+/// as simple as possible.
+pub const MAX_SAMPLED_DELAY_N: u64 = u64::MAX;
+
 /// The maximum sampled number of decoy packets in a [`State`](crate::state),
 /// currently set to 10_000.
 pub const MAX_SAMPLED_DECOY_N: u64 = 10_000;

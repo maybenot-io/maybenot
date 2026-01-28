@@ -75,6 +75,14 @@ pub fn scrambler_client() -> Vec<Machine> {
             start: 0.0,
             max: 0.0,
         },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
+            max: 0.0,
+        },
         duration: Dist {
             dist: DistType::Uniform {
                 low: MAX_SAMPLED_DELAY_DURATION,
@@ -171,6 +179,14 @@ fn generate_block_state() -> State {
                 high: 0.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
             max: 0.0,
         },
         duration: Dist {
@@ -459,6 +475,14 @@ fn generate_signal_state() -> State {
                 high: 0.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
             max: 0.0,
         },
         duration: Dist {

@@ -342,6 +342,15 @@ fn random_action_delay<R: Rng>(
         timeout: random_timeout(duration_point, rng),
         duration: random_timeout(duration_point, rng),
         limit: random_limit(count_point, rng),
+        // TODO/FIXME: randomize this later properly
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
+            max: 0.0,
+        },
     }
 }
 

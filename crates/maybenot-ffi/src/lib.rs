@@ -89,7 +89,7 @@ pub enum MaybenotAction {
         machine: usize,
 
         /// The number of packets to inject.
-        amount: usize,
+        n: usize,
 
         /// The time to wait before injecting decoy packets.
         timeout: MaybenotDuration,
@@ -109,8 +109,11 @@ pub enum MaybenotAction {
         replace: bool,
         bypass: bool,
 
-        /// How long to block.
+        /// The maximum duration to delay packets.
         duration: MaybenotDuration,
+
+        /// The maximum number of packets to delay.
+        n: usize,
     } = 2,
 
     /// Update the timer duration for a machine.
@@ -203,25 +206,27 @@ fn convert_action(action: &maybenot::TriggerAction) -> MaybenotAction {
         },
         maybenot::TriggerAction::DecoyTraffic {
             timeout,
-            n: amount,
+            n,
             bypass,
             replace,
             machine,
         } => MaybenotAction::DecoyTraffic {
             timeout: timeout.into(),
-            amount,
+            n,
             replace,
             bypass,
             machine: machine.into_raw(),
         },
         maybenot::TriggerAction::DelayTraffic {
             timeout,
+            n,
             duration,
             bypass,
             replace,
             machine,
         } => MaybenotAction::DelayTraffic {
             timeout: timeout.into(),
+            n,
             duration: duration.into(),
             replace,
             bypass,

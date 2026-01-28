@@ -4,7 +4,7 @@ use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
-    MAX_SAMPLED_DECOY_N, MAX_SAMPLED_DELAY_DURATION, MAX_SAMPLED_TIMEOUT,
+    MAX_SAMPLED_DECOY_N, MAX_SAMPLED_DELAY_DURATION, MAX_SAMPLED_DELAY_N, MAX_SAMPLED_TIMEOUT,
     MAX_SAMPLED_TIMER_DURATION, STATE_LIMIT_MAX,
 };
 use crate::{Error, MachineId, dist};
@@ -60,7 +60,9 @@ pub enum Action {
         n: Dist,
         limit: Option<Dist>,
     },
-    /// Schedule a delay of of outgoing traffic after a timeout.
+    /// Schedule a delay of up to N outgoing packets for up to a maximum
+    /// duration after a timeout. The delay ends after N packets have been
+    /// delayed or the maximum duration has passed.
     ///
     /// Replaces any previously pending scheduled action timer (set via
     /// DecoyTraffic or DelayTraffic) for this machine.
@@ -81,6 +83,7 @@ pub enum Action {
         bypass: bool,
         replace: bool,
         timeout: Dist,
+        n: Dist,
         duration: Dist,
         limit: Option<Dist>,
     },
@@ -130,6 +133,16 @@ impl Action {
         match self {
             Action::DecoyTraffic { n: amount, .. } => {
                 amount.sample(rng).min(MAX_SAMPLED_DECOY_N as f64).round() as usize
+            }
+            _ => 0,
+        }
+    }
+
+    /// Sample the number of packets to delay for a delay action.
+    pub(crate) fn sample_delay_n<R: RngCore>(&self, rng: &mut R) -> usize {
+        match self {
+            Action::DelayTraffic { n: amount, .. } => {
+                amount.sample(rng).min(MAX_SAMPLED_DELAY_N as f64).round() as usize
             }
             _ => 0,
         }
@@ -254,10 +267,11 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
         replace: bool,
         machine: MachineId,
     },
-    /// Schedule delay of outgoing traffic after the given timeout. The duration
-    /// of the delay is specified. Note that the delay is framework scoped,
-    /// i.e., if there are multiple machines running, then the delay will affect
-    /// all of them (by delaying packets).
+    /// Schedule a delay of up to N outgoing packets for up to a maximum
+    /// duration after a timeout. The delay ends after N packets have been
+    /// delayed or the maximum duration has past. Note that the delay is
+    /// framework scoped, i.e., if there are multiple machines running, then the
+    /// delay will affect all of them (by delaying outgoing packets).
     ///
     /// Whenever the given action timeout expires, a corresponding
     /// [`TriggerEvent::DelayBegin`](crate::TriggerEvent::DelayBegin) event
@@ -267,12 +281,13 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// The bypass flag indicates if the delay of outgoing traffic can be
     /// bypassed by decoy packets with the bypass flag set to true.
     ///
-    /// The replace flag indicates if the duration MUST replace any other
-    /// currently ongoing delay of outgoing traffic. If the flag is false, the
-    /// longest of the two durations MUST be used.
+    /// The replace flag indicates if the duration and count N MUST replace any
+    /// other currently ongoing delay of outgoing traffic. If the flag is false,
+    /// the longest of the two durations and largest N MUST be used (compared
+    /// independently).
     ///
-    /// Whenever the delay timer of outgoing traffic is replaced or adjusted,
-    /// the "bypassable" status of the delay is also replaced.
+    /// Whenever the delay timer of outgoing traffic is replaced or adjusted
+    /// (duration or N), the "bypassable" status of the delay is also replaced.
     ///
     /// Note that, since only one action timer per machine can be pending at a
     /// time, this `DelayTraffic` action should replace any currently pending
@@ -280,6 +295,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// not yet expired.
     DelayTraffic {
         timeout: T::Duration,
+        n: usize,
         duration: T::Duration,
         bypass: bool,
         replace: bool,
@@ -449,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_delaying_action() {
+    fn validate_delay_action() {
         // valid DelayTraffic action
         let mut a = Action::DelayTraffic {
             bypass: false,
@@ -460,6 +476,14 @@ mod tests {
                     high: 10.0,
                 },
                 start: 0.0,
+                max: 0.0,
+            },
+            n: Dist {
+                dist: DistType::Uniform {
+                    low: 0.0,
+                    high: 0.0,
+                },
+                start: 1_000.0,
                 max: 0.0,
             },
             duration: Dist {

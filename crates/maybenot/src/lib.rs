@@ -144,6 +144,7 @@
 //!             }
 //!             TriggerAction::DelayTraffic {
 //!                 timeout: _,
+//!                 n: _,
 //!                 duration: _,
 //!                 bypass: _,
 //!                 replace: _,
@@ -157,13 +158,17 @@
 //!                 // 1. If no delay is currently taking place (globally
 //!                 //    across all machines, so for this instance of the
 //!                 //    framework), start delaying all outgoing traffic
-//!                 //    for the specified duration. If delay is already
-//!                 //    taking place (due to any machine), there are two
-//!                 //    cases. If replace is true, replace the existing
-//!                 //    delay duration with the specified duration in this
+//!                 //    for the specified duration or until N packets have
+//!                 //    been delayed, whichever happens first. If delay is
+//!                 //    already taking place (due to any machine), there
+//!                 //    are two cases. If replace is true, replace the
+//!                 //    existing delay duration and maximum packet count N
+//!                 //    with the specified duration and count in this
 //!                 //    action. If replace is false, pick the longest
 //!                 //    duration of the specified duration and the
-//!                 //    *remaining* duration to delay already in place.
+//!                 //    *remaining* duration to delay already in place AND
+//!                 //    the largest N. Select the two parameters
+//!                 //    independently.
 //!                 // 2. Trigger TriggerEvent::DelayBegin { machine:
 //!                 //    machine } regardless of logic outcome in 1. (From
 //!                 //    the point of view of the machine, delay is now
@@ -421,6 +426,7 @@ mod tests {
                     }
                     TriggerAction::DelayTraffic {
                         timeout: _,
+                        n: _,
                         duration: _,
                         bypass: _,
                         replace: _,
@@ -434,13 +440,17 @@ mod tests {
                         // 1. If no delay is currently taking place (globally
                         //    across all machines, so for this instance of the
                         //    framework), start delaying all outgoing traffic
-                        //    for the specified duration. If delay is already
-                        //    taking place (due to any machine), there are two
-                        //    cases. If replace is true, replace the existing
-                        //    delay duration with the specified duration in this
+                        //    for the specified duration or until N packets have
+                        //    been delayed, whichever happens first. If delay is
+                        //    already taking place (due to any machine), there
+                        //    are two cases. If replace is true, replace the
+                        //    existing delay duration and maximum packet count N
+                        //    with the specified duration and count in this
                         //    action. If replace is false, pick the longest
                         //    duration of the specified duration and the
-                        //    *remaining* duration to delay already in place.
+                        //    *remaining* duration to delay already in place AND
+                        //    the largest N. Select the two parameters
+                        //    independently.
                         // 2. Trigger TriggerEvent::DelayBegin { machine:
                         //    machine } regardless of logic outcome in 1. (From
                         //    the point of view of the machine, delay is now

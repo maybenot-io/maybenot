@@ -154,6 +154,14 @@ fn test_simple_block_machine() {
             start: 0.0,
             max: 0.0,
         },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
+            max: 0.0,
+        },
         duration: Dist {
             dist: DistType::Uniform {
                 low: 5.0,
@@ -217,6 +225,14 @@ fn test_both_block_machine() {
             start: 0.0,
             max: 0.0,
         },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
+            max: 0.0,
+        },
         duration: Dist {
             dist: DistType::Uniform {
                 low: 5.0,
@@ -271,6 +287,14 @@ fn test_block_and_decoy() {
                 high: 5.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
             max: 0.0,
         },
         duration: Dist {
@@ -365,6 +389,14 @@ fn test_bypass_machine() {
                 high: 5.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
             max: 0.0,
         },
         duration: Dist {
@@ -550,6 +582,14 @@ fn test_bypass_replace_machine() {
                 high: 1.0,
             },
             start: 0.0,
+            max: 0.0,
+        },
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 0.0,
+                high: 0.0,
+            },
+            start: f64::MAX,
             max: 0.0,
         },
         duration: Dist {
