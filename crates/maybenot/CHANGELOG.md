@@ -8,6 +8,11 @@ Manually generated changelog, for now. We follow semantic versioning.
   padding to only refer to padding packets to some length. The SendPadding
   action is now a DecoyTraffic action with an additional parameters for sending
   N decoy packets. This increases the expressiveness of actions.
+- When sending N > 1 decoy packets with the replace flag set, for a queue of Q
+  queued packets, if N > Q, then N-Q new decoy packets should be created. Do not
+  keep state on packets counted towards replace or not across actions.
+  Previously, conceptually, one queued packet could replace infinite decoy
+  packets.
 - Renamed events: s/NormalSent/NormalQueued and s/PaddingSent/DecoyQueued.
   Emphasizes that normal/decoy packets are first queued before being sent over
   the network.
