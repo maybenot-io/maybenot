@@ -309,6 +309,13 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                         // 2. the bypass flag is not set, which is also the case
                         //    for normal packets, so we do nothing
                         if !next.bypass {
+                            // FIXME/TODO: we do not support the new v3
+                            // framework logic of the replace flag with N > 1
+                            // packets to replace. Now, one blocked queued
+                            // normal can replace N > 1 packets from the same
+                            // action. The plan is to fix this in simulator v3+,
+                            // after porting all the simulator improvements to
+                            // framework v3 first. It's an edge case.
                             debug!("\treplaced decoy sent with blocked queued normal @{side}");
                             return false;
                         }

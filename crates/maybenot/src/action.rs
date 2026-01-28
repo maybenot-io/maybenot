@@ -48,9 +48,11 @@ pub enum Action {
     /// could be in the queue due to ongoing blocking or just not being sent yet
     /// (e.g., due to CC). We assume that packets will be encrypted ASAP for the
     /// egress queue and we do not want to keep state around to distinguish
-    /// decoy and non-decoy, hence, any packet. Similarly, this implies that a
-    /// single blocked packet in the egress queue can replace multiple decoy
-    /// packets with the replace flag set.
+    /// decoy and non-decoy, hence, any packet. For an egress queue of Q queued
+    /// packets and N decoy packets to send with replace set, if N > Q, add N-Q
+    /// decoy packets. Do not keep any state to track if any packet in the
+    /// egress queue has been counted for replace decoy traffic or not across
+    /// multiple DecoyTraffic actions.
     DecoyTraffic {
         bypass: bool,
         replace: bool,
@@ -222,9 +224,11 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// could be in the queue due to ongoing blocking or just not being sent yet
     /// (e.g., due to CC). We assume that packets will be encrypted ASAP for the
     /// egress queue and we do not want to keep state around to distinguish
-    /// decoy and non-decoy, hence, any packet. Similarly, this implies that a
-    /// single blocked packet in the egress queue can replace multiple decoy
-    /// packets with the replace flag set.
+    /// decoy and non-decoy, hence, any packet. For an egress queue of Q queued
+    /// packets and N decoy packets to send with replace set, if N > Q, add N-Q
+    /// decoy packets. Do not keep any state to track if any packet in the
+    /// egress queue has been counted for replace decoy traffic or not across
+    /// multiple DecoyTraffic actions.
     ///
     /// If the bypass and replace flags are both set to true AND the active
     /// blocking may be bypassed, then non-decoy packets MAY replace the decoy
@@ -240,8 +244,8 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// additional event besides `DecoyQueued` needs to be triggered.)
     ///
     /// Note that, since only one action timer per machine can be pending at a
-    /// time, this `SendDecoy` action should replace any currently pending
-    /// `SendDecoy` or `BlockOutgoing` action timer for this machine that has
+    /// time, this `DecoyTraffic` action should replace any currently pending
+    /// `DecoyTraffic` or `BlockOutgoing` action timer for this machine that has
     /// not yet expired.
     DecoyTraffic {
         timeout: T::Duration,
@@ -272,7 +276,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     ///
     /// Note that, since only one action timer per machine can be pending at a
     /// time, this `BlockOutgoing` action should replace any currently pending
-    /// `BlockOutgoing` or `SendDecoy` action timer for this machine that has
+    /// `BlockOutgoing` or `DecoyTraffic` action timer for this machine that has
     /// not yet expired.
     BlockOutgoing {
         timeout: T::Duration,
@@ -341,7 +345,7 @@ mod tests {
 
     #[test]
     fn validate_decoy_action() {
-        // valid SendDecoy action
+        // valid DecoyTraffic action
         let mut a = Action::DecoyTraffic {
             bypass: false,
             replace: false,

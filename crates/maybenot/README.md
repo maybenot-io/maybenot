@@ -70,7 +70,7 @@ loop {
                 // cancel the specified timer (action, machine, or both) for the
                 // machine in question, if any
             }
-            TriggerAction::SendDecoys {
+            TriggerAction::DecoyTraffic {
                 timeout: Duration,
                 bypass: bool,
                 replace: bool,

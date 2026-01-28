@@ -176,7 +176,7 @@
 //!                 // If bypass is true and blocking was activated,
 //!                 // extended, or replaced in step 1, then a bypass flag
 //!                 // MUST be set and be available to check as part of
-//!                 // dealing with TriggerAction::SendDecoys actions (see
+//!                 // dealing with TriggerAction::DecoyTraffic actions (see
 //!                 // above).
 //!             }
 //!             TriggerAction::UpdateTimer {
@@ -231,7 +231,7 @@
 //!   [`TriggerAction::UpdateTimer`] and [`TriggerAction::Cancel`]. If it
 //!   expires, you will need to trigger [`TriggerEvent::TimerEnd`].
 //! - A single "action" timer, which the machine will manage via
-//!   [`TriggerAction::SendDecoys`], [`TriggerAction::BlockOutgoing`], and
+//!   [`TriggerAction::DecoyTraffic`], [`TriggerAction::BlockOutgoing`], and
 //!   [`TriggerAction::Cancel`].
 //!   - An action to be taken if and when the "action" timer expires. This
 //!     action may be "begin blocking for a certain Duration" or "Send a decoy
@@ -382,7 +382,7 @@ mod tests {
                         // Set the action timer with the specified timeout. On
                         // expiry, do the following:
                         //
-                        // 1. Send the specified amount of decoy.
+                        // 1. Send N decoy packets.
                         // 2. Trigger TriggerEvent::DecoyQueued { machine:
                         //    machine } after each packet has been sent.
                         //
@@ -393,17 +393,18 @@ mod tests {
                         // decoy MUST NOT be sent. This is to support completely
                         // fail-closed defenses.
                         //
-                        // If replace is true, then the decoy MAY be replaced by
-                        // other packet(s). The other packets could be encrypted
-                        // packets already queued but not already sent to the
-                        // network, containing either decoy or normal data
-                        // (ideally, the user of the framework cannot tell,
-                        // because encrypted). The other data could also be
-                        // normal data about to be turned into normal packet(s)
-                        // and sent. Regardless of if the decoy is replaced or
-                        // not, the event should still be triggered (steps 2).
-                        // If enqueued normal data sent instead of decoy, then
-                        // the NormalQueued event should be triggered as well.
+                        // If replace is true, then decoy packets MAY be
+                        // replaced by other packet(s). The other packets could
+                        // be encrypted packets already queued but not already
+                        // sent to the network, containing either decoy or
+                        // normal data (ideally, the user of the framework
+                        // cannot tell, because encrypted). The other data could
+                        // also be normal data about to be turned into normal
+                        // packet(s) and sent. Regardless of if decoy packets
+                        // are replaced or not, an event per packet should still
+                        // be triggered (step 2). If normal data is turned into
+                        // a packet and sent instead of a decoy packet, then the
+                        // NormalQueued event should be triggered as well.
                         //
                         // Above, note the use case of having bypass and replace
                         // set to true. This is to support constant-rate
@@ -426,8 +427,8 @@ mod tests {
                     } => {
                         // Set an action timer with the specified timeout,
                         // overwriting any existing action timer for the machine
-                        // (be it to block or to send decoy). On expiry, do
-                        // the following (all or nothing):
+                        // (be it to block or to send decoy). On expiry, do the
+                        // following (all or nothing):
                         //
                         // 1. If no blocking is currently taking place (globally
                         //    across all machines, so for this instance of the
@@ -452,7 +453,7 @@ mod tests {
                         // If bypass is true and blocking was activated,
                         // extended, or replaced in step 1, then a bypass flag
                         // MUST be set and be available to check as part of
-                        // dealing with TriggerAction::SendDecoys actions (see
+                        // dealing with TriggerAction::DecoyTraffic actions (see
                         // above).
                     }
                     TriggerAction::UpdateTimer {

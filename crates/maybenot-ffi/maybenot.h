@@ -107,7 +107,7 @@ enum MaybenotAction_Tag {
    * Schedule decoy traffic to be injected after the given timeout for a
    * machine.
    */
-  MaybenotAction_SendDecoy = 1,
+  MaybenotAction_DecoyTraffic = 1,
   /**
    * Schedule blocking of outgoing traffic after the given timeout for a machine.
    */
@@ -127,7 +127,7 @@ typedef struct MaybenotAction_Cancel_Body {
   MaybenotTimer timer;
 } MaybenotAction_Cancel_Body;
 
-typedef struct MaybenotAction_SendDecoys_Body {
+typedef struct MaybenotAction_DecoyTraffic_Body {
   /**
    * The machine that generated the action.
    */
@@ -138,7 +138,7 @@ typedef struct MaybenotAction_SendDecoys_Body {
   struct MaybenotDuration timeout;
   bool replace;
   bool bypass;
-} MaybenotAction_SendDecoys_Body;
+} MaybenotAction_DecoyTraffic_Body;
 
 typedef struct MaybenotAction_BlockOutgoing_Body {
   /**
