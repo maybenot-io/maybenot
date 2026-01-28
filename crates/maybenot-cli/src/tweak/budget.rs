@@ -107,8 +107,8 @@ fn update_budgets<R: RngCore>(
                 }
             }
             "abs_block" => {
-                if machine.allowed_blocked_microsec == 0 || !soft {
-                    machine.allowed_blocked_microsec = rng.random_range(range).round() as u64;
+                if machine.allowed_delay_microsec == 0 || !soft {
+                    machine.allowed_delay_microsec = rng.random_range(range).round() as u64;
                 }
             }
             "max_pad" => {
@@ -117,8 +117,8 @@ fn update_budgets<R: RngCore>(
                 }
             }
             "max_block" => {
-                if machine.max_blocking_frac == 0.0 || !soft {
-                    machine.max_blocking_frac = rng.random_range(range).clamp(0.0, 1.0);
+                if machine.max_delay_frac == 0.0 || !soft {
+                    machine.max_delay_frac = rng.random_range(range).clamp(0.0, 1.0);
                 }
             }
             _ => unreachable!(),

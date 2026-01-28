@@ -46,9 +46,9 @@ struct MachineRuntime<T: crate::time::Instant> {
     state_limit: u64,
     decoys_sent: u64,
     normal_sent: u64,
-    blocking_duration: T::Duration,
+    delay_duration: T::Duration,
     machine_start: T,
-    allowed_blocked_microsec: T::Duration,
+    allowed_delay_microsec: T::Duration,
     counter_a: u64,
     counter_b: u64,
 }
@@ -73,7 +73,7 @@ enum SignalTarget {
 /// An instance of the [`Framework`] repeatedly takes as *input* one or more
 /// [`TriggerEvent`] describing the encrypted traffic going over an encrypted
 /// channel, and produces as *output* zero or more [`TriggerAction`], such as to
-/// *send decoy* traffic or *block outgoing* traffic. One or more [`Machine`]
+/// *send decoy traffic* or *delay outgoing traffic*. One or more [`Machine`]
 /// determine what [`TriggerAction`] to take based on [`TriggerEvent`].
 #[derive(Clone, Debug)]
 pub struct Framework<M, R, T = std::time::Instant>
@@ -95,11 +95,11 @@ where
     max_decoy_frac: f64,
     normal_sent_packets: u64,
     decoys_sent_packets: u64,
-    // blocking accounting
-    max_blocking_frac: f64,
-    blocking_duration: T::Duration,
-    blocking_started: T,
-    blocking_active: bool,
+    // delay accounting
+    max_delay_frac: f64,
+    delay_duration: T::Duration,
+    delay_started: T,
+    delay_active: bool,
     // for internal signaling: if set, specifies the target machines to signal
     signal_pending: Option<SignalTarget>,
     // only allow each counter to be zeroed once per trigger_events call
@@ -115,10 +115,10 @@ where
 {
     /// Create a new framework instance with zero or more [`Machine`].
     ///
-    /// The max decoys/blocking fractions are enforced as a total across all
+    /// The max allowed decoy/delay fractions are enforced as a total across all
     /// machines. The only way those limits can be violated are through
     /// [`Machine::allowed_decoy_packets`] and
-    /// [`Machine::allowed_blocked_microsec`], respectively.
+    /// [`Machine::allowed_delay_microsec`], respectively.
     ///
     /// The current time is handed to the framework here (and later in
     /// [`Self::trigger_events()`]) to make some types of use cases of the
@@ -131,15 +131,15 @@ where
     pub fn new(
         machines: M,
         max_decoy_frac: f64,
-        max_blocking_frac: f64,
+        max_delay_frac: f64,
         current_time: T,
         rng: R,
     ) -> Result<Self, Error> {
         if !(0.0..=1.0).contains(&max_decoy_frac) {
             Err(Error::DecoyLimit)?;
         }
-        if !(0.0..=1.0).contains(&max_blocking_frac) {
-            Err(Error::BlockingLimit)?;
+        if !(0.0..=1.0).contains(&max_delay_frac) {
+            Err(Error::DelayLimit)?;
         }
 
         let mut runtime = Vec::with_capacity(machines.as_ref().len());
@@ -150,9 +150,9 @@ where
                 state_limit: 0,
                 decoys_sent: 0,
                 normal_sent: 0,
-                blocking_duration: T::Duration::zero(),
+                delay_duration: T::Duration::zero(),
                 machine_start: current_time,
-                allowed_blocked_microsec: T::Duration::from_micros(m.allowed_blocked_microsec),
+                allowed_delay_microsec: T::Duration::from_micros(m.allowed_delay_microsec),
                 counter_a: 0,
                 counter_b: 0,
             });
@@ -167,12 +167,12 @@ where
             runtime,
             current_time,
             rng,
-            max_blocking_frac,
+            max_delay_frac,
             max_decoy_frac,
             framework_start: current_time,
-            blocking_active: false,
-            blocking_started: current_time,
-            blocking_duration: T::Duration::zero(),
+            delay_active: false,
+            delay_started: current_time,
+            delay_duration: T::Duration::zero(),
             decoys_sent_packets: 0,
             normal_sent_packets: 0,
             signal_pending: None,
@@ -212,11 +212,11 @@ where
     /// nondecreasing clock. This means that the time passed SHOULD never be
     /// earlier than what was given to [`Framework::new()`] or a previous call
     /// to `trigger_events` for the same framework instance. If this requirement
-    /// is not followed, blocking durations MAY be inaccurately accounted for,
-    /// leading to less or more [`TriggerAction::BlockOutgoing`] than intended
-    /// by set framework and machine limits. The consequences of this depend on
-    /// the running machines (e.g., a machine may also pad as a consequence of
-    /// blocking) and the use-case for the user of the framework.
+    /// is not followed, delay durations MAY be inaccurately accounted for,
+    /// leading to less or more [`TriggerAction::DelayTraffic`] than intended by
+    /// set framework and machine limits. The consequences of this depend on the
+    /// running machines (e.g., a machine may also decoy as a consequence of
+    /// delaying) and the use-case for the user of the framework.
     ///
     /// Returns an iterator of zero or more [`TriggerAction`] that MUST be taken
     /// by the caller.
@@ -326,16 +326,17 @@ where
                     self.transition(mi, Event::PacketSent);
                 }
             }
-            TriggerEvent::BlockingBegin { machine } => {
-                // keep track of when we start blocking (for accounting in BlockingEnd)
-                if !self.blocking_active {
-                    self.blocking_active = true;
-                    self.blocking_started = self.current_time;
+            TriggerEvent::DelayBegin { machine } => {
+                // keep track of when we start delaying traffic (for accounting
+                // in DelayEnd)
+                if !self.delay_active {
+                    self.delay_active = true;
+                    self.delay_started = self.current_time;
                 }
 
-                // blocking is a global event
+                // delaying traffic is a global event
                 for mi in 0..self.runtime.len() {
-                    if self.transition(mi, Event::BlockingBegin) == StateChange::Unchanged
+                    if self.transition(mi, Event::DelayBegin) == StateChange::Unchanged
                         && self.runtime[mi].current_state != STATE_END
                         && mi == machine.into_raw()
                     {
@@ -345,23 +346,23 @@ where
                     }
                 }
             }
-            TriggerEvent::BlockingEnd => {
-                let mut blocked = T::Duration::zero();
-                if self.blocking_active {
-                    blocked = self
+            TriggerEvent::DelayEnd => {
+                let mut delayed = T::Duration::zero();
+                if self.delay_active {
+                    delayed = self
                         .current_time
-                        .saturating_duration_since(self.blocking_started);
-                    self.blocking_duration += blocked; // Duration has AddAssign trait with overflow protection
-                    self.blocking_active = false;
+                        .saturating_duration_since(self.delay_started);
+                    self.delay_duration += delayed; // Duration has AddAssign trait with overflow protection
+                    self.delay_active = false;
                 }
 
                 for mi in 0..self.runtime.len() {
-                    // since block is global, every machine was blocked the
-                    // same duration
-                    if !blocked.is_zero() {
-                        self.runtime[mi].blocking_duration += blocked; // Duration has AddAssign trait with overflow protection
+                    // since delaying is global, every machine has been delayed
+                    // for the same duration
+                    if !delayed.is_zero() {
+                        self.runtime[mi].delay_duration += delayed; // Duration has AddAssign trait with overflow protection
                     }
-                    self.transition(mi, Event::BlockingEnd);
+                    self.transition(mi, Event::DelayEnd);
                 }
             }
             TriggerEvent::TimerBegin { machine } => {
@@ -556,9 +557,9 @@ where
                     replace,
                     machine: index,
                 }),
-                Action::BlockOutgoing {
+                Action::DelayTraffic {
                     bypass, replace, ..
-                } => Some(TriggerAction::BlockOutgoing {
+                } => Some(TriggerAction::DelayTraffic {
                     timeout: T::Duration::from_micros(action.sample_timeout(&mut self.rng)),
                     duration: T::Duration::from_micros(action.sample_duration(&mut self.rng)),
                     bypass,
@@ -599,67 +600,67 @@ where
         };
 
         match action {
-            Action::BlockOutgoing { .. } => self.below_limit_blocking(runtime, machine),
-            Action::DecoyTraffic { .. } => self.below_limit_decoys(runtime, machine),
+            Action::DelayTraffic { .. } => self.below_limit_delay(runtime, machine),
+            Action::DecoyTraffic { .. } => self.below_limit_decoy(runtime, machine),
             Action::UpdateTimer { .. } => runtime.state_limit > 0,
             _ => true,
         }
     }
 
-    fn below_limit_blocking(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
+    fn below_limit_delay(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
-        // blocking action
+        // delay action
 
-        // special case: we always allow overwriting existing blocking
-        let replace = if let Some(Action::BlockOutgoing { replace, .. }) = current.action {
+        // special case: we always allow overwriting existing delay
+        let replace = if let Some(Action::DelayTraffic { replace, .. }) = current.action {
             replace
         } else {
             false
         };
 
-        if replace && self.blocking_active {
+        if replace && self.delay_active {
             // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
 
-        // compute durations we've been blocking
-        let mut m_block_dur = runtime.blocking_duration;
-        let mut g_block_dur = self.blocking_duration;
-        if self.blocking_active {
-            // account for ongoing blocking as well, add duration
-            m_block_dur += self
+        // compute durations we've been delaying
+        let mut m_delay_dur = runtime.delay_duration;
+        let mut g_delay_dur = self.delay_duration;
+        if self.delay_active {
+            // account for ongoing delay as well, add duration
+            m_delay_dur += self
                 .current_time
-                .saturating_duration_since(self.blocking_started);
-            g_block_dur += self
+                .saturating_duration_since(self.delay_started);
+            g_delay_dur += self
                 .current_time
-                .saturating_duration_since(self.blocking_started);
+                .saturating_duration_since(self.delay_started);
         }
 
-        // machine allowed blocking duration first, since it bypasses the
-        // other two types of limits
-        if m_block_dur < runtime.allowed_blocked_microsec {
+        // machine allowed delay duration first, since it bypasses the other two
+        // types of limits
+        if m_delay_dur < runtime.allowed_delay_microsec {
             // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
 
         // does the machine limit say no, if set?
-        if machine.max_blocking_frac > 0.0 {
-            let f: f64 = m_block_dur.div_duration_f64(
+        if machine.max_delay_frac > 0.0 {
+            let f: f64 = m_delay_dur.div_duration_f64(
                 self.current_time
                     .saturating_duration_since(runtime.machine_start),
             );
-            if f >= machine.max_blocking_frac {
+            if f >= machine.max_delay_frac {
                 return false;
             }
         }
 
         // does the framework say no?
-        if self.max_blocking_frac > 0.0 {
-            let f: f64 = g_block_dur.div_duration_f64(
+        if self.max_delay_frac > 0.0 {
+            let f: f64 = g_delay_dur.div_duration_f64(
                 self.current_time
                     .saturating_duration_since(self.framework_start),
             );
-            if f >= self.max_blocking_frac {
+            if f >= self.max_delay_frac {
                 return false;
             }
         }
@@ -668,7 +669,7 @@ where
         runtime.state_limit > 0
     }
 
-    fn below_limit_decoys(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
+    fn below_limit_decoy(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
         // no limits apply if not made up decoy count
         if runtime.decoys_sent < machine.allowed_decoy_packets {
             return runtime.state_limit > 0;
@@ -808,7 +809,7 @@ mod tests {
 
         // start triggering
         _ = f.trigger_events(
-            &[TriggerEvent::BlockingBegin {
+            &[TriggerEvent::DelayBegin {
                 machine: MachineId(0),
             }],
             current_time,
@@ -818,7 +819,7 @@ mod tests {
         // move time forward, trigger again to make sure no scheduled timer
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::BlockingBegin {
+            &[TriggerEvent::DelayBegin {
                 machine: MachineId(0),
             }],
             current_time,
@@ -940,15 +941,15 @@ mod tests {
     }
 
     #[test]
-    fn blocking_machine() {
-        // a machine that blocks for 10us, 1us after NormalQueued
+    fn delaying_machine() {
+        // a machine that delays traffic for 10us, 1us after NormalQueued
 
         // state 0
         let mut s0 = State::new(enum_map! {
                  Event::NormalQueued => vec![Trans(0, 1.0)],
              _ => vec![],
         });
-        s0.action = Some(Action::BlockOutgoing {
+        s0.action = Some(Action::DelayTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -980,7 +981,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::BlockOutgoing {
+            Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(1),
                 duration: Duration::from_micros(10),
                 bypass: false,
@@ -991,7 +992,7 @@ mod tests {
 
         current_time = current_time.add(Duration::from_micros(20));
         _ = f.trigger_events(
-            &[TriggerEvent::BlockingBegin {
+            &[TriggerEvent::DelayBegin {
                 machine: MachineId(0),
             }],
             current_time,
@@ -1003,7 +1004,7 @@ mod tests {
             _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::BlockOutgoing {
+                Some(TriggerAction::DelayTraffic {
                     timeout: Duration::from_micros(1),
                     duration: Duration::from_micros(10),
                     bypass: false,
@@ -2407,19 +2408,18 @@ mod tests {
     }
 
     #[test]
-    fn machine_max_blocking_frac() {
-        // We create a machine that should be allowed to block for 10us before
+    fn machine_max_delaying_frac() {
+        // We create a machine that should be allowed to delay for 10us before
         // machine limits are applied, then the machine should be limited from
-        // blocking until after 10us, given the set max blocking fraction of
-        // 0.5.
+        // delaying until after 10us, given the set max delay fraction of 0.5.
 
         // state 0
         let mut s0 = State::new(enum_map! {
-           Event::BlockingBegin | Event::BlockingEnd | Event::NormalRecv => vec![Trans(0, 1.0)],
+           Event::DelayBegin | Event::DelayEnd | Event::NormalRecv => vec![Trans(0, 1.0)],
            _ => vec![],
         });
-        // block every 2us for 2us
-        s0.action = Some(Action::BlockOutgoing {
+        // delay every 2us for 2us
+        s0.action = Some(Action::DelayTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2448,14 +2448,14 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        // trigger self to start the blocking (triggers action)
+        // trigger self to start delaying traffic (triggers action)
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
 
-        // verify that we can block for 5*2=10us
+        // verify that we can delay for 5*2=10us
         for _ in 0..5 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::BlockOutgoing {
+                Some(TriggerAction::DelayTraffic {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     bypass: false,
@@ -2465,14 +2465,14 @@ mod tests {
             );
 
             _ = f.trigger_events(
-                &[TriggerEvent::BlockingBegin {
+                &[TriggerEvent::DelayBegin {
                     machine: MachineId(0),
                 }],
                 current_time,
             );
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::BlockOutgoing {
+                Some(TriggerAction::DelayTraffic {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     bypass: false,
@@ -2481,18 +2481,18 @@ mod tests {
                 })
             );
             current_time = current_time.add(Duration::from_micros(2));
-            _ = f.trigger_events(&[TriggerEvent::BlockingEnd], current_time);
+            _ = f.trigger_events(&[TriggerEvent::DelayEnd], current_time);
         }
         assert_eq!(f.actions[0], None);
-        assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
+        assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(10));
 
-        // now we've burned our blocking budget, should be blocked for 10us
+        // now we've burned our delay budget, should be prevented for 10us
         for _ in 0..5 {
             current_time = current_time.add(Duration::from_micros(2));
             _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
             assert_eq!(f.actions[0], None);
         }
-        assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
+        assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(10));
         assert_eq!(
             current_time.duration_since(f.runtime[0].machine_start),
             Duration::from_micros(20)
@@ -2503,7 +2503,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::BlockOutgoing {
+            Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
                 bypass: false,
@@ -2514,19 +2514,19 @@ mod tests {
     }
 
     #[test]
-    fn framework_max_blocking_frac() {
-        // We create a machine that should be allowed to block for 10us before
+    fn framework_max_delay_frac() {
+        // We create a machine that should be allowed to delay for 10us before
         // machine limits are applied, then the machine should be limited from
-        // blocking until after 10us, given the set max blocking fraction of
-        // 0.5 in the framework.
+        // delaying until after 10us, given the set max delay fraction of 0.5 in
+        // the framework.
 
         // state 0
         let mut s0 = State::new(enum_map! {
-            Event::BlockingBegin | Event::BlockingEnd | Event::NormalRecv => vec![Trans(0, 1.0)],
+            Event::DelayBegin | Event::DelayEnd | Event::NormalRecv => vec![Trans(0, 1.0)],
         _ => vec![],
         });
-        // block every 2us for 2us
-        s0.action = Some(Action::BlockOutgoing {
+        // delay every 2us for 2us
+        s0.action = Some(Action::DelayTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2557,14 +2557,14 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(&machines, 0.0, 0.5, current_time, rand::rng()).unwrap();
 
-        // trigger self to start the blocking (triggers action)
+        // trigger self to start delaying traffic (triggers action)
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
 
-        // verify that we can block for 5*2=10us
+        // verify that we can delay for 5*2=10us
         for _ in 0..5 {
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::BlockOutgoing {
+                Some(TriggerAction::DelayTraffic {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     bypass: false,
@@ -2574,14 +2574,14 @@ mod tests {
             );
 
             _ = f.trigger_events(
-                &[TriggerEvent::BlockingBegin {
+                &[TriggerEvent::DelayBegin {
                     machine: MachineId(0),
                 }],
                 current_time,
             );
             assert_eq!(
                 f.actions[0],
-                Some(TriggerAction::BlockOutgoing {
+                Some(TriggerAction::DelayTraffic {
                     timeout: Duration::from_micros(2),
                     duration: Duration::from_micros(2),
                     bypass: false,
@@ -2590,18 +2590,18 @@ mod tests {
                 })
             );
             current_time = current_time.add(Duration::from_micros(2));
-            _ = f.trigger_events(&[TriggerEvent::BlockingEnd], current_time);
+            _ = f.trigger_events(&[TriggerEvent::DelayEnd], current_time);
         }
         assert_eq!(f.actions[0], None);
-        assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
+        assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(10));
 
-        // now we've burned our blocking budget, should be blocked for 10us
+        // now we've burned our delay budget, should be blocked for 10us
         for _ in 0..5 {
             current_time = current_time.add(Duration::from_micros(2));
             _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
             assert_eq!(f.actions[0], None);
         }
-        assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(10));
+        assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(10));
         assert_eq!(
             current_time.duration_since(f.runtime[0].machine_start),
             Duration::from_micros(20)
@@ -2612,7 +2612,7 @@ mod tests {
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::BlockOutgoing {
+            Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
                 bypass: false,
@@ -2623,19 +2623,19 @@ mod tests {
     }
 
     #[test]
-    fn framework_replace_blocking() {
-        // Plan: create two machines. #0 will exceed its blocking limit
-        // and no longer be allowed to block. #1 will then enable blocking,
-        // so #0 should now be able to overwrite that blocking regardless
-        // of its limit (special case in below_limit_blocking).
+    fn framework_replace_delay() {
+        // Plan: create two machines. #0 will exceed its delay limit and no
+        // longer be allowed to cause delay. #1 will then delay traffic, so #0
+        // should now be able to overwrite that delay regardless of its limit
+        // (special case in below_limit_delay fn).
 
         // state 0, first machine
         let mut s0 = State::new(enum_map! {
             Event::NormalRecv => vec![Trans(0, 1.0)],
         _ => vec![],
         });
-        // block every 2us for 2us
-        s0.action = Some(Action::BlockOutgoing {
+        // delay every 2us for 2us
+        s0.action = Some(Action::DelayTraffic {
             bypass: false,
             replace: true, // NOTE
             timeout: Dist {
@@ -2665,8 +2665,8 @@ mod tests {
             Event::NormalQueued => vec![Trans(0, 1.0)],
         _ => vec![],
         });
-        // block instantly for 1000us
-        s0.action = Some(Action::BlockOutgoing {
+        // delay instantly for 1000us
+        s0.action = Some(Action::DelayTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -2696,13 +2696,13 @@ mod tests {
         let machines = vec![m0, m1];
         let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
 
-        // trigger to make machine 0 block
+        // trigger to make machine 0 delay
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
 
-        // verify machine 0 can block for 2us
+        // verify machine 0 can delay for 2us
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::BlockOutgoing {
+            Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
                 bypass: false,
@@ -2712,28 +2712,28 @@ mod tests {
         );
 
         _ = f.trigger_events(
-            &[TriggerEvent::BlockingBegin {
+            &[TriggerEvent::DelayBegin {
                 machine: MachineId(0),
             }],
             current_time,
         );
 
         current_time = current_time.add(Duration::from_micros(2));
-        _ = f.trigger_events(&[TriggerEvent::BlockingEnd], current_time);
+        _ = f.trigger_events(&[TriggerEvent::DelayEnd], current_time);
 
-        // ensure machine 0 can no longer block
+        // ensure machine 0 can no longer delay
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
 
         assert_eq!(f.actions[0], None);
-        assert_eq!(f.runtime[0].blocking_duration, Duration::from_micros(2));
+        assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(2));
 
-        // now cause machine 1 to start blocking
+        // now cause machine 1 to start delaying
         _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
 
-        // verify machine 1 blocks as expected
+        // verify machine 1 delays traffic as expected
         assert_eq!(
             f.actions[1],
-            Some(TriggerAction::BlockOutgoing {
+            Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(0),
                 duration: Duration::from_micros(1000),
                 bypass: false,
@@ -2743,18 +2743,18 @@ mod tests {
         );
 
         _ = f.trigger_events(
-            &[TriggerEvent::BlockingBegin {
+            &[TriggerEvent::DelayBegin {
                 machine: MachineId(1),
             }],
             current_time,
         );
 
-        // machine 0 should now be able to replace the blocking
+        // machine 0 should now be able to replace the delay
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
 
         assert_eq!(
             f.actions[0],
-            Some(TriggerAction::BlockOutgoing {
+            Some(TriggerAction::DelayTraffic {
                 timeout: Duration::from_micros(2),
                 duration: Duration::from_micros(2),
                 bypass: false,
@@ -2847,7 +2847,7 @@ mod tests {
         assert_eq!(f.runtime[0].decoys_sent, 4);
         assert_eq!(f.runtime[0].normal_sent, 1);
 
-        // limit should be reached after 4 decoys, blocking next action
+        // limit should be reached after 4 decoys, delay next action
         assert_eq!(f.actions[0], None);
         assert_eq!(f.runtime[0].state_limit, 0);
     }

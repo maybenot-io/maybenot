@@ -18,13 +18,13 @@ pub enum Queue {
 /// in order (time-wise). The queue is split into four parts:
 /// - base: TriggerEvent::NormalQueued events that are from the parsed base
 ///   trace
-/// - blocking: PacketSent events that may be blocked by blocking machines
-/// - bypassable: PacketSent events that are blocked with bypassable blocking
+/// - delay: PacketSent events that may be blocked by delay machines
+/// - bypassable: PacketSent events that are blocked with bypassable delay
 /// - internal: all other events
 #[derive(Debug, Clone)]
 pub struct EventQueue {
     pub(crate) base: BinaryHeap<SimEvent>,
-    pub(crate) blocking: BinaryHeap<SimEvent>,
+    pub(crate) delay: BinaryHeap<SimEvent>,
     pub(crate) bypassable: BinaryHeap<SimEvent>,
     pub(crate) internal: BinaryHeap<SimEvent>,
 }
@@ -40,9 +40,9 @@ impl EventQueue {
         EventQueue {
             // TriggerEvent::NormalQueued is the only event in the base trace
             base: BinaryHeap::with_capacity(4096),
-            // TriggerEvent::PacketSent is the only event that can be blocking
+            // TriggerEvent::PacketSent is the only event that can be delay
             // or bypassable
-            blocking: BinaryHeap::with_capacity(1024),
+            delay: BinaryHeap::with_capacity(1024),
             bypassable: BinaryHeap::with_capacity(1024),
             // all events that are not TriggerEvent::PacketSent or
             // TriggerEvent::NormalQueued are internal
@@ -51,7 +51,7 @@ impl EventQueue {
     }
 
     pub fn len(&self) -> usize {
-        self.blocking.len() + self.bypassable.len() + self.internal.len() + self.base.len()
+        self.delay.len() + self.bypassable.len() + self.internal.len() + self.base.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -60,13 +60,13 @@ impl EventQueue {
 
     /// Checks if there are no normal packets in the queue. This involves
     /// checking the base queue for TriggerEvent::NormalQueued events, the
-    /// blocking and bypassable queues for TriggerEvent::PacketSent events
+    /// delay and bypassable queues for TriggerEvent::PacketSent events
     /// without the decoy flag, and the internal queue for any PacketRecv
     /// without the decoy flag.
     pub fn no_normal_packets(&self) -> bool {
         self.base.is_empty()
             && self
-                .blocking
+                .delay
                 .iter()
                 .all(|e| e.event != TriggerEvent::PacketSent && !e.contains_decoy)
             && self
@@ -83,7 +83,7 @@ impl EventQueue {
         match item.event {
             TriggerEvent::PacketSent => match item.bypass {
                 true => self.bypassable.push(item),
-                false => self.blocking.push(item),
+                false => self.delay.push(item),
             },
             // from parse_trace_advanced(), the only place where we push
             // TriggerEvent::NormalQueued from a base trace
@@ -105,10 +105,10 @@ impl EventQueue {
             0 => (None, Queue::Blocking, Duration::default()),
             _ => {
                 // peek all, per def, it's one of them: we prioritize in order
-                // of base, bypassable, blocking, and lastly internal
+                // of base, bypassable, delay, and lastly internal
                 let (mut first, mut q) = (self.bypassable.peek(), Queue::Bypassable);
 
-                let n = self.blocking.peek();
+                let n = self.delay.peek();
                 if n > first {
                     first = n;
                     q = Queue::Blocking;
@@ -140,7 +140,7 @@ impl EventQueue {
     /// remove an event from the queue
     pub fn pop(&mut self, q: Queue, network_delay_sum: Duration) -> Option<SimEvent> {
         match q {
-            Queue::Blocking => self.blocking.pop(),
+            Queue::Blocking => self.delay.pop(),
             Queue::Bypassable => self.bypassable.pop(),
             Queue::Internal => self.internal.pop(),
             Queue::Base => {
@@ -155,9 +155,9 @@ impl EventQueue {
         }
     }
 
-    /// peek the next blocking event
-    pub fn peek_blocking(&self) -> Option<&SimEvent> {
-        self.blocking.peek()
+    /// peek the next delay event
+    pub fn peek_delay(&self) -> Option<&SimEvent> {
+        self.delay.peek()
     }
 
     /// peek the next bypassable event
@@ -165,8 +165,8 @@ impl EventQueue {
         self.bypassable.peek()
     }
 
-    /// peek the next non-blocking event
-    pub fn peek_non_blocking(&self, network_delay_sum: Duration) -> (Option<&SimEvent>, Queue) {
+    /// peek the next non-delay event
+    pub fn peek_non_delay(&self, network_delay_sum: Duration) -> (Option<&SimEvent>, Queue) {
         let b = self.base.peek();
         let i = self.internal.peek();
         if before(b, i, network_delay_sum) {

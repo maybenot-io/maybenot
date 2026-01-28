@@ -25,8 +25,8 @@ packets_per_sec = [100_000, 100_000]
 
 [derive.machine]
 num_states = [3,4]
-allow_blocking_client = false
-allow_blocking_server = false
+allow_delay_client = false
+allow_delay_server = false
 allow_expressive = false
 allow_fixed_budget = true
 allow_frac_limits = false

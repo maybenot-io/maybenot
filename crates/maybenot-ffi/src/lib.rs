@@ -98,12 +98,12 @@ pub enum MaybenotAction {
         bypass: bool,
     } = 1,
 
-    /// Schedule blocking of outgoing traffic after the given timeout for a machine.
-    BlockOutgoing {
+    /// Schedule delay of outgoing traffic after the given timeout for a machine.
+    DelayTraffic {
         /// The machine that generated the action.
         machine: usize,
 
-        /// The time to wait before blocking.
+        /// The time to wait before delay.
         timeout: MaybenotDuration,
 
         replace: bool,
@@ -142,7 +142,7 @@ impl MaybenotFramework {
     fn start(
         machines_str: &str,
         max_decoy_frac: f64,
-        max_blocking_frac: f64,
+        max_delay_frac: f64,
     ) -> Result<Self, MaybenotResult> {
         let machines: Vec<_> = machines_str
             .lines()
@@ -157,7 +157,7 @@ impl MaybenotFramework {
         let framework = Framework::new(
             machines,
             max_decoy_frac,
-            max_blocking_frac,
+            max_delay_frac,
             Instant::now(),
             rng,
         )
@@ -214,13 +214,13 @@ fn convert_action(action: &maybenot::TriggerAction) -> MaybenotAction {
             bypass,
             machine: machine.into_raw(),
         },
-        maybenot::TriggerAction::BlockOutgoing {
+        maybenot::TriggerAction::DelayTraffic {
             timeout,
             duration,
             bypass,
             replace,
             machine,
-        } => MaybenotAction::BlockOutgoing {
+        } => MaybenotAction::DelayTraffic {
             timeout: timeout.into(),
             duration: duration.into(),
             replace,
@@ -251,8 +251,8 @@ fn convert_event(event: MaybenotEvent) -> TriggerEvent {
         MaybenotEventType::DecoyQueued => TriggerEvent::DecoyQueued { machine },
         MaybenotEventType::PacketSent => TriggerEvent::PacketSent,
 
-        MaybenotEventType::BlockingBegin => TriggerEvent::BlockingBegin { machine },
-        MaybenotEventType::BlockingEnd => TriggerEvent::BlockingEnd,
+        MaybenotEventType::BlockingBegin => TriggerEvent::DelayBegin { machine },
+        MaybenotEventType::BlockingEnd => TriggerEvent::DelayEnd,
 
         MaybenotEventType::TimerBegin => TriggerEvent::TimerBegin { machine },
         MaybenotEventType::TimerEnd => TriggerEvent::TimerEnd { machine },

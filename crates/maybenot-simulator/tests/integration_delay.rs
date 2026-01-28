@@ -104,7 +104,7 @@ fn get_0ms_delay_dist() -> BinDist {
 fn test_action_delay() {
     // action delay should be visible in the network trace we get from the
     // simulator, by simply delaying decoy packets by the action delay or
-    // delaying blocking to start/stop by the action delay
+    // delaying delay to start/stop by the action delay
 
     let integration = Integration {
         action_delay: get_1ms_delay_dist(),

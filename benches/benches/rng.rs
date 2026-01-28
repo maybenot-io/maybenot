@@ -111,7 +111,7 @@ pub fn complete_trace_rng_source_benchmarks(c: &mut Criterion) {
         },
     );
 
-    // TODO: benchmarks for decoy and blocking machines
+    // TODO: benchmarks for decoy and delaying machines
 }
 
 criterion_group!(

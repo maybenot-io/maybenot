@@ -109,9 +109,9 @@ enum MaybenotAction_Tag {
    */
   MaybenotAction_DecoyTraffic = 1,
   /**
-   * Schedule blocking of outgoing traffic after the given timeout for a machine.
+   * Schedule delay of outgoing traffic after the given timeout for a machine.
    */
-  MaybenotAction_BlockOutgoing = 2,
+  MaybenotAction_DelayTraffic = 2,
   /**
    * Update the timer duration for a machine.
    */
@@ -140,13 +140,13 @@ typedef struct MaybenotAction_DecoyTraffic_Body {
   bool bypass;
 } MaybenotAction_DecoyTraffic_Body;
 
-typedef struct MaybenotAction_BlockOutgoing_Body {
+typedef struct MaybenotAction_DelayTraffic_Body {
   /**
    * The machine that generated the action.
    */
   uintptr_t machine;
   /**
-   * The time to wait before blocking.
+   * The time to wait before delay.
    */
   struct MaybenotDuration timeout;
   bool replace;
@@ -155,7 +155,7 @@ typedef struct MaybenotAction_BlockOutgoing_Body {
    * How long to block.
    */
   struct MaybenotDuration duration;
-} MaybenotAction_BlockOutgoing_Body;
+} MaybenotAction_DelayTraffic_Body;
 
 typedef struct MaybenotAction_UpdateTimer_Body {
   uintptr_t machine;
@@ -168,7 +168,7 @@ typedef struct MaybenotAction {
   union {
     MaybenotAction_Cancel_Body cancel;
     MaybenotAction_DecoyTraffic_Body send_decoy;
-    MaybenotAction_BlockOutgoing_Body block_outgoing;
+    MaybenotAction_DelayTraffic_Body block_outgoing;
     MaybenotAction_UpdateTimer_Body update_timer;
   };
 } MaybenotAction;
@@ -190,7 +190,7 @@ const char *maybenot_version(void);
  */
 MaybenotResult maybenot_start(const char *machines_str,
                               double max_decoy_frac,
-                              double max_blocking_frac,
+                              double max_delay_frac,
                               struct MaybenotFramework **out);
 
 /**

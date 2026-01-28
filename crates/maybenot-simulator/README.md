@@ -117,10 +117,10 @@ improved and evaluated against real-world network experiments. The goal of the
 simulator is not necessarily to be a perfect simulator, but a useful simulator
 for making different kinds of traffic analysis defenses.
 
-There are also fundamental issues with simulating blocking actions of machines.
+There are also fundamental issues with simulating delay actions of machines.
 Because the simulator takes as input a base network trace of encrypted network
 traffic, we do not know any semantics or inter-dependencies between the packets
-in the encrypted trace. As a result, we cannot properly simulate blocking
+in the encrypted trace. As a result, we cannot properly simulate delay
 actions. For example, if a machine blocks a packet, we cannot know if the
 blocked packet contains a request for a resource that leads to a response
 contained in the following received packets. The simulator will happily still

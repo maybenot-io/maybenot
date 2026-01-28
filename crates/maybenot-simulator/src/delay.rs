@@ -4,30 +4,30 @@ use log::debug;
 
 use crate::{SimEvent, queue::SimQueue};
 
-/// on blocking expiration, this function determines the duration, if any, that
+/// on delay expiration, this function determines the duration, if any, that
 /// should be added as aggregated delay as a consequence of packets being
 /// blocked
-pub fn agg_delay_on_blocking_expire(
+pub fn agg_delay_on_delay_expire(
     sq: &SimQueue,
     is_client: bool,
     expire_time: Instant,
-    blocking_head: &SimEvent,
+    delay_head: &SimEvent,
     aggregate_base_delay: Duration,
 ) -> Option<Duration> {
     // how far into the future in the ingress queue (base events of
-    // NormalQueued) to consider the blocking head event as part of a burst
+    // NormalQueued) to consider the delay head event as part of a burst
     const BASE_WINDOW: Duration = Duration::from_millis(1);
     // the maximum duration of the hypothetical burst as part of the blocked
     // (buffered) PacketSent events
     const BUFFER_WINDOW: Duration = Duration::from_millis(1);
 
-    let (blocking, bypassable) = match is_client {
-        true => (&sq.client.blocking, &sq.client.bypassable),
-        false => (&sq.server.blocking, &sq.server.bypassable),
+    let (delay, bypassable) = match is_client {
+        true => (&sq.client.delay, &sq.client.bypassable),
+        false => (&sq.server.delay, &sq.server.bypassable),
     };
 
     // we have a buffer of blocked packets
-    let buffer_size = blocking.len() + bypassable.len();
+    let buffer_size = delay.len() + bypassable.len();
 
     // and the packet to be sent next in the simulator (either at expire_time or
     // in the future)
@@ -40,14 +40,14 @@ pub fn agg_delay_on_blocking_expire(
     };
 
     // we look for the tail of the buffered packets within the window
-    let mut tail = blocking_head.time;
+    let mut tail = delay_head.time;
     if buffer_size > 2 {
-        // many packets, note that the blocking_head has been blocked for the
+        // many packets, note that the delay_head has been blocked for the
         // longest duration of all blocked packets. We now check all the blocked
         // packets, determining the timestamp of the event with the largest
         // timestamp still within the window (the tail packet)
-        blocking.iter().chain(bypassable.iter()).for_each(|e| {
-            if e.time - blocking_head.time <= BUFFER_WINDOW && e.time > tail {
+        delay.iter().chain(bypassable.iter()).for_each(|e| {
+            if e.time - delay_head.time <= BUFFER_WINDOW && e.time > tail {
                 tail = e.time;
             }
         });
@@ -61,12 +61,12 @@ pub fn agg_delay_on_blocking_expire(
     match base {
         Some(base) => {
             let base_time = base.time + aggregate_base_delay;
-            if base_time - blocking_head.time <= BASE_WINDOW {
-                debug!("base is within blocking head window");
-                // if the blocking head event (not the tail, or we get a sliding
+            if base_time - delay_head.time <= BASE_WINDOW {
+                debug!("base is within delay head window");
+                // if the delay head event (not the tail, or we get a sliding
                 // window) and the next base event are within the window, we
                 // assume that they are related and don't add any delay, instead
-                // any later blocking of the tail should cause delay, if any
+                // any later delay of the tail should cause delay, if any
                 None
             } else {
                 debug!("base is outside of the window");
@@ -84,21 +84,21 @@ pub fn agg_delay_on_blocking_expire(
 }
 
 /// when a decoy packet with bypass replace is sent through bypassable
-/// blocking, this function determines the duration, if any, that should be
+/// delay, this function determines the duration, if any, that should be
 /// added as aggregated delay as a consequence of packets being blocked
 pub fn agg_delay_on_decoy_bypass_replace(
     sq: &SimQueue,
     is_client: bool,
     current_time: Instant,
-    blocking_head: &SimEvent,
+    delay_head: &SimEvent,
     aggregate_base_delay: Duration,
 ) -> Option<Duration> {
     const ADJACENT_WINDOW: Duration = Duration::from_millis(100);
     const BASE_WINDOW: Duration = Duration::from_millis(1);
 
-    let (blocking, bypassable) = match is_client {
-        true => (&sq.client.blocking, &sq.client.bypassable),
-        false => (&sq.server.blocking, &sq.server.bypassable),
+    let (delay, bypassable) = match is_client {
+        true => (&sq.client.delay, &sq.client.bypassable),
+        false => (&sq.server.delay, &sq.server.bypassable),
     };
 
     // and the packet to be sent next in the simulator (either at current_time
@@ -112,10 +112,10 @@ pub fn agg_delay_on_decoy_bypass_replace(
     };
 
     // before calling agg_delay_on_decoy_bypass_replace() in network.rs, the
-    // blocking packet has been temporarily popped, so we look for any adjacent
-    // packet either in the blocking or bypassable queues
-    for e in blocking.iter().chain(bypassable.iter()) {
-        if e.time - blocking_head.time <= ADJACENT_WINDOW {
+    // delay packet has been temporarily popped, so we look for any adjacent
+    // packet either in the delay or bypassable queues
+    for e in delay.iter().chain(bypassable.iter()) {
+        if e.time - delay_head.time <= ADJACENT_WINDOW {
             debug!("found adjacently blocked packet");
             return None;
         }
@@ -123,14 +123,14 @@ pub fn agg_delay_on_decoy_bypass_replace(
 
     if let Some(base) = base {
         let base_time = base.time + aggregate_base_delay;
-        if base_time - blocking_head.time <= BASE_WINDOW {
-            debug!("base is within blocking head window");
+        if base_time - delay_head.time <= BASE_WINDOW {
+            debug!("base is within delay head window");
             return None;
         }
         debug!("base is outside of the window");
     }
 
-    Some(current_time - blocking_head.time)
+    Some(current_time - delay_head.time)
 }
 
 /// when the network bottleneck determines that a network packet has been
@@ -145,14 +145,14 @@ pub fn should_delayed_packet_prop_agg_delay(
     const ADJACENT_WINDOW: Duration = Duration::from_millis(100);
     const BASE_WINDOW: Duration = Duration::from_millis(1);
 
-    let (blocking, bypassable) = match is_client {
-        true => (&sq.client.blocking, &sq.client.bypassable),
-        false => (&sq.server.blocking, &sq.server.bypassable),
+    let (delay, bypassable) = match is_client {
+        true => (&sq.client.delay, &sq.client.bypassable),
+        false => (&sq.server.delay, &sq.server.bypassable),
     };
 
-    // we look for any adjacent packet either in the blocking or bypassable
+    // we look for any adjacent packet either in the delay or bypassable
     // queues...
-    for e in blocking.iter().chain(bypassable.iter()) {
+    for e in delay.iter().chain(bypassable.iter()) {
         if e.time - delayed_packet.time <= ADJACENT_WINDOW {
             debug!("found adjacently queued packet");
             return false;

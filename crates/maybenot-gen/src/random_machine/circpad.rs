@@ -17,7 +17,7 @@ use crate::{
 /// Generate a random Maybenot machine that can be directly translated to a Tor
 /// Circuit Padding (circpad) Framework machine. This limits us to a subset of
 /// Maybenot and circpad features. Notably, Maybenot lacks histograms, while
-/// circpad lacks probabilistic state transitions, blocking actions, and the
+/// circpad lacks probabilistic state transitions, delay actions, and the
 /// "expressive" features of Maybenot.
 pub(crate) fn random_circpad_compatible_machine<R: Rng>(
     num_states: usize,
@@ -89,7 +89,7 @@ pub fn random_state<R: Rng>(
         },
     };
 
-    // enforce the minimum action timeout for blocking and decoy actions
+    // enforce the minimum action timeout for delay and decoy actions
     if let Action::DecoyTraffic {
         ref mut timeout, ..
     } = action

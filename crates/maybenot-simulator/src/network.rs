@@ -55,7 +55,7 @@ impl fmt::Display for Network {
 
 /// a network bottleneck that adds delay to packets above a certain packets per
 /// window limit (default 1s window, so pps), and keeps track of the aggregate
-/// delay to add to packets due to the bottleneck or accumulated blocking by
+/// delay to add to packets due to the bottleneck or accumulated delay by
 /// machines: used to shift the baseline trace time at both client and server
 #[derive(Debug, Clone)]
 pub struct NetworkBottleneck {
@@ -139,7 +139,7 @@ impl NetworkBottleneck {
         // client-server and server-destination.
         let d = self.network.sample();
 
-        // did the blocking expire at the client?
+        // did the delay expire at the client?
         let mut client = Duration::default();
         let mut server = Duration::default();
         match client_expiry {
@@ -252,7 +252,7 @@ impl WindowCount {
 // Queued normal or decoy packets create the corresponding sent packet events.
 // Here, we could simulate the egress queue of the network stack. We assume that
 // it is always possible to turn a queued packet into a sent packet, but that
-// sending a packet can be blocked (dealt with by the simulation of blocking in
+// sending a packet can be blocked (dealt with by the simulation of delay in
 // the main loop of the simulator).
 //
 // For sending a normal packet, we queue the corresponding recv event on the
@@ -296,9 +296,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                 // replace flag is set: if we have a normal packet queued up /
                 // blocked, we can replace the decoy with that FIXME: here be
                 // bugs related to integration delays
-                if let (Some(queued), qid) =
-                    sq.peek_blocking(state.blocking_bypassable, next.client)
-                {
+                if let (Some(queued), qid) = sq.peek_delay(state.delay_bypassable, next.client) {
                     if queued.client == next.client
                         && TriggerEvent::PacketSent == queued.event
                         && !queued.contains_decoy
@@ -323,9 +321,9 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                         // we need to remove and re-insert to get the packet
                         // into the correct internal queue with the new flags
                         let mut entry = sq
-                            .pop_blocking(
+                            .pop_delay(
                                 qid,
-                                state.blocking_bypassable,
+                                state.delay_bypassable,
                                 next.client,
                                 if next.client {
                                     network.client_aggregate_base_delay
@@ -339,7 +337,7 @@ pub(crate) fn sim_network_stack<M: AsRef<[Machine]>>(
                         debug!(
                             "\treplaced bypassable decoy sent with blocked queued normal PacketSent @{side}"
                         );
-                        // queue any aggregate delay caused by the blocking
+                        // queue any aggregate delay caused by the delay
                         if let Some(block_duration) = agg_delay_on_decoy_bypass_replace(
                             sq,
                             next.client,

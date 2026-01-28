@@ -6,7 +6,7 @@ use common::run_test_sim;
 use maybenot::{
     Machine,
     action::Action,
-    constants::MAX_SAMPLED_BLOCK_DURATION,
+    constants::MAX_SAMPLED_DELAY_DURATION,
     dist::{Dist, DistType},
     event::Event,
     state::{State, Trans},
@@ -96,15 +96,15 @@ fn test_network_bottleneck() {
 }
 
 #[test_log::test]
-fn test_blocking_packet_reordering() {
+fn test_delay_packet_reordering() {
     // The purpose of this test is to test packet reordering in the simulator,
-    // using bypassable blocking to create a constant-rate defense on one side
+    // using bypassable delay to create a constant-rate defense on one side
     // of the connection, with significant simulated delays as a consequence.
 
     // The constant-rate defense is a "ratio3 machine". The ratio3 machine
     // blocks all outgoing traffic at the client (after the first packet) and
     // then attempts to send one packet for every 3 received packets. If there
-    // is real traffic queued up (from the blocking), real traffic will be sent,
+    // is real traffic queued up (from the delay), real traffic will be sent,
     // otherwise, a decoy packet is sent.
 
     // The trace is the first 40 cells (out of 5092) from a trace part of the
@@ -246,12 +246,12 @@ fn ratio3_machine() -> Machine {
     });
     states.push(start_state);
 
-    // blocking state 1
-    let mut blocking_state = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(2, 1.0)],
+    // delay state 1
+    let mut delay_state = State::new(enum_map! {
+        Event::DelayBegin => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    blocking_state.action = Some(Action::BlockOutgoing {
+    delay_state.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -267,12 +267,12 @@ fn ratio3_machine() -> Machine {
                 low: 0.0,
                 high: 0.0,
             },
-            start: MAX_SAMPLED_BLOCK_DURATION,
+            start: MAX_SAMPLED_DELAY_DURATION,
             max: 0.0,
         },
         limit: None,
     });
-    states.push(blocking_state);
+    states.push(delay_state);
 
     // recv states 2..n+2
     for i in 0..n {
@@ -316,17 +316,17 @@ fn ratio3_machine() -> Machine {
     Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
 }
 
-fn blocking_machine(blocking_duration: DistType, padding_delay: DistType) -> Machine {
+fn delay_machine(delay_duration: DistType, padding_delay: DistType) -> Machine {
     let s0 = State::new(enum_map! {
         Event::NormalQueued => vec![Trans(1, 1.0)],
         _ => vec![],
     });
 
     let mut s1 = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(2, 1.0)],
+        Event::DelayBegin => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::BlockOutgoing {
+    s1.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: false,
         timeout: Dist {
@@ -338,7 +338,7 @@ fn blocking_machine(blocking_duration: DistType, padding_delay: DistType) -> Mac
             max: 0.0,
         },
         duration: Dist {
-            dist: blocking_duration,
+            dist: delay_duration,
             start: 0.0,
             max: 0.0,
         },
@@ -369,9 +369,9 @@ fn blocking_machine(blocking_duration: DistType, padding_delay: DistType) -> Mac
 }
 
 #[test_log::test]
-fn test_network_aggregate_blocking_one_packet() {
+fn test_network_aggregate_delay_one_packet() {
     // block for 5ms, pad after 100ms
-    let m = blocking_machine(
+    let m = delay_machine(
         DistType::Uniform {
             low: 5.0 * 1000.0,
             high: 5.0 * 1000.0,
@@ -385,7 +385,7 @@ fn test_network_aggregate_blocking_one_packet() {
 
     // machine only at client
     let base = "0,nq 1,nq 40,nq 40,nr 41,nq 41,nr";
-    // blocking at 0, delaying 1 by 4 until 5:
+    // delay at 0, delaying 1 by 4 until 5:
     // - delay goes into effect at 41 at client
     // - delay goes into effect at 31 at server
     let result = "0,ps 5,ps 40,ps 40,pr 45,ps 45,pr";
@@ -403,10 +403,10 @@ fn test_network_aggregate_blocking_one_packet() {
 
     // machine at client and server
     let base = "0,nq 1,nq 30,nr 31,nr 40,nq 41,nq 41,nr 80,nr";
-    // @client: blocking at 0, delaying 1 by 4 until 5:
+    // @client: delay at 0, delaying 1 by 4 until 5:
     // - delay goes into effect at 41 at client
     // - delay goes into effect at 31 at server
-    // @server: blocking at 20, delaying 21 until 25
+    // @server: delay at 20, delaying 21 until 25
     // - delay goes into effect at 31 at client
     // - delay goes into effect at 61 at server
     let result = "0,ps 5,ps 30,pr 35,pr 45,pr 48,ps 49,ps 88,pr";
@@ -424,9 +424,9 @@ fn test_network_aggregate_blocking_one_packet() {
 }
 
 #[test_log::test]
-fn test_network_aggregate_blocking_many_packets() {
+fn test_network_aggregate_delay_many_packets() {
     // block for 5ms, pad after 100ms
-    let m = blocking_machine(
+    let m = delay_machine(
         DistType::Uniform {
             low: 5.0 * 1000.0,
             high: 5.0 * 1000.0,
@@ -440,7 +440,7 @@ fn test_network_aggregate_blocking_many_packets() {
 
     // machine only at client
     let base = "0,nq 1,nq 2,nq 2,nq 3,nq 40,nq 40,nr 42,nq 42,nr";
-    // blocking at 0, delaying burst 1-2 by 3 (tail, window 1ms) until 5:
+    // delay at 0, delaying burst 1-2 by 3 (tail, window 1ms) until 5:
     // - delay goes into effect at 42 at client
     // - delay goes into effect at 32 at server
     let result = "0,ps 5,ps 5,ps 5,ps 5,ps 40,ps 40,pr 45,ps 45,pr";
@@ -458,10 +458,10 @@ fn test_network_aggregate_blocking_many_packets() {
 
     // machine at client and server
     let base = "0,nq 1,nq 2,nq 2,nq 3,nq 29,nr 30,nr 31,nr 42,nq 80,nr";
-    // blocking at 0, delaying burst 1-2 by 3 (tail, window 1ms) until 5:
+    // delay at 0, delaying burst 1-2 by 3 (tail, window 1ms) until 5:
     // - delay goes into effect at 42 at client
     // - delay goes into effect at 32 at server
-    // @server: blocking at 19, delaying 20-21 by 4 (tail, window 1ms) until 25
+    // @server: delay at 19, delaying 20-21 by 4 (tail, window 1ms) until 25
     // - delay goes into effect at 30 at client
     // - delay goes into effect at 60 at server
     let result = "0,ps 5,ps 5,ps 5,ps 5,ps 29,pr 34,pr 34,pr 49,ps 87,pr";
@@ -479,9 +479,9 @@ fn test_network_aggregate_blocking_many_packets() {
 }
 
 #[test_log::test]
-fn test_network_aggregate_blocking_many_packets_normal_no_delay() {
+fn test_network_aggregate_delay_many_packets_normal_no_delay() {
     // block for 5ms, pad after 100ms
-    let m = blocking_machine(
+    let m = delay_machine(
         DistType::Uniform {
             low: 5.0 * 1000.0,
             high: 5.0 * 1000.0,
@@ -495,7 +495,7 @@ fn test_network_aggregate_blocking_many_packets_normal_no_delay() {
 
     // machine only at client
     let base = "0,nq 4,nq 5,nq 45,nq 45,nr 47,nq 47,nr";
-    // blocking at 0, delaying 4 BUT also 5 normal so no delay:
+    // delay at 0, delaying 4 BUT also 5 normal so no delay:
     let result = "0,ps 5,ps 5,ps 45,ps 45,pr 47,ps 47,pr";
     run_test_sim(
         base,
@@ -528,7 +528,7 @@ fn test_network_aggregate_blocking_many_packets_normal_no_delay() {
 #[test_log::test]
 fn test_network_aggregate_decoy_bypass_replace_one_packet() {
     // block for 100ms, pad after 5ms
-    let m = blocking_machine(
+    let m = delay_machine(
         DistType::Uniform {
             low: 100.0 * 1000.0,
             high: 100.0 * 1000.0,
@@ -542,7 +542,7 @@ fn test_network_aggregate_decoy_bypass_replace_one_packet() {
 
     // machine only at client
     let base = "0,nq 1,nq 40,nq 40,nr 41,nq 41,nr";
-    // blocking at 0, delaying 1 by 4 until padding is sent at 5:
+    // delay at 0, delaying 1 by 4 until padding is sent at 5:
     // - delay goes into effect at 41 at client
     // - delay goes into effect at 31 at server
     let result = "0,ps 5,ps 40,pr 45,pr 100,ps 100,ps";
@@ -563,7 +563,7 @@ fn test_network_aggregate_decoy_bypass_replace_one_packet() {
     // the 1,nq is delayed by 4
     // the 100,nr is queued up at the server at 94
     // the 40,nq is delayed until 100 (block expiry), resulting in 60 delay
-    // the 100,nr, queued up at server at 94, is sent when blocking expires at 130,
+    // the 100,nr, queued up at server at 94, is sent when delay expires at 130,
     // resulting in 36 delay
     // total delay: 36+4+60 = 100
     let result = "0,ps 5,ps 40,pr 45,pr 100,ps 100,ps 140,pr 200,ps";
@@ -583,7 +583,7 @@ fn test_network_aggregate_decoy_bypass_replace_one_packet() {
 #[test_log::test]
 fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
     // block for 100ms, pad after 1ms
-    let m = blocking_machine(
+    let m = delay_machine(
         DistType::Uniform {
             low: 100.0 * 1000.0,
             high: 100.0 * 1000.0,
@@ -634,7 +634,7 @@ fn test_network_aggregate_padding_bypass_replace_one_packet_normal() {
 #[test_log::test]
 fn test_network_aggregate_decoy_bypass_replace_many_packets() {
     // block for 100ms, pad after 5ms
-    let m = blocking_machine(
+    let m = delay_machine(
         DistType::Uniform {
             low: 100.0 * 1000.0,
             high: 100.0 * 1000.0,
@@ -648,7 +648,7 @@ fn test_network_aggregate_decoy_bypass_replace_many_packets() {
 
     // machine only at client
     let base = "0,nq 1,nq 40,nq 40,nr 41,nq 41,nr";
-    // causes 4 delay by blocking 1 until 5, in effect at server at 31
+    // causes 4 delay by delay 1 until 5, in effect at server at 31
     let result = "0,ps 5,ps 40,pr 45,pr 100,ps 100,ps";
     run_test_sim(
         base,
@@ -681,7 +681,7 @@ fn test_network_aggregate_decoy_bypass_replace_many_packets() {
 #[test_log::test]
 fn test_network_aggregate_decoy_bypass_replace_many_packets_window() {
     // block for 100ms, pad after 5ms
-    let m = blocking_machine(
+    let m = delay_machine(
         DistType::Uniform {
             low: 100.0 * 1000.0,
             high: 100.0 * 1000.0,

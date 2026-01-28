@@ -134,18 +134,18 @@ impl SimQueue {
         }
     }
 
-    pub fn peek_blocking(
+    pub fn peek_delay(
         &self,
-        active_blocking_bypassable: bool,
+        active_delay_bypassable: bool,
         is_client: bool,
     ) -> (Option<&SimEvent>, Queue) {
         match is_client {
-            true => peek_blocking(&self.client, active_blocking_bypassable),
-            false => peek_blocking(&self.server, active_blocking_bypassable),
+            true => peek_delay(&self.client, active_delay_bypassable),
+            false => peek_delay(&self.server, active_delay_bypassable),
         }
     }
 
-    pub fn pop_blocking(
+    pub fn pop_delay(
         &mut self,
         q: Queue,
         bypassable: bool,
@@ -154,23 +154,23 @@ impl SimQueue {
     ) -> Option<SimEvent> {
         if bypassable {
             match is_client {
-                true => self.client.blocking.pop(),
-                false => self.server.blocking.pop(),
+                true => self.client.delay.pop(),
+                false => self.server.delay.pop(),
             }
         } else {
             self.pop(q, is_client, network_delay_sum)
         }
     }
 
-    pub fn peek_non_blocking(
+    pub fn peek_non_delay(
         &self,
         bypassable: bool,
         is_client: bool,
         network_delay_sum: Duration,
     ) -> (Option<&SimEvent>, Queue) {
         match is_client {
-            true => peek_non_blocking(&self.client, bypassable, network_delay_sum),
-            false => peek_non_blocking(&self.server, bypassable, network_delay_sum),
+            true => peek_non_delay(&self.client, bypassable, network_delay_sum),
+            false => peek_non_delay(&self.server, bypassable, network_delay_sum),
         }
     }
 
@@ -187,17 +187,14 @@ impl SimQueue {
     }
 }
 
-fn peek_blocking(
-    queue: &EventQueue,
-    active_blocking_bypassable: bool,
-) -> (Option<&SimEvent>, Queue) {
-    if active_blocking_bypassable {
-        // only blocking events are then blocking
-        (queue.peek_blocking(), Queue::Blocking)
+fn peek_delay(queue: &EventQueue, active_delay_bypassable: bool) -> (Option<&SimEvent>, Queue) {
+    if active_delay_bypassable {
+        // only delay events are then delay
+        (queue.peek_delay(), Queue::Blocking)
     } else {
-        // if the current blocking is not bypassable, then we need to
-        // consider bypassable events as also blocking
-        let b = queue.peek_blocking();
+        // if the current delay is not bypassable, then we need to
+        // consider bypassable events as also delay
+        let b = queue.peek_delay();
         let bb = queue.peek_bypassable();
 
         if b > bb {
@@ -208,16 +205,16 @@ fn peek_blocking(
     }
 }
 
-fn peek_non_blocking(
+fn peek_non_delay(
     queue: &EventQueue,
     bypassable: bool,
     network_delay_sum: Duration,
 ) -> (Option<&SimEvent>, Queue) {
     if bypassable {
-        // if the current blocking is bypassable, then we need to consider
-        // bypassable as non-blocking
+        // if the current delay is bypassable, then we need to consider
+        // bypassable as non-delay
         let bb = queue.peek_bypassable();
-        let (n, nq) = queue.peek_non_blocking(network_delay_sum);
+        let (n, nq) = queue.peek_non_delay(network_delay_sum);
 
         if bb > n {
             (bb, Queue::Bypassable)
@@ -225,6 +222,6 @@ fn peek_non_blocking(
             (n, nq)
         }
     } else {
-        queue.peek_non_blocking(network_delay_sum)
+        queue.peek_non_delay(network_delay_sum)
     }
 }

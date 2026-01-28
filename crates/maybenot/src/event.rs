@@ -26,10 +26,10 @@ pub enum Event {
     /// PacketSent is when we sent a packet: because it is encrypted, we do not
     /// know if it is a normal or decoy packet.
     PacketSent,
-    /// BlockingBegin is when blocking started.
-    BlockingBegin,
-    /// BlockingEnd is when blocking ended.
-    BlockingEnd,
+    /// DelayBegin is when delaying traffic starts.
+    DelayBegin,
+    /// DelayEnd is when delaying traffic stops.
+    DelayEnd,
     /// LimitReached is when a limit in a state is reached (internal).
     LimitReached,
     /// CounterZero is when a machine's counter was decremented to zero.
@@ -57,8 +57,8 @@ impl Event {
             NormalQueued,
             DecoyQueued,
             PacketSent,
-            BlockingBegin,
-            BlockingEnd,
+            DelayBegin,
+            DelayEnd,
             LimitReached,
             CounterZero,
             TimerBegin,
@@ -112,17 +112,17 @@ pub enum TriggerEvent {
     /// close as possible to the time when the packet is actually written to the
     /// network.
     PacketSent,
-    /// Blocking of outgoing traffic started by the action from a machine.
+    /// Delaying of outgoing traffic started by the action from a machine.
     ///
     /// This event should be triggered whenever the action timer for a
-    /// [`crate::action::TriggerAction::BlockOutgoing`] action expires, whether
-    /// the blocking timer is adjusted or not.
-    BlockingBegin { machine: MachineId },
-    /// Blocking of outgoing traffic has stopped.
+    /// [`crate::action::TriggerAction::DelayTraffic`] action expires, whether
+    /// the delay timer is adjusted or not.
+    DelayBegin { machine: MachineId },
+    /// Delaying of outgoing traffic has stopped.
     ///
-    /// This event should be triggered when the framework-scoped blocking timer
+    /// This event should be triggered when the framework-scoped delaying timer
     /// expires.
-    BlockingEnd,
+    DelayEnd,
     /// A machine's internal timer started, or was changed.
     ///
     /// This event should be triggered any time a new internal timer is started,
@@ -143,8 +143,8 @@ impl TriggerEvent {
             TriggerEvent::DecoyRecv => e == Event::DecoyRecv,
             TriggerEvent::NormalQueued => e == Event::NormalQueued,
             TriggerEvent::DecoyQueued { .. } => e == Event::DecoyQueued,
-            TriggerEvent::BlockingBegin { .. } => e == Event::BlockingBegin,
-            TriggerEvent::BlockingEnd => e == Event::BlockingEnd,
+            TriggerEvent::DelayBegin { .. } => e == Event::DelayBegin,
+            TriggerEvent::DelayEnd => e == Event::DelayEnd,
             TriggerEvent::TimerBegin { .. } => e == Event::TimerBegin,
             TriggerEvent::TimerEnd { .. } => e == Event::TimerEnd,
             TriggerEvent::PacketSent => e == Event::PacketSent,
@@ -163,8 +163,8 @@ impl fmt::Display for TriggerEvent {
             TriggerEvent::DecoyQueued { .. } => write!(f, "dq"),
             TriggerEvent::PacketRecv => write!(f, "pr"),
             TriggerEvent::PacketSent => write!(f, "ps"),
-            TriggerEvent::BlockingBegin { .. } => write!(f, "bb"),
-            TriggerEvent::BlockingEnd => write!(f, "be"),
+            TriggerEvent::DelayBegin { .. } => write!(f, "bb"),
+            TriggerEvent::DelayEnd => write!(f, "be"),
             TriggerEvent::TimerBegin { .. } => write!(f, "tb"),
             TriggerEvent::TimerEnd { .. } => write!(f, "te"),
         }
@@ -183,8 +183,10 @@ mod tests {
         assert_eq!(Event::NormalQueued.to_string(), "NormalQueued");
         // PaddingSent
         assert_eq!(Event::DecoyQueued.to_string(), "DecoyQueued");
-        assert_eq!(Event::BlockingBegin.to_string(), "BlockingBegin");
-        assert_eq!(Event::BlockingEnd.to_string(), "BlockingEnd");
+        // BlockingBegin
+        assert_eq!(Event::DelayBegin.to_string(), "DelayBegin");
+        // BlockingEnd
+        assert_eq!(Event::DelayEnd.to_string(), "DelayEnd");
         assert_eq!(Event::LimitReached.to_string(), "LimitReached");
     }
 

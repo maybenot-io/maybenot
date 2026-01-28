@@ -4,7 +4,7 @@ use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
-    MAX_SAMPLED_BLOCK_DURATION, MAX_SAMPLED_DECOY_N, MAX_SAMPLED_TIMEOUT,
+    MAX_SAMPLED_DECOY_N, MAX_SAMPLED_DELAY_DURATION, MAX_SAMPLED_TIMEOUT,
     MAX_SAMPLED_TIMER_DURATION, STATE_LIMIT_MAX,
 };
 use crate::{Error, MachineId, dist};
@@ -35,19 +35,19 @@ pub enum Action {
     /// Schedule N decoy packets to be sent after a timeout.
     ///
     /// Replaces any previously pending scheduled action timer (set via
-    /// DecoyTraffic or BlockOutgoing) for this machine.
+    /// DecoyTraffic or DelayTraffic) for this machine.
     ///
     /// The bypass flag determines if the decoy packet(s) MUST bypass any
-    /// existing blocking that was triggered with the bypass flag set.
+    /// existing delay of traffic that was triggered with the bypass flag set.
     ///
     /// The replace flag determines if the decoy packet(s) MAY be replaced by
     /// packets already queued to be sent at the time the decoy packet would be
     /// sent. This applies for data queued to be turned into normal (non-decoy)
     /// packets AND _any_ packet (decoy or normal) in the egress queue yet to be
     /// sent (i.e., before the PacketSent event is triggered). Such a packet
-    /// could be in the queue due to ongoing blocking or just not being sent yet
-    /// (e.g., due to CC). We assume that packets will be encrypted ASAP for the
-    /// egress queue and we do not want to keep state around to distinguish
+    /// could be in the queue due to ongoing added delay or just not being sent
+    /// yet (e.g., due to CC). We assume that packets will be encrypted ASAP for
+    /// the egress queue and we do not want to keep state around to distinguish
     /// decoy and non-decoy, hence, any packet. For an egress queue of Q queued
     /// packets and N decoy packets to send with replace set, if N > Q, add N-Q
     /// decoy packets. Do not keep any state to track if any packet in the
@@ -60,24 +60,24 @@ pub enum Action {
         n: Dist,
         limit: Option<Dist>,
     },
-    /// Schedule blocking of outgoing traffic after a timeout.
+    /// Schedule a delay of of outgoing traffic after a timeout.
     ///
     /// Replaces any previously pending scheduled action timer (set via
-    /// DecoyTraffic or BlockOutgoing) for this machine.
+    /// DecoyTraffic or DelayTraffic) for this machine.
     ///
     /// The bypass flag determines if decoy actions are allowed to bypass this
-    /// blocking action. This allows for machines that can fail closed (never
-    /// bypass blocking) while simultaneously providing support for
+    /// delay action. This allows for machines that can fail closed (never
+    /// bypass any set delay) while simultaneously providing support for
     /// constant-rate defenses, when set along with the replace flag.
     ///
     /// The replace flag determines if the action duration MUST replace any
-    /// existing blocking. Note that the blocking with the replace flag is
-    /// always allowed if blocking is currently active, regardless of any limits
+    /// existing added delay. Note that the delay action with the replace flag
+    /// is always allowed if delay is currently active, regardless of any limits
     /// set. This is to make it possible to create a machine that is guaranteed
-    /// to prevent indefinite blocking (but comes at the cost of making it
-    /// possible for a machine that indefinitely refresh blocking by using the
-    /// replace flag).
-    BlockOutgoing {
+    /// to prevent indefinite delaying of traffic (but comes at the cost of
+    /// making it possible for a machine that indefinitely refreshes a delay by
+    /// using the replace flag).
+    DelayTraffic {
         bypass: bool,
         replace: bool,
         timeout: Dist,
@@ -102,21 +102,21 @@ impl fmt::Display for Action {
 }
 
 impl Action {
-    /// Sample a timeout for a decoy or blocking action.
+    /// Sample a timeout for a decoy or delay action.
     pub(crate) fn sample_timeout<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
-            Action::DecoyTraffic { timeout, .. } | Action::BlockOutgoing { timeout, .. } => {
+            Action::DecoyTraffic { timeout, .. } | Action::DelayTraffic { timeout, .. } => {
                 timeout.sample(rng).min(MAX_SAMPLED_TIMEOUT).round() as u64
             }
             _ => 0,
         }
     }
 
-    /// Sample a duration for a blocking or timer update action.
+    /// Sample a duration for a delay or timer update action.
     pub(crate) fn sample_duration<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
-            Action::BlockOutgoing { duration, .. } => {
-                duration.sample(rng).min(MAX_SAMPLED_BLOCK_DURATION).round() as u64
+            Action::DelayTraffic { duration, .. } => {
+                duration.sample(rng).min(MAX_SAMPLED_DELAY_DURATION).round() as u64
             }
             Action::UpdateTimer { duration, .. } => {
                 duration.sample(rng).min(MAX_SAMPLED_TIMER_DURATION).round() as u64
@@ -139,7 +139,7 @@ impl Action {
     pub(crate) fn sample_limit<R: RngCore>(&self, rng: &mut R) -> u64 {
         match self {
             Action::DecoyTraffic { limit, .. }
-            | Action::BlockOutgoing { limit, .. }
+            | Action::DelayTraffic { limit, .. }
             | Action::UpdateTimer { limit, .. } => {
                 if limit.is_none() {
                     return STATE_LIMIT_MAX;
@@ -154,7 +154,7 @@ impl Action {
     pub(crate) fn has_limit(&self) -> bool {
         match self {
             Action::DecoyTraffic { limit, .. }
-            | Action::BlockOutgoing { limit, .. }
+            | Action::DelayTraffic { limit, .. }
             | Action::UpdateTimer { limit, .. } => limit.is_some(),
             _ => false,
         }
@@ -172,7 +172,7 @@ impl Action {
                     limit.validate()?;
                 }
             }
-            Action::BlockOutgoing {
+            Action::DelayTraffic {
                 timeout,
                 duration,
                 limit,
@@ -213,17 +213,17 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// Schedule N decoy packets to be sent after the given timeout.
     ///
     /// The bypass flag indicates if the decoy packet(s) MUST be sent despite
-    /// active blocking of outgoing traffic. Note that this is only allowed if
-    /// the active blocking was set with the bypass flag set to true.
+    /// active delay of traffic. Note that this is only allowed if the active
+    /// delay was set with the bypass flag set to true.
     ///
     /// The replace flag determines if the decoy packet(s) MAY be replaced by
     /// packets already queued to be sent at the time the decoy packet would be
     /// sent. This applies for data queued to be turned into normal (non-decoy)
     /// packets AND _any_ packet (decoy or normal) in the egress queue yet to be
     /// sent (i.e., before the PacketSent event is triggered). Such a packet
-    /// could be in the queue due to ongoing blocking or just not being sent yet
-    /// (e.g., due to CC). We assume that packets will be encrypted ASAP for the
-    /// egress queue and we do not want to keep state around to distinguish
+    /// could be in the queue due to ongoing added delay or just not being sent
+    /// yet (e.g., due to CC). We assume that packets will be encrypted ASAP for
+    /// the egress queue and we do not want to keep state around to distinguish
     /// decoy and non-decoy, hence, any packet. For an egress queue of Q queued
     /// packets and N decoy packets to send with replace set, if N > Q, add N-Q
     /// decoy packets. Do not keep any state to track if any packet in the
@@ -231,8 +231,8 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     /// multiple DecoyTraffic actions.
     ///
     /// If the bypass and replace flags are both set to true AND the active
-    /// blocking may be bypassed, then non-decoy packets MAY replace the decoy
-    /// packet AND bypass the active blocking.
+    /// delay may be bypassed, then non-decoy packets MAY replace the decoy
+    /// packet AND bypass the active delay.
     ///
     /// For each decoy packet queued, a corresponding
     /// [`TriggerEvent::DecoyQueued`](crate::TriggerEvent::DecoyQueued) event
@@ -245,7 +245,7 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
     ///
     /// Note that, since only one action timer per machine can be pending at a
     /// time, this `DecoyTraffic` action should replace any currently pending
-    /// `DecoyTraffic` or `BlockOutgoing` action timer for this machine that has
+    /// `DecoyTraffic` or `DelayTraffic` action timer for this machine that has
     /// not yet expired.
     DecoyTraffic {
         timeout: T::Duration,
@@ -254,31 +254,31 @@ pub enum TriggerAction<T: crate::time::Instant = std::time::Instant> {
         replace: bool,
         machine: MachineId,
     },
-    /// Schedule blocking of outgoing traffic after the given timeout for a
-    /// machine. The duration of the blocking is specified. Note that the
-    /// blocking is framework scoped, i.e., if there are multiple machines
-    /// running, then the blocking will affect all of them.
+    /// Schedule delay of outgoing traffic after the given timeout. The duration
+    /// of the delay is specified. Note that the delay is framework scoped,
+    /// i.e., if there are multiple machines running, then the delay will affect
+    /// all of them (by delaying packets).
     ///
     /// Whenever the given action timeout expires, a corresponding
-    /// [`TriggerEvent::BlockingBegin`](crate::TriggerEvent::BlockingBegin)
-    /// event should be triggered with the same MachineId, regardless of whether
-    /// the current blocking was adjusted.
+    /// [`TriggerEvent::DelayBegin`](crate::TriggerEvent::DelayBegin) event
+    /// should be triggered with the same MachineId, regardless of whether the
+    /// current delay was adjusted.
     ///
-    /// The bypass flag indicates if the blocking of outgoing traffic can be
+    /// The bypass flag indicates if the delay of outgoing traffic can be
     /// bypassed by decoy packets with the bypass flag set to true.
     ///
     /// The replace flag indicates if the duration MUST replace any other
-    /// currently ongoing blocking of outgoing traffic. If the flag is false,
-    /// the longest of the two durations MUST be used.
+    /// currently ongoing delay of outgoing traffic. If the flag is false, the
+    /// longest of the two durations MUST be used.
     ///
-    /// Whenever the blocking timer of outgoing traffic is replaced or adjusted,
-    /// the "bypassable" status of the blocking is also replaced.
+    /// Whenever the delay timer of outgoing traffic is replaced or adjusted,
+    /// the "bypassable" status of the delay is also replaced.
     ///
     /// Note that, since only one action timer per machine can be pending at a
-    /// time, this `BlockOutgoing` action should replace any currently pending
-    /// `BlockOutgoing` or `DecoyTraffic` action timer for this machine that has
+    /// time, this `DelayTraffic` action should replace any currently pending
+    /// `DelayTraffic` or `DecoyTraffic` action timer for this machine that has
     /// not yet expired.
-    BlockOutgoing {
+    DelayTraffic {
         timeout: T::Duration,
         duration: T::Duration,
         bypass: bool,
@@ -449,9 +449,9 @@ mod tests {
     }
 
     #[test]
-    fn validate_blocking_action() {
-        // valid BlockOutgoing action
-        let mut a = Action::BlockOutgoing {
+    fn validate_delaying_action() {
+        // valid DelayTraffic action
+        let mut a = Action::DelayTraffic {
             bypass: false,
             replace: false,
             timeout: Dist {
@@ -484,7 +484,7 @@ mod tests {
         assert!(r.is_ok());
 
         // invalid timeout dist, not allowed
-        if let Action::BlockOutgoing { timeout, .. } = &mut a {
+        if let Action::DelayTraffic { timeout, .. } = &mut a {
             *timeout = Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
@@ -500,7 +500,7 @@ mod tests {
         assert!(r.is_err());
 
         // repair timeout dist
-        if let Action::BlockOutgoing { timeout, .. } = &mut a {
+        if let Action::DelayTraffic { timeout, .. } = &mut a {
             *timeout = Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
@@ -512,7 +512,7 @@ mod tests {
         }
 
         // invalid duration dist, not allowed
-        if let Action::BlockOutgoing { duration, .. } = &mut a {
+        if let Action::DelayTraffic { duration, .. } = &mut a {
             *duration = Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high
@@ -527,7 +527,7 @@ mod tests {
         assert!(r.is_err());
 
         // repair duration dist
-        if let Action::BlockOutgoing { duration, .. } = &mut a {
+        if let Action::DelayTraffic { duration, .. } = &mut a {
             *duration = Dist {
                 dist: DistType::Uniform {
                     low: 10.0,
@@ -539,7 +539,7 @@ mod tests {
         }
 
         // invalid limit dist, not allowed
-        if let Action::BlockOutgoing { limit, .. } = &mut a {
+        if let Action::DelayTraffic { limit, .. } = &mut a {
             *limit = Some(Dist {
                 dist: DistType::Uniform {
                     low: 15.0, // NOTE low > high

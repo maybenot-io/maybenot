@@ -48,7 +48,7 @@ pub(crate) fn random_machine<R: Rng>(
     } else {
         0.0
     };
-    let max_blocking_frac = if action_block && frac_limit {
+    let max_delay_frac = if action_block && frac_limit {
         round_f64(rng.random_range(0.0..=1.0))
     } else {
         0.0
@@ -72,7 +72,7 @@ pub(crate) fn random_machine<R: Rng>(
                 allowed_decoy_packets,
                 max_decoy_frac,
                 allowed_blocked_microsec,
-                max_blocking_frac,
+                max_delay_frac,
                 states,
             );
             if let Ok(m) = m {
@@ -114,9 +114,9 @@ pub fn random_state<R: Rng>(
         ))
     };
 
-    // enforce the minimum action timeout for blocking and decoy actions
+    // enforce the minimum action timeout for delay and decoy actions
     match action {
-        Some(Action::BlockOutgoing {
+        Some(Action::DelayTraffic {
             ref mut timeout, ..
         })
         | Some(Action::DecoyTraffic {
@@ -146,7 +146,7 @@ pub fn random_state<R: Rng>(
     let action_has_limit = action.is_some()
         && match action.as_ref().unwrap() {
             Action::DecoyTraffic { limit, .. }
-            | Action::BlockOutgoing { limit, .. }
+            | Action::DelayTraffic { limit, .. }
             | Action::UpdateTimer { limit, .. } => limit.is_some(),
             _ => false,
         };
@@ -161,7 +161,7 @@ pub fn random_state<R: Rng>(
 
 pub fn random_transitions<R: Rng>(
     num_states: usize,
-    blocking: bool,
+    delay: bool,
     expressive: bool,
     has_limit: bool,
     rng: &mut R,
@@ -170,9 +170,9 @@ pub fn random_transitions<R: Rng>(
 
     for e in Event::iter() {
         // skip events that are not allowed/relevant
-        if !blocking && (*e == Event::BlockingBegin || *e == Event::BlockingEnd) {
+        if !delay && (*e == Event::DelayBegin || *e == Event::DelayEnd) {
             // NOTE: this can be used to signal to this machine from another
-            // machine triggering blocking, but we ignore that for now
+            // machine triggering delay, but we ignore that for now
             continue;
         }
         if !has_limit && *e == Event::LimitReached {
@@ -260,22 +260,22 @@ pub fn random_counter<R: Rng>(rng: &mut R) -> Counter {
 }
 
 pub fn random_action<R: Rng>(
-    blocking: bool,
+    delay: bool,
     expressive: bool,
     count_point: u64,
     duration_point: f64,
     rng: &mut R,
 ) -> Action {
-    if expressive && blocking {
+    if expressive && delay {
         return match rng.random_range(0..4) {
             0 => random_action_cancel(rng),
             1 => random_action_decoy(count_point, duration_point, rng),
-            2 => random_action_blocking(count_point, duration_point, expressive, rng),
+            2 => random_action_delay(count_point, duration_point, expressive, rng),
             3 => random_action_timer(count_point, duration_point, rng),
             _ => unreachable!(),
         };
     }
-    if expressive && !blocking {
+    if expressive && !delay {
         return match rng.random_range(0..3) {
             0 => random_action_cancel(rng),
             1 => random_action_decoy(count_point, duration_point, rng),
@@ -283,10 +283,10 @@ pub fn random_action<R: Rng>(
             _ => unreachable!(),
         };
     }
-    if blocking {
+    if delay {
         return match rng.random_range(0..2) {
             0 => random_action_decoy(count_point, duration_point, rng),
-            1 => random_action_blocking(count_point, duration_point, expressive, rng),
+            1 => random_action_delay(count_point, duration_point, expressive, rng),
             _ => unreachable!(),
         };
     }
@@ -324,16 +324,16 @@ fn random_action_decoy<R: Rng>(count_point: u64, duration_point: f64, rng: &mut 
     }
 }
 
-fn random_action_blocking<R: Rng>(
+fn random_action_delay<R: Rng>(
     count_point: u64,
     duration_point: f64,
     expressive: bool,
     rng: &mut R,
 ) -> Action {
-    Action::BlockOutgoing {
+    Action::DelayTraffic {
         bypass: rng.random_bool(0.5),
-        // replaceable blocking ignores limits, making it possible for machines
-        // that repeatedly blocks to cause infinite blocking: this is too
+        // replaceable delay ignores limits, making it possible for machines
+        // that repeatedly blocks to cause infinite delay: this is too
         // powerful for random machines, so we disable it by default
         replace: match expressive {
             true => rng.random_bool(0.5),

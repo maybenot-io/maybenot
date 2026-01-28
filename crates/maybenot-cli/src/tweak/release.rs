@@ -11,8 +11,8 @@ use crate::storage::load_defenses;
 struct Limits {
     min_decoy_frac: f64,
     max_decoy_frac: f64,
-    min_blocking_frac: f64,
-    max_blocking_frac: f64,
+    min_delay_frac: f64,
+    max_delay_frac: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -41,14 +41,14 @@ pub fn do_release(input: PathBuf, output: PathBuf) -> Result<()> {
         client_limits: Limits {
             min_decoy_frac: 0.0,
             max_decoy_frac: 0.0,
-            min_blocking_frac: 0.0,
-            max_blocking_frac: 0.0,
+            min_delay_frac: 0.0,
+            max_delay_frac: 0.0,
         },
         server_limits: Limits {
             min_decoy_frac: 0.0,
             max_decoy_frac: 0.0,
-            min_blocking_frac: 0.0,
-            max_blocking_frac: 0.0,
+            min_delay_frac: 0.0,
+            max_delay_frac: 0.0,
         },
         defenses,
     };

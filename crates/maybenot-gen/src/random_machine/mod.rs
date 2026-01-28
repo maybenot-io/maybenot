@@ -41,9 +41,9 @@ pub struct RandomMachineConfig {
     /// Range of the number of states in the machine.
     pub num_states: RangeInclusive<usize>,
     /// Whether the client machine can block.
-    pub allow_blocking_client: Option<bool>,
+    pub allow_delay_client: Option<bool>,
     /// Whether the server machine can block.
-    pub allow_blocking_server: Option<bool>,
+    pub allow_delay_server: Option<bool>,
     /// Whether the machine can use expressive actions (counters and timers).
     pub allow_expressive: Option<bool>,
     /// Whether the machine can use fixed budgets.
@@ -51,7 +51,7 @@ pub struct RandomMachineConfig {
     /// Whether the machine can use fractional limits.
     pub allow_frac_limits: Option<bool>,
     /// Reference point for actions involving durations of time, such as action
-    /// timeouts or blocking duration.
+    /// timeouts or delay duration.
     pub duration_point: Option<RangeInclusive<f64>>,
     /// Reference point for randomized parameters involving counts of actions or
     /// packets.
@@ -70,9 +70,9 @@ impl RandomMachineConfig {
         let num_states = rng_range!(rng, self.num_states);
 
         let action_block = if is_client {
-            self.allow_blocking_client.unwrap_or(rng.random_bool(0.5))
+            self.allow_delay_client.unwrap_or(rng.random_bool(0.5))
         } else {
-            self.allow_blocking_server.unwrap_or(rng.random_bool(0.5))
+            self.allow_delay_server.unwrap_or(rng.random_bool(0.5))
         };
 
         let expressive = self.allow_expressive.unwrap_or(rng.random_bool(0.5));

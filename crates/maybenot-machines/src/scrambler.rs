@@ -8,7 +8,7 @@
 use maybenot::{
     Machine,
     action::Action,
-    constants::MAX_SAMPLED_BLOCK_DURATION,
+    constants::MAX_SAMPLED_DELAY_DURATION,
     dist::{Dist, DistType},
     event::Event,
     state::{State, Trans},
@@ -61,10 +61,10 @@ pub fn scrambler_client() -> Vec<Machine> {
 
     let mut block = State::new(enum_map! {
         // BlockingBegin --> CONST (100%)
-        Event::BlockingBegin => vec![Trans(2, 1.0)],
+        Event::DelayBegin => vec![Trans(2, 1.0)],
        _ => vec![],
     });
-    block.action = Some(Action::BlockOutgoing {
+    block.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -77,8 +77,8 @@ pub fn scrambler_client() -> Vec<Machine> {
         },
         duration: Dist {
             dist: DistType::Uniform {
-                low: MAX_SAMPLED_BLOCK_DURATION,
-                high: MAX_SAMPLED_BLOCK_DURATION,
+                low: MAX_SAMPLED_DELAY_DURATION,
+                high: MAX_SAMPLED_DELAY_DURATION,
             },
             start: 0.0,
             max: 0.0,
@@ -159,10 +159,10 @@ fn generate_start_state() -> State {
 fn generate_block_state() -> State {
     let mut block = State::new(enum_map! {
         // BlockingBegin --> MIN (100%)
-        Event::BlockingBegin => vec![Trans(MIN_STATE_INDEX, 1.0)],
+        Event::DelayBegin => vec![Trans(MIN_STATE_INDEX, 1.0)],
        _ => vec![],
     });
-    block.action = Some(Action::BlockOutgoing {
+    block.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -175,8 +175,8 @@ fn generate_block_state() -> State {
         },
         duration: Dist {
             dist: DistType::Uniform {
-                low: MAX_SAMPLED_BLOCK_DURATION,
-                high: MAX_SAMPLED_BLOCK_DURATION,
+                low: MAX_SAMPLED_DELAY_DURATION,
+                high: MAX_SAMPLED_DELAY_DURATION,
             },
             start: 0.0,
             max: 0.0,
@@ -239,7 +239,7 @@ fn generate_left_state(index: usize, interval: f64, min_trail: f64, max_trail: f
             // LimitReached --> START (100%)
             Event::LimitReached => vec![Trans(START_STATE_INDEX, 1.0)],
             // BlockingBegin --> L_2 (if L_1)
-            Event::BlockingBegin => vec![Trans(LEFT_STATE_INDEX + 2, 1.0)],
+            Event::DelayBegin => vec![Trans(LEFT_STATE_INDEX + 2, 1.0)],
            _ => vec![],
         })
     } else {
@@ -297,7 +297,7 @@ fn generate_right_state(index: usize, interval: f64, min_trail: f64, max_trail: 
             // LimitReached --> START (100%)
             Event::LimitReached => vec![Trans(START_STATE_INDEX, 1.0)],
             // BlockingBegin --> R_2 (if R_1)
-            Event::BlockingBegin => vec![Trans(RIGHT_STATE_INDEX + 2, 1.0)],
+            Event::DelayBegin => vec![Trans(RIGHT_STATE_INDEX + 2, 1.0)],
            _ => vec![],
         })
     } else {
@@ -361,7 +361,7 @@ fn generate_count_left_state(count: f64) -> State {
         // NormalQueued --> L (100%)
         Event::NormalQueued => vec![Trans(COUNT_LEFT_INDEX, 1.0)],
         // BlockingBegin --> R (100%)
-        Event::BlockingBegin => vec![Trans(COUNT_RIGHT_INDEX, 1.0)],
+        Event::DelayBegin => vec![Trans(COUNT_RIGHT_INDEX, 1.0)],
         // LimitReached --> SIGNAL (100%)
         Event::LimitReached => vec![Trans(SIGNAL_INDEX, 1.0)],
        _ => vec![],
@@ -405,7 +405,7 @@ fn generate_count_right_state(count: f64) -> State {
         // NormalQueued --> R (100%)
         Event::NormalQueued => vec![Trans(COUNT_RIGHT_INDEX, 1.0)],
         // BlockingBegin --> L (100%)
-        Event::BlockingBegin => vec![Trans(COUNT_LEFT_INDEX, 1.0)],
+        Event::DelayBegin => vec![Trans(COUNT_LEFT_INDEX, 1.0)],
         // LimitReached --> SIGNAL (100%)
         Event::LimitReached => vec![Trans(SIGNAL_INDEX, 1.0)],
        _ => vec![],
@@ -447,10 +447,10 @@ fn generate_count_right_state(count: f64) -> State {
 fn generate_signal_state() -> State {
     let mut block = State::new(enum_map! {
         // BlockingBegin --> R (100%)
-        Event::BlockingBegin => vec![Trans(COUNT_RIGHT_INDEX, 1.0)],
+        Event::DelayBegin => vec![Trans(COUNT_RIGHT_INDEX, 1.0)],
        _ => vec![],
     });
-    block.action = Some(Action::BlockOutgoing {
+    block.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -463,8 +463,8 @@ fn generate_signal_state() -> State {
         },
         duration: Dist {
             dist: DistType::Uniform {
-                low: MAX_SAMPLED_BLOCK_DURATION,
-                high: MAX_SAMPLED_BLOCK_DURATION,
+                low: MAX_SAMPLED_DELAY_DURATION,
+                high: MAX_SAMPLED_DELAY_DURATION,
             },
             start: 0.0,
             max: 0.0,

@@ -8,7 +8,7 @@ use enum_map::enum_map;
 use maybenot::{
     Machine, Timer,
     action::Action,
-    constants::{MAX_SAMPLED_BLOCK_DURATION, STATE_END, STATE_SIGNAL},
+    constants::{MAX_SAMPLED_DELAY_DURATION, STATE_END, STATE_SIGNAL},
     counter::{Counter, Operation},
     dist::{Dist, DistType},
     event::Event,
@@ -17,7 +17,7 @@ use maybenot::{
 
 // Root of many bugs in complex machines like those for attempting to accurately
 // port RegulaTor: Datasets like BigEnough with many events that happen at the
-// same time, or blocking ending resulting in many events at the exact same
+// same time, or delay ending resulting in many events at the exact same
 // time. The Maybenot simulator deals with different events with different
 // priorities, in general, prioritizing events that relate to the protected
 // network tunnel higher than actions from machines. This, especially in
@@ -46,7 +46,7 @@ pub fn regulator_server(r: f64, d: f64, t: f64, n: f64, num_bins: usize) -> Vec<
         // machine that sends 10 packets at a constant rate, sends signal, ends
         make_regulator_boot_machine(10.0, 10),
         // on signal, (re)start a machine that pads at rate RD^t, where the rate
-        // can never go below 1 PPS .. ends on blocking ending
+        // can never go below 1 PPS .. ends on delay ending
         make_regulator_rate_machine(r, d, num_bins),
         // if we ever queue more than rate * threshold packets in any bin, surge
         // (reset) by sending a signal
@@ -54,10 +54,10 @@ pub fn regulator_server(r: f64, d: f64, t: f64, n: f64, num_bins: usize) -> Vec<
         // the echo machine echoes signals (purpose is to restart the surge
         // machine when it signals)
         make_regulator_echo_machine(),
-        // count until we have spent padding budget, then end blocking, ending
-        // the rate machine, and starting the blocking rate machine
+        // count until we have spent padding budget, then end delay, ending
+        // the rate machine, and starting the delay rate machine
         make_regulator_budget_machine(n),
-        // like the rate machine, but with blocking toggled at the same PPS rate
+        // like the rate machine, but with delay toggled at the same PPS rate
         // as the padding rate
         make_regulator_block_rate_machine(r, d, num_bins),
     ]
@@ -67,7 +67,7 @@ fn make_regulator_block_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine
     let mut states = vec![];
 
     let start = State::new(enum_map! {
-        Event::BlockingEnd => vec![Trans(1, 1.0)],
+        Event::DelayEnd => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     states.push(start);
@@ -80,7 +80,7 @@ fn make_regulator_block_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine
     for rate in rates {
         let start = states.len();
 
-        // 0: start a timer for delta_sec, then go to blocking state
+        // 0: start a timer for delta_sec, then go to delay state
         let mut timer = State::new(enum_map! {
             Event::TimerBegin  => vec![Trans(start + 1, 1.0)],
             Event::Signal => vec![Trans(restart, 1.0)],
@@ -100,14 +100,14 @@ fn make_regulator_block_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine
         });
         states.push(timer);
 
-        // 1: blocking at rate until timer expires
+        // 1: delay at rate until timer expires
         let mut block = State::new(enum_map! {
-            Event::BlockingEnd => vec![Trans(start +1, 1.0)],
+            Event::DelayEnd => vec![Trans(start +1, 1.0)],
             Event::TimerEnd  => vec![Trans(start +2, 1.0)],
             Event::Signal => vec![Trans(restart, 1.0)],
             _ => vec![],
         });
-        block.action = Some(Action::BlockOutgoing {
+        block.action = Some(Action::DelayTraffic {
             bypass: true,
             replace: true,
             timeout: Dist {
@@ -133,12 +133,12 @@ fn make_regulator_block_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine
 
     // last state that blocks 1s at a time for up to 60s
     let mut block = State::new(enum_map! {
-        Event::BlockingEnd => vec![Trans(states.len(), 1.00)],
+        Event::DelayEnd => vec![Trans(states.len(), 1.00)],
         Event::Signal => vec![Trans(restart, 1.0)],
         Event::LimitReached => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
     });
-    block.action = Some(Action::BlockOutgoing {
+    block.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -175,7 +175,7 @@ fn make_regulator_budget_machine(budget: f64) -> Machine {
     let mut states = vec![];
 
     let start = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(1, 1.0)],
+        Event::DelayBegin => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     states.push(start);
@@ -227,11 +227,11 @@ fn make_regulator_budget_machine(budget: f64) -> Machine {
     // 4: block override and signal on BlockingBegin, so that we get
     // BlockingBegin -> Signal -> BlockingEnd
     let mut end = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(STATE_SIGNAL, 1.0)],
+        Event::DelayBegin => vec![Trans(STATE_SIGNAL, 1.0)],
         Event::Signal => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
     });
-    end.action = Some(Action::BlockOutgoing {
+    end.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -372,7 +372,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
 
     let start = State::new(enum_map! {
         Event::Signal => vec![Trans(1, 1.0)],
-        Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
+        Event::DelayEnd => vec![Trans(STATE_END, 1.0)],
        _ => vec![],
     });
     states.push(start);
@@ -389,7 +389,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
         let mut timer = State::new(enum_map! {
             Event::TimerBegin  => vec![Trans(start + 1, 1.0)],
             Event::Signal => vec![Trans(restart, 1.0)],
-            Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
+            Event::DelayEnd => vec![Trans(STATE_END, 1.0)],
             _ => vec![],
         });
         timer.action = Some(Action::UpdateTimer {
@@ -411,7 +411,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
             Event::PacketSent => vec![Trans(start +1, 1.0)],
             Event::TimerEnd  => vec![Trans(start +2, 1.0)],
             Event::Signal => vec![Trans(restart, 1.0)],
-            Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
+            Event::DelayEnd => vec![Trans(STATE_END, 1.0)],
             _ => vec![],
         });
         pad.action = Some(Action::DecoyTraffic {
@@ -442,7 +442,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
     let mut pad = State::new(enum_map! {
         Event::PacketSent => vec![Trans(states.len(), 1.0)],
         Event::Signal => vec![Trans(restart, 1.0)],
-        Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
+        Event::DelayEnd => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
     });
     pad.action = Some(Action::DecoyTraffic {
@@ -490,12 +490,12 @@ fn get_rate_bins(r: f64, d: f64, num_bins: usize) -> (f64, Vec<f64>) {
     (delta, rates)
 }
 
-// after blocking begin, sends n padding packets at pps, then sends a signal
+// after delay begin, sends n padding packets at pps, then sends a signal
 fn make_regulator_boot_machine(pps: f64, n: usize) -> Machine {
     let mut states = vec![];
 
     let start = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(1, 1.0)],
+        Event::DelayBegin => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     states.push(start);
@@ -503,7 +503,7 @@ fn make_regulator_boot_machine(pps: f64, n: usize) -> Machine {
     let mut pad = State::new(enum_map! {
         Event::DecoyQueued => vec![Trans(1, 1.0)],
         Event::LimitReached => vec![Trans(STATE_SIGNAL, 1.0)],
-        Event::BlockingEnd => vec![Trans(STATE_END, 1.0)],
+        Event::DelayEnd => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
     });
     pad.action = Some(Action::DecoyTraffic {
@@ -540,7 +540,7 @@ fn make_regulator_boot_machine(pps: f64, n: usize) -> Machine {
 }
 
 // RegulaTor, both sides:
-// A machine that enables infinite blocking on the first NormalSent, thereby
+// A machine that enables infinite delay on the first NormalSent, thereby
 // "sealing" the network link.
 fn make_regulator_seal_machine() -> Machine {
     let mut states = vec![];
@@ -552,12 +552,12 @@ fn make_regulator_seal_machine() -> Machine {
     });
     states.push(start);
 
-    // block state (1), infinite blocking
+    // block state (1), infinite delay
     let mut block = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(STATE_END, 1.0)],
+        Event::DelayBegin => vec![Trans(STATE_END, 1.0)],
         _ => vec![],
     });
-    block.action = Some(Action::BlockOutgoing {
+    block.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -570,8 +570,8 @@ fn make_regulator_seal_machine() -> Machine {
         },
         duration: Dist {
             dist: DistType::Uniform {
-                low: MAX_SAMPLED_BLOCK_DURATION,
-                high: MAX_SAMPLED_BLOCK_DURATION,
+                low: MAX_SAMPLED_DELAY_DURATION,
+                high: MAX_SAMPLED_DELAY_DURATION,
             },
             start: 0.0,
             max: 0.0,
@@ -730,12 +730,12 @@ fn make_regulator_client_queue_machine(c: f64) -> Machine {
     });
     states.push(timer);
 
-    // 2: release blocking, sending all queued packets
+    // 2: release delay, sending all queued packets
     let mut release = State::new(enum_map! {
-        Event::BlockingEnd => vec![Trans(3, 1.0)],
+        Event::DelayEnd => vec![Trans(3, 1.0)],
         _ => vec![],
     });
-    release.action = Some(Action::BlockOutgoing {
+    release.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -760,10 +760,10 @@ fn make_regulator_client_queue_machine(c: f64) -> Machine {
 
     // and block again after 1us, then to start
     let mut block = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(0, 1.0)],
+        Event::DelayBegin => vec![Trans(0, 1.0)],
         _ => vec![],
     });
-    block.action = Some(Action::BlockOutgoing {
+    block.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -779,7 +779,7 @@ fn make_regulator_client_queue_machine(c: f64) -> Machine {
                 low: 0.0,
                 high: 0.0,
             },
-            start: MAX_SAMPLED_BLOCK_DURATION,
+            start: MAX_SAMPLED_DELAY_DURATION,
             max: 0.0,
         },
         limit: None,

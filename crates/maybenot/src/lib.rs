@@ -43,9 +43,9 @@
 //! // - A vector of zero or more machines.
 //! // - Max fractions prevent machines from causing too much overhead: note
 //! // that machines can be defined to be allowed a fixed amount of
-//! // decoy/blocking, bypassing these limits until having used up their
+//! // decoy/delay, bypassing these limits until having used up their
 //! // allowed budgets. This means that it is possible to create machines
-//! // that trigger actions to block outgoing traffic indefinitely and/or
+//! // that trigger actions to delay outgoing traffic indefinitely and/or
 //! // send a lot of outgoing traffic.
 //! // - The current time. For normal use, just provide the current time as
 //! // below. This is exposed mainly for testing purposes (can also be used
@@ -106,28 +106,29 @@
 //!                 // Set the action timer with the specified timeout. On
 //!                 // expiry, do the following:
 //!                 //
-//!                 // 1. Send the specified amount of decoy.
+//!                 // 1. Send N decoy packets.
 //!                 // 2. Trigger TriggerEvent::DecoyQueued { machine:
 //!                 //    machine } after each packet has been sent.
 //!                 //
 //!                 // If bypass is true, then the decoy MUST be sent even
-//!                 // if there is active blocking of outgoing traffic AND
-//!                 // the active blocking had the bypass flag set. If the
-//!                 // active blocking had bypass set to false, then the
-//!                 // decoy MUST NOT be sent. This is to support
-//!                 // completely fail-closed defenses.
+//!                 // if there is active delay of outgoing traffic AND the
+//!                 // active delay has the bypass flag set. If the active
+//!                 // delay has bypass set to false, then the decoy MUST
+//!                 // NOT be sent. This is to support completely
+//!                 // fail-closed defenses.
 //!                 //
-//!                 // If replace is true, then the decoy MAY be replaced
-//!                 // by other packet(s). The other packets could be
-//!                 // encrypted packets already queued but not already sent
-//!                 // over the network, containing either decoy or normal
-//!                 // data (ideally, the user of the framework cannot tell,
-//!                 // because encrypted). The other data could also be
-//!                 // normal data about to be turned into normal packet(s)
-//!                 // and sent. Regardless of if the decoy is replaced or
-//!                 // not, the event should still be triggered (steps 2).
-//!                 // If enqueued normal data sent instead of decoy, then
-//!                 // the NormalQueued event should be triggered as well.
+//!                 // If replace is true, then decoy packets MAY be
+//!                 // replaced by other packet(s). The other packets could
+//!                 // be encrypted packets already queued but not already
+//!                 // sent to the network, containing either decoy or
+//!                 // normal data (ideally, the user of the framework
+//!                 // cannot tell, because encrypted). The other data could
+//!                 // also be normal data about to be turned into normal
+//!                 // packet(s) and sent. Regardless of if decoy packets
+//!                 // are replaced or not, an event per packet should still
+//!                 // be triggered (step 2). If normal data is turned into
+//!                 // a packet and sent instead of a decoy packet, then the
+//!                 // NormalQueued event should be triggered as well.
 //!                 //
 //!                 // Above, note the use case of having bypass and replace
 //!                 // set to true. This is to support constant-rate
@@ -138,10 +139,10 @@
 //!                 // overwrite it with the new timer. This will happen
 //!                 // very frequently so make effort to make it efficient
 //!                 // (typically, efficient machines will always have
-//!                 // something scheduled but try to minimize actual
-//!                 // decoy sent).
+//!                 // something scheduled but try to minimize actual decoy
+//!                 // sent).
 //!             }
-//!             TriggerAction::BlockOutgoing {
+//!             TriggerAction::DelayTraffic {
 //!                 timeout: _,
 //!                 duration: _,
 //!                 bypass: _,
@@ -150,34 +151,33 @@
 //!             } => {
 //!                 // Set an action timer with the specified timeout,
 //!                 // overwriting any existing action timer for the machine
-//!                 // (be it to block or to send decoy). On expiry, do
-//!                 // the following (all or nothing):
+//!                 // (be it to delay or to send decoy). On expiry, do the
+//!                 // following (all or nothing):
 //!                 //
-//!                 // 1. If no blocking is currently taking place (globally
+//!                 // 1. If no delay is currently taking place (globally
 //!                 //    across all machines, so for this instance of the
-//!                 //    framework), start blocking all outgoing traffic
-//!                 //    for the specified duration. If blocking is already
+//!                 //    framework), start delaying all outgoing traffic
+//!                 //    for the specified duration. If delay is already
 //!                 //    taking place (due to any machine), there are two
 //!                 //    cases. If replace is true, replace the existing
-//!                 //    blocking duration with the specified duration in
-//!                 //    this action. If replace is false, pick the longest
+//!                 //    delay duration with the specified duration in this
+//!                 //    action. If replace is false, pick the longest
 //!                 //    duration of the specified duration and the
-//!                 //    *remaining* duration to block already in place.
-//!                 // 2. Trigger TriggerEvent::BlockingBegin { machine:
+//!                 //    *remaining* duration to delay already in place.
+//!                 // 2. Trigger TriggerEvent::DelayBegin { machine:
 //!                 //    machine } regardless of logic outcome in 1. (From
-//!                 //    the point of view of the machine, blocking is now
+//!                 //    the point of view of the machine, delay is now
 //!                 //    taking place).
 //!                 //
-//!                 // Note that blocking is global across all machines,
-//!                 // since the intent is to block all outgoing traffic.
-//!                 // Further, you MUST ensure that when blocking ends, you
-//!                 // trigger TriggerEvent::BlockingEnd.
+//!                 // Note that delay is global across all machines, since
+//!                 // the intent is to delay all outgoing traffic. Further,
+//!                 // you MUST ensure that when the delay ends, you trigger
+//!                 // TriggerEvent::DelayEnd.
 //!                 //
-//!                 // If bypass is true and blocking was activated,
-//!                 // extended, or replaced in step 1, then a bypass flag
-//!                 // MUST be set and be available to check as part of
-//!                 // dealing with TriggerAction::DecoyTraffic actions (see
-//!                 // above).
+//!                 // If bypass is true and delay was activated, extended,
+//!                 // or replaced in step 1, then a bypass flag MUST be set
+//!                 // and be available to check as part of dealing with
+//!                 // TriggerAction::DecoyTraffic actions (see above).
 //!             }
 //!             TriggerAction::UpdateTimer {
 //!                 duration: _,
@@ -231,41 +231,42 @@
 //!   [`TriggerAction::UpdateTimer`] and [`TriggerAction::Cancel`]. If it
 //!   expires, you will need to trigger [`TriggerEvent::TimerEnd`].
 //! - A single "action" timer, which the machine will manage via
-//!   [`TriggerAction::DecoyTraffic`], [`TriggerAction::BlockOutgoing`], and
+//!   [`TriggerAction::DecoyTraffic`], [`TriggerAction::DelayTraffic`], and
 //!   [`TriggerAction::Cancel`].
 //!   - An action to be taken if and when the "action" timer expires. This
-//!     action may be "begin blocking for a certain Duration" or "Send a decoy
-//!     packet". (There are additional flags associated with these actions.)
+//!     action may be "begin delaying packets for a certain Duration" or "send
+//!     decoy packets". (There are additional flags associated with these
+//!     actions.)
 //!
 //! Additionally, for the [`Framework`] itself, you will need to track:
-//! - Whether traffic blocking has been enabled, and when it will expire.
-//! - Whether the enabled traffic blocking is "bypassable" (q.v.).
+//! - Whether traffic delay has been enabled, and when it will expire.
+//! - Whether the enabled traffic delay is "bypassable" (q.v.).
 //!
-//! ### Blocking
+//! ### Delay
 //!
-//! In addition to sending decoy, a Maybenot [`Machine`] can tell the
-//! application to temporarily _block_ traffic.
+//! In addition to sending decoy packets, a Maybenot [`Machine`] can tell the
+//! application to temporarily _delay_ traffic.
 //!
-//! While traffic is blocked on a connection, no packets should ordinarily be
-//! sent to the network until traffic becomes unblocked. Instead, normal traffic
-//! should be queued.
+//! While traffic is delayed on a connection, no packets should ordinarily be
+//! sent to the network until the delay expires. Instead, traffic should be
+//! queued.
 //!
-//! Traffic blocking may be "bypassable" or "non-bypassable". This difference
-//! affects whether decoy packets marked with the "bypass" flag can still be
-//! sent while the blocking is in effect.
+//! The delay may be "bypassable" or "non-bypassable". This difference affects
+//! whether decoy packets marked with the "bypass" flag can still be sent while
+//! the delay is in effect.
 //!
 //! By cases:
 //!
-//! | Blocking       | Decoy           | Action         |
-//! | -------------- | --------------- | -------------- |
-//! | non-bypassable | none            | queue decoy  |
-//! |                | bypass          | queue decoy  |
-//! |                | replace         | queue decoy if queue is empty |
-//! |                | bypass, replace | queue decoy if queue is empty
-//! | bypassable     | none            | queue decoy  |
-//! |                | bypass          | send decoy immediately |
-//! |                | replace         | queue decoy if queue is empty |
-//! |                | bypass, replace | send packet from queue immediately, or decoy if queue is empty |
+//! | Delay          | Decoy (N packets)| Action (for Q = |queue|)                                      |
+//! | -------------- | ---------------  | ------------------------------------------------------------- |
+//! | non-bypassable | none             | queue N decoy packets                                         |
+//! |                | bypass           | queue N decoy packets                                         |
+//! |                | replace          | queue N-Q decoy packets                                       |
+//! |                | bypass, replace  | queue N-Q decoy packets                                       |
+//! | bypassable     | none             | queue N decoy packets                                         |
+//! |                | bypass           | send N decoy packets immediately                              |
+//! |                | replace          | queue N-Q decoy packets                                       |
+//! |                | bypass, replace  | send N packets immediately, first draining Q, then N-Q decoys |
 
 pub mod action;
 pub mod constants;
@@ -319,9 +320,9 @@ mod tests {
         // - A vector of zero or more machines.
         // - Max fractions prevent machines from causing too much overhead: note
         // that machines can be defined to be allowed a fixed amount of
-        // decoy/blocking, bypassing these limits until having used up their
+        // decoy/delay, bypassing these limits until having used up their
         // allowed budgets. This means that it is possible to create machines
-        // that trigger actions to block outgoing traffic indefinitely and/or
+        // that trigger actions to delay outgoing traffic indefinitely and/or
         // send a lot of outgoing traffic.
         // - The current time. For normal use, just provide the current time as
         // below. This is exposed mainly for testing purposes (can also be used
@@ -387,10 +388,10 @@ mod tests {
                         //    machine } after each packet has been sent.
                         //
                         // If bypass is true, then the decoy MUST be sent even
-                        // if there is active blocking of outgoing traffic AND
-                        // the active blocking had the bypass flag set. If the
-                        // active blocking had bypass set to false, then the
-                        // decoy MUST NOT be sent. This is to support completely
+                        // if there is active delay of outgoing traffic AND the
+                        // active delay has the bypass flag set. If the active
+                        // delay has bypass set to false, then the decoy MUST
+                        // NOT be sent. This is to support completely
                         // fail-closed defenses.
                         //
                         // If replace is true, then decoy packets MAY be
@@ -418,7 +419,7 @@ mod tests {
                         // something scheduled but try to minimize actual decoy
                         // sent).
                     }
-                    TriggerAction::BlockOutgoing {
+                    TriggerAction::DelayTraffic {
                         timeout: _,
                         duration: _,
                         bypass: _,
@@ -427,34 +428,33 @@ mod tests {
                     } => {
                         // Set an action timer with the specified timeout,
                         // overwriting any existing action timer for the machine
-                        // (be it to block or to send decoy). On expiry, do the
+                        // (be it to delay or to send decoy). On expiry, do the
                         // following (all or nothing):
                         //
-                        // 1. If no blocking is currently taking place (globally
+                        // 1. If no delay is currently taking place (globally
                         //    across all machines, so for this instance of the
-                        //    framework), start blocking all outgoing traffic
-                        //    for the specified duration. If blocking is already
+                        //    framework), start delaying all outgoing traffic
+                        //    for the specified duration. If delay is already
                         //    taking place (due to any machine), there are two
                         //    cases. If replace is true, replace the existing
-                        //    blocking duration with the specified duration in
-                        //    this action. If replace is false, pick the longest
+                        //    delay duration with the specified duration in this
+                        //    action. If replace is false, pick the longest
                         //    duration of the specified duration and the
-                        //    *remaining* duration to block already in place.
-                        // 2. Trigger TriggerEvent::BlockingBegin { machine:
+                        //    *remaining* duration to delay already in place.
+                        // 2. Trigger TriggerEvent::DelayBegin { machine:
                         //    machine } regardless of logic outcome in 1. (From
-                        //    the point of view of the machine, blocking is now
+                        //    the point of view of the machine, delay is now
                         //    taking place).
                         //
-                        // Note that blocking is global across all machines,
-                        // since the intent is to block all outgoing traffic.
-                        // Further, you MUST ensure that when blocking ends, you
-                        // trigger TriggerEvent::BlockingEnd.
+                        // Note that delay is global across all machines, since
+                        // the intent is to delay all outgoing traffic. Further,
+                        // you MUST ensure that when the delay ends, you trigger
+                        // TriggerEvent::DelayEnd.
                         //
-                        // If bypass is true and blocking was activated,
-                        // extended, or replaced in step 1, then a bypass flag
-                        // MUST be set and be available to check as part of
-                        // dealing with TriggerAction::DecoyTraffic actions (see
-                        // above).
+                        // If bypass is true and delay was activated, extended,
+                        // or replaced in step 1, then a bypass flag MUST be set
+                        // and be available to check as part of dealing with
+                        // TriggerAction::DecoyTraffic actions (see above).
                     }
                     TriggerAction::UpdateTimer {
                         duration: _,

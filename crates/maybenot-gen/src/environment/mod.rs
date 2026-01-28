@@ -141,11 +141,11 @@ impl Environment {
             overhead2frac(&constraints.client_load, cfg.implied_framework_limits);
         args.max_decoy_frac_server =
             overhead2frac(&constraints.server_load, cfg.implied_framework_limits);
-        // FIXME: note that we cannot have different blocking fractions for
+        // FIXME: note that we cannot have different delay fractions for
         // client and server as-is.
-        args.max_blocking_frac_client =
+        args.max_delay_frac_client =
             overhead2frac(&constraints.delay, cfg.implied_framework_limits);
-        args.max_blocking_frac_server =
+        args.max_delay_frac_server =
             overhead2frac(&constraints.delay, cfg.implied_framework_limits);
 
         // Compute relative durations for every sent packet for all traces,

@@ -1,7 +1,7 @@
 use maybenot::{
     Machine,
     action::Action,
-    constants::MAX_SAMPLED_BLOCK_DURATION,
+    constants::MAX_SAMPLED_DELAY_DURATION,
     counter::{Counter, Operation},
     dist::{Dist, DistType},
     event::Event,
@@ -19,8 +19,8 @@ pub fn tamaraw(p: f64, stop_window: f64) -> Vec<Machine> {
     vec![make_padding_machine(p), make_soft_stop_machine(stop_window)]
 }
 
-// make a machine that starts blocking, pads at rate p s/packet, and stops on
-// blocking ending
+// make a machine that starts delay, pads at rate p s/packet, and stops on
+// delay ending
 fn make_padding_machine(p: f64) -> Machine {
     let mut states = vec![];
 
@@ -31,10 +31,10 @@ fn make_padding_machine(p: f64) -> Machine {
     states.push(start);
 
     let mut block = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(2, 1.0)],
+        Event::DelayBegin => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    block.action = Some(Action::BlockOutgoing {
+    block.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {
@@ -47,8 +47,8 @@ fn make_padding_machine(p: f64) -> Machine {
         },
         duration: Dist {
             dist: DistType::Uniform {
-                low: MAX_SAMPLED_BLOCK_DURATION,
-                high: MAX_SAMPLED_BLOCK_DURATION,
+                low: MAX_SAMPLED_DELAY_DURATION,
+                high: MAX_SAMPLED_DELAY_DURATION,
             },
             start: 0.0,
             max: 0.0,
@@ -58,7 +58,7 @@ fn make_padding_machine(p: f64) -> Machine {
     states.push(block);
 
     let mut padding = State::new(enum_map! {
-        Event::BlockingEnd => vec![Trans(0, 1.0)],
+        Event::DelayEnd => vec![Trans(0, 1.0)],
         Event::PacketSent => vec![Trans(2, 1.0)],
         _ => vec![],
     });
@@ -94,9 +94,9 @@ fn make_padding_machine(p: f64) -> Machine {
 fn make_soft_stop_machine(stop_window: f64) -> Machine {
     let mut states = vec![];
 
-    // 0: start machine when the padding machine starts blocking
+    // 0: start machine when the padding machine starts delay
     let start = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(1, 1.0)],
+        Event::DelayBegin => vec![Trans(1, 1.0)],
        _ => vec![],
     });
     states.push(start);
@@ -201,12 +201,12 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
     });
     states.push(tail);
 
-    // 5: end blocking
+    // 5: end delay
     let mut end = State::new(enum_map! {
-        Event::BlockingEnd=> vec![Trans(0, 1.0)],
+        Event::DelayEnd=> vec![Trans(0, 1.0)],
        _ => vec![],
     });
-    end.action = Some(Action::BlockOutgoing {
+    end.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: true,
         timeout: Dist {

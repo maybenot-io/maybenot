@@ -36,35 +36,35 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
         return (Duration::MAX, Queue::Blocking, false);
     }
 
-    // easy: non-blocking event first
+    // easy: non-delay event first
     if !peek.event.is_event(Event::PacketSent) {
         return (duration_since, queue, peek.client);
     }
 
-    let client_blocking = client.blocking_until.is_some();
-    let server_blocking = server.blocking_until.is_some();
+    let client_delay = client.delay_until.is_some();
+    let server_delay = server.delay_until.is_some();
 
-    // easy: no active blocking to consider
-    if !client_blocking && !server_blocking {
+    // easy: no active delay to consider
+    if !client_delay && !server_delay {
         return (duration_since, queue, peek.client);
     }
 
     // lucky: peek not blocked means it's earliest
-    if (peek.client && !client_blocking) || (!peek.client && !server_blocking) {
+    if (peek.client && !client_delay) || (!peek.client && !server_delay) {
         return (duration_since, queue, peek.client);
     }
 
-    // peek is blocked but the event is a bypassable PacketSent AND the blocking
+    // peek is blocked but the event is a bypassable PacketSent AND the delay
     // is bypassable
     if (peek.client
-        && client_blocking
-        && client.blocking_bypassable
+        && client_delay
+        && client.delay_bypassable
         // bypassable PacketSent is the result of replaced decoy traffic
         && (peek.event.is_event(Event::PacketSent))
         && peek.bypass)
         || (!peek.client
-            && server_blocking
-            && server.blocking_bypassable
+            && server_delay
+            && server.delay_bypassable
             // bypassable PacketSent is the result of replaced decoy traffic
             && (peek.event.is_event(Event::PacketSent))
             && peek.bypass)
@@ -76,16 +76,16 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
     // earliest client and server
     let (c_d, c_q, c_b) = peek_queue_earliest_side(
         sq,
-        client.blocking_until,
-        client.blocking_bypassable,
+        client.delay_until,
+        client.delay_bypassable,
         current_time,
         client_network_delay_sum,
         true,
     );
     let (s_d, s_q, s_b) = peek_queue_earliest_side(
         sq,
-        server.blocking_until,
-        server.blocking_bypassable,
+        server.delay_until,
+        server.delay_bypassable,
         current_time,
         server_network_delay_sum,
         false,
@@ -103,97 +103,91 @@ pub(crate) fn peek_queue<M: AsRef<[Machine]>>(
 // Closely tied to how SimQueue is implemented.
 fn peek_queue_earliest_side(
     sq: &SimQueue,
-    blocking_until: Option<Instant>,
-    blocking_bypassable: bool,
+    delay_until: Option<Instant>,
+    delay_bypassable: bool,
     current_time: Instant,
     network_delay_sum: Duration,
     is_client: bool,
 ) -> (Duration, Queue, bool) {
     debug!("peek_queue_earliest_side: is_client={is_client}");
-    // OK, bummer, we have to peek for the next blocking and non-blocking: note
-    // that this takes into account if blocking is bypassable or not, picking
+    // OK, bummer, we have to peek for the next delay and non-delay: note
+    // that this takes into account if delay is bypassable or not, picking
     // the earliest next event from the queue.
-    let (peek_blocking, blocking_queue) = sq.peek_blocking(blocking_bypassable, is_client);
-    let (peek_non_blocking, non_blocking_queue) =
-        sq.peek_non_blocking(blocking_bypassable, is_client, network_delay_sum);
+    let (peek_delay, delay_queue) = sq.peek_delay(delay_bypassable, is_client);
+    let (peek_non_delay, non_delay_queue) =
+        sq.peek_non_delay(delay_bypassable, is_client, network_delay_sum);
 
     // easy: no events to consider
-    if peek_blocking.is_none() && peek_non_blocking.is_none() {
+    if peek_delay.is_none() && peek_non_delay.is_none() {
         return (Duration::MAX, Queue::Blocking, is_client);
     }
 
-    // take the blocking_until into account, if no set, use current time as a
+    // take the delay_until into account, if no set, use current time as a
     // placeholder
-    let blocking_until = blocking_until.unwrap_or(current_time);
+    let delay_until = delay_until.unwrap_or(current_time);
 
     // easy: only one event to consider
-    if peek_blocking.is_none() {
-        // take network delay into account for non-blocking events
-        let peek_non_blocking_time = match non_blocking_queue {
-            Queue::Base => peek_non_blocking.unwrap().time + network_delay_sum,
-            _ => peek_non_blocking.unwrap().time,
+    if peek_delay.is_none() {
+        // take network delay into account for non-delay events
+        let peek_non_delay_time = match non_delay_queue {
+            Queue::Base => peek_non_delay.unwrap().time + network_delay_sum,
+            _ => peek_non_delay.unwrap().time,
         };
         return (
-            peek_non_blocking_time.duration_since(current_time),
-            non_blocking_queue,
+            peek_non_delay_time.duration_since(current_time),
+            non_delay_queue,
             is_client,
         );
     }
-    if peek_non_blocking.is_none() {
+    if peek_non_delay.is_none() {
         return (
-            peek_blocking
+            peek_delay
                 .unwrap()
                 .time
-                .max(blocking_until)
+                .max(delay_until)
                 .duration_since(current_time),
-            blocking_queue,
+            delay_queue,
             is_client,
         );
     }
 
-    // consider both events, taking blocking into account
-    let peek_blocking = peek_blocking.unwrap();
-    let peek_non_blocking = peek_non_blocking.unwrap();
+    // consider both events, taking delay into account
+    let peek_delay = peek_delay.unwrap();
+    let peek_non_delay = peek_non_delay.unwrap();
 
+    debug!("\tpeek_queue_earliest_side: peek_delay={peek_delay:?}, delay_queue={delay_queue:?}");
     debug!(
-        "\tpeek_queue_earliest_side: peek_blocking={peek_blocking:?}, blocking_queue={blocking_queue:?}"
-    );
-    debug!(
-        "\tpeek_queue_earliest_side: peek_non_blocking={peek_non_blocking:?}, non_blocking_queue={non_blocking_queue:?}"
+        "\tpeek_queue_earliest_side: peek_non_delay={peek_non_delay:?}, non_delay_queue={non_delay_queue:?}"
     );
 
-    // take network delay into account for non-blocking events
-    let peek_non_blocking_time = match non_blocking_queue {
-        Queue::Base => peek_non_blocking.time + network_delay_sum,
-        _ => peek_non_blocking.time,
+    // take network delay into account for non-delay events
+    let peek_non_delay_time = match non_delay_queue {
+        Queue::Base => peek_non_delay.time + network_delay_sum,
+        _ => peek_non_delay.time,
     };
 
     // a bit verbose, but on equal, we want to prioritize the base queue while
-    // not prioritizing the internal queue, which are both non-blocking
-    let blocking_first = match peek_blocking
-        .time
-        .max(blocking_until)
-        .cmp(&peek_non_blocking_time)
-    {
+    // not prioritizing the internal queue, which are both non-delay
+    let delay_first = match peek_delay.time.max(delay_until).cmp(&peek_non_delay_time) {
         std::cmp::Ordering::Less => true,
         std::cmp::Ordering::Greater => false,
-        // blocking only if the queue is not the base queue
-        std::cmp::Ordering::Equal => non_blocking_queue != Queue::Base,
+        // delay only if the queue is not the base queue
+        std::cmp::Ordering::Equal => non_delay_queue != Queue::Base,
     };
-    debug!("\tpeek_queue_earliest_side: blocking_first={blocking_first}");
-    if blocking_first {
+    debug!("\tpeek_queue_earliest_side: delay_first={delay_first}");
+    if delay_first {
         (
-            peek_blocking
+            peek_delay
                 .time
-                .max(blocking_until)
+                .max(delay_until)
                 .duration_since(current_time),
-            blocking_queue,
+            delay_queue,
             is_client,
         )
     } else {
         (
-            peek_non_blocking_time.duration_since(current_time),
-            non_blocking_queue,
+            peek_non_delay_time.duration_since(current_time),
+            non_delay_queue,
             is_client,
         )
     }
@@ -246,11 +240,11 @@ pub fn peek_scheduled_internal_timer(
 }
 
 pub fn peek_blocked_exp(
-    blocking_c: Option<Instant>,
-    blocking_s: Option<Instant>,
+    delay_c: Option<Instant>,
+    delay_s: Option<Instant>,
     current_time: Instant,
 ) -> (Duration, bool) {
-    match (blocking_c, blocking_s) {
+    match (delay_c, delay_s) {
         (Some(c), Some(s)) => {
             if c < s {
                 (c.duration_since(current_time), true)

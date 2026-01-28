@@ -19,6 +19,8 @@ Manually generated changelog, for now. We follow semantic versioning.
 - Renamed events: s/TunnelSent/PacketSent and s/TunnelRecv/PacketRecv. With
   packets first being queued, we can now get rid of the tunnel abstraction and
   simply report when a packet is sent or received. Improves clarity.
+- Renamed the blocking action to a delay traffic action, emphasizing that
+  (outgoing) traffic is only temporarily delayed.
 
 ## 2.2.2 - 2025-09-12
 

@@ -112,8 +112,8 @@ packets_per_sec = { start = 100, end = 1000 }
 # Machine configuration - test comprehensive settings with mixed formats
 [derive.machine]
 num_states = { start = 2, end = 10 }
-allow_blocking_client = true
-allow_blocking_server = false
+allow_delay_client = true
+allow_delay_server = false
 allow_expressive = true
 allow_fixed_budget = false
 allow_frac_limits = true
@@ -221,8 +221,8 @@ min_action_timeout = [0.0, 1000.0]
                 // test machine configuration with comprehensive range testing
                 assert_eq!(derive_config.machine.num_states.start(), &2);
                 assert_eq!(derive_config.machine.num_states.end(), &10);
-                assert_eq!(derive_config.machine.allow_blocking_client, Some(true));
-                assert_eq!(derive_config.machine.allow_blocking_server, Some(false));
+                assert_eq!(derive_config.machine.allow_delay_client, Some(true));
+                assert_eq!(derive_config.machine.allow_delay_server, Some(false));
                 assert_eq!(derive_config.machine.allow_expressive, Some(true));
                 assert_eq!(derive_config.machine.allow_fixed_budget, Some(false));
                 assert_eq!(derive_config.machine.allow_frac_limits, Some(true));

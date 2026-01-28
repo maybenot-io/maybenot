@@ -140,10 +140,10 @@ fn test_simple_block_machine() {
     });
 
     let mut s1 = State::new(enum_map! {
-        Event::BlockingEnd => vec![Trans(1, 1.0)],
+        Event::DelayEnd => vec![Trans(1, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::BlockOutgoing {
+    s1.action = Some(Action::DelayTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -167,7 +167,7 @@ fn test_simple_block_machine() {
     let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1]).unwrap();
 
     // client
-    // note in the output how 18,nq should be delayed until 20,nq due to blocking
+    // note in the output how 18,nq should be delayed until 20,nq due to delay
     run_test_sim(
         "0,nq 18,nq 25,nr 25,nr 30,nq 35,nr",
         "0,nq 0,ps 5,bb 10,be 15,bb 18,nq 20,be 20,ps 25,pr 25,pr 25,nr 25,nr 25,bb 30,be 30,nq 30,ps 35,pr 35,nr 35,bb",
@@ -203,10 +203,10 @@ fn test_both_block_machine() {
     });
 
     let mut s1 = State::new(enum_map! {
-        Event::BlockingEnd => vec![Trans(1, 1.0)],
+        Event::DelayEnd => vec![Trans(1, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::BlockOutgoing {
+    s1.action = Some(Action::DelayTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -233,11 +233,11 @@ fn test_both_block_machine() {
 
     run_test_sim(
         "0,nq 7,nr 8,nq 14,nr 18,nq",
-        // blocking starts client at 5, server at 7
+        // delay starts client at 5, server at 7
         // client is blocked until 10, server until 12
         // the delay at client, from 8-10, adds delay 2 in effect at 10+3x5=25
-        // at 12, blocking ends and the server sends queued from 9, adding 3 to delay
-        // the blocking from the server goes into effect at 15, adding 3 to base delay
+        // at 12, delay ends and the server sends queued from 9, adding 3 to delay
+        // the delay from the server goes into effect at 15, adding 3 to base delay
         // at 18,nq, we now have 3 base delay in total, so its turned into 21,nq
         "0,nq 0,ps 5,bb 7,pr 7,nr 8,nq 10,be 10,ps 15,bb 17,pr 17,nr 20,be 21,nq 21,ps",
         Duration::from_micros(5),
@@ -259,10 +259,10 @@ fn test_block_and_decoy() {
         _ => vec![],
     });
     let mut s1 = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(2, 1.0)],
+        Event::DelayBegin => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::BlockOutgoing {
+    s1.action = Some(Action::DelayTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -353,10 +353,10 @@ fn test_bypass_machine() {
         _ => vec![],
     });
     let mut s1 = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(2, 1.0)],
+        Event::DelayBegin => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::BlockOutgoing {
+    s1.action = Some(Action::DelayTraffic {
         bypass: true,
         replace: false,
         timeout: Dist {
@@ -437,7 +437,7 @@ fn test_bypass_machine() {
         false,
     );
 
-    // make the blocking not bypassable
+    // make the delay not bypassable
     set_bypass(&mut m.states[1], false);
 
     // client
@@ -466,7 +466,7 @@ fn test_bypass_machine() {
         false,
     );
 
-    // make the blocking bypassable but the decoy not
+    // make the delay bypassable but the decoy not
     set_bypass(&mut m.states[1], true);
     set_bypass(&mut m.states[2], false);
 
@@ -496,7 +496,7 @@ fn test_bypass_machine() {
         false,
     );
 
-    // make the blocking not bypassable but the decoy is
+    // make the delay not bypassable but the decoy is
     set_bypass(&mut m.states[1], false);
     set_bypass(&mut m.states[2], true);
 
@@ -538,10 +538,10 @@ fn test_bypass_replace_machine() {
     // 1: block for 1000us after 1us, bypassable
     // 1->2 on BlockingBegin
     let mut s1 = State::new(enum_map! {
-        Event::BlockingBegin => vec![Trans(2, 1.0)],
+        Event::DelayBegin => vec![Trans(2, 1.0)],
         _ => vec![],
     });
-    s1.action = Some(Action::BlockOutgoing {
+    s1.action = Some(Action::DelayTraffic {
         bypass: false,
         replace: false,
         timeout: Dist {
@@ -655,7 +655,7 @@ fn test_bypass_replace_machine() {
     // client, with bypass and replace, events as seen by framework
     run_test_sim(
         "0,nq 4,nq 6,nr 6,nr 7,nq",
-        // with all events, we also get SP events and blocking events
+        // with all events, we also get SP events and delay events
         "0,nq 0,ps 1,bb 3,dq 3,ps 4,nq 5,dq 5,ps 6,pr 6,pr 6,nr 6,nr 7,nq 7,dq 7,ps 1001,be",
         Duration::from_micros(5),
         &[m.clone()],
@@ -681,7 +681,7 @@ fn test_bypass_replace_machine() {
     );
     run_test_sim(
         "0,nq 2,nq 2,nq 6,nr 6,nr 7,nq",
-        // with all events, we also get SP events and blocking events
+        // with all events, we also get SP events and delay events
         "0,nq 0,ps 1,bb 2,nq 2,nq 3,dq 3,ps 5,dq 5,ps 6,pr 6,pr 6,nr 6,nr 7,nq 7,dq 7,ps 1001,be",
         Duration::from_micros(5),
         &[m.clone()],

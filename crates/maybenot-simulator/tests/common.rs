@@ -102,7 +102,7 @@ pub fn make_sq(s: String, delay: Duration, starting_time: Instant, as_ms: bool) 
 pub fn set_bypass(s: &mut State, value: bool) {
     if let Some(ref mut a) = s.action {
         match a {
-            Action::BlockOutgoing { bypass, .. } => {
+            Action::DelayTraffic { bypass, .. } => {
                 *bypass = value;
             }
             Action::DecoyTraffic { bypass, .. } => {
@@ -116,7 +116,7 @@ pub fn set_bypass(s: &mut State, value: bool) {
 pub fn set_replace(s: &mut State, value: bool) {
     if let Some(ref mut a) = s.action {
         match a {
-            Action::BlockOutgoing { replace, .. } => {
+            Action::DelayTraffic { replace, .. } => {
                 *replace = value;
             }
             Action::DecoyTraffic { replace, .. } => {

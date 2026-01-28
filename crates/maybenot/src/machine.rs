@@ -1,4 +1,4 @@
-//! A machine determines when to inject and/or block outgoing traffic. Consists
+//! A machine determines when to send decoy traffic or delay traffic. Consists
 //! of one or more [`State`] structs.
 
 use crate::constants::{MAX_DECOMPRESSED_SIZE, STATE_MAX, VERSION};
@@ -16,8 +16,9 @@ use std::str::FromStr;
 
 use self::state::State;
 
-/// A probabilistic state machine (Rabin automaton) consisting of one or more
-/// [`State`] that determine when to inject and/or block outgoing traffic.
+/// A probabilistic state machine (a probabilistic Moore machine) consisting of
+/// one or more [`State`] that determine when to send decoy traffic or delay
+/// traffic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Machine {
     /// The number of decoy packets the machine is allowed to generate as
@@ -25,11 +26,11 @@ pub struct Machine {
     pub allowed_decoy_packets: u64,
     /// The maximum fraction of decoy packets to allow as actions.
     pub max_decoy_frac: f64,
-    /// The number of microseconds of blocking a machine is allowed to generate
-    /// as actions before other limits apply.
-    pub allowed_blocked_microsec: u64,
-    /// The maximum fraction of blocking (microseconds) to allow as actions.
-    pub max_blocking_frac: f64,
+    /// The number of microseconds of delay a machine is allowed to generate as
+    /// actions before other limits apply.
+    pub allowed_delay_microsec: u64,
+    /// The maximum fraction of delaying (microseconds) to allow as actions.
+    pub max_delay_frac: f64,
     /// The states that make up the machine.
     pub states: Vec<State>,
 }
@@ -40,15 +41,15 @@ impl Machine {
     pub fn new(
         allowed_decoy_packets: u64,
         max_decoy_frac: f64,
-        allowed_blocked_microsec: u64,
-        max_blocking_frac: f64,
+        allowed_delay_microsec: u64,
+        max_delay_frac: f64,
         states: Vec<State>,
     ) -> Result<Self, Error> {
         let machine = Machine {
             allowed_decoy_packets,
             max_decoy_frac,
-            allowed_blocked_microsec,
-            max_blocking_frac,
+            allowed_delay_microsec,
+            max_delay_frac,
             states,
         };
         machine.validate()?;
@@ -83,10 +84,10 @@ impl Machine {
                 self.max_decoy_frac
             )));
         }
-        if self.max_blocking_frac < 0.0 || self.max_blocking_frac > 1.0 {
+        if self.max_delay_frac < 0.0 || self.max_delay_frac > 1.0 {
             return Err(Error::Machine(format!(
-                "max_blocking_frac has to be [0.0, 1.0], got {}",
-                self.max_blocking_frac
+                "max_delay_frac has to be [0.0, 1.0], got {}",
+                self.max_delay_frac
             )));
         }
 
@@ -168,15 +169,15 @@ impl fmt::Display for Machine {
             "Machine {}\n\
             - allowed_decoy_packets: {}\n\
             - max_decoy_frac: {}\n\
-            - allowed_blocked_microsec: {}\n\
-            - max_blocking_frac: {}\n\
+            - allowed_delay_microsec: {}\n\
+            - max_delay_frac: {}\n\
             States:\n\
             {}",
             self.name(),
             self.allowed_decoy_packets,
             self.max_decoy_frac,
-            self.allowed_blocked_microsec,
-            self.max_blocking_frac,
+            self.allowed_delay_microsec,
+            self.max_delay_frac,
             self.states
                 .iter()
                 .map(|s| format!("{s}"))
@@ -231,18 +232,18 @@ mod tests {
         let r = m.validate();
         assert!(r.is_ok());
 
-        // max blocking frac
-        m.max_blocking_frac = -0.1;
+        // max delay frac
+        m.max_delay_frac = -0.1;
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
-        m.max_blocking_frac = 1.1;
+        m.max_delay_frac = 1.1;
         let r = m.validate();
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
-        m.max_blocking_frac = 0.5;
+        m.max_delay_frac = 0.5;
         let r = m.validate();
         assert!(r.is_ok());
     }

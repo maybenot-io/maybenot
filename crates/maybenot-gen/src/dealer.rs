@@ -20,13 +20,13 @@ pub struct Setup {
 pub struct Params {
     pub machines: Vec<Machine>,
     pub max_decoy_frac: f64,
-    pub max_blocking_frac: f64,
+    pub max_delay_frac: f64,
 }
 
 /// A "dealer" "draws" a "setup" for the client and the server. Each party gets
-/// a list of machines, and maximum fractions of decoy and blocking for their
+/// a list of machines, and maximum fractions of decoy and delay for their
 /// instance of Maybenot. The scale parameter is used to scale the decoy and
-/// blocking budgets for the client and server, between (0.0, 1.0]. This is
+/// delay budgets for the client and server, between (0.0, 1.0]. This is
 /// useful for creating defense-overhead trade-offs.
 pub trait Dealer {
     /// draw a setup for the client and server
@@ -46,13 +46,13 @@ pub struct Limits {
     /// absolute number of decoy packets before other limits apply, split over
     /// all machines in the defense
     pub decoy_budget: Option<RangeInclusive<f64>>,
-    /// absolute time in microseconds of blocking before other limits apply,
+    /// absolute time in microseconds of delay before other limits apply,
     /// split over all machines in the defense
-    pub blocking_budget: Option<RangeInclusive<f64>>,
+    pub delay_budget: Option<RangeInclusive<f64>>,
     /// fraction of allowed decoy packets, framework-wide
     pub decoy_frac: Option<RangeInclusive<f64>>,
-    /// fraction of allowed blocking duration, framework-wide
-    pub blocking_frac: Option<RangeInclusive<f64>>,
+    /// fraction of allowed delay duration, framework-wide
+    pub delay_frac: Option<RangeInclusive<f64>>,
 }
 /// A dealer based on a fixed list of defenses. The defenses are either drawn
 /// with replacement (reused) or not. Setup fractions are sampled from the
@@ -111,7 +111,7 @@ impl Dealer for DealerFixed {
             set_machine_limits(&mut def.server, limits, scale, rng);
         }
 
-        // return the setup, sampling decoy and blocking fractions for the
+        // return the setup, sampling decoy and delay fractions for the
         // client and server framework instances if limits are set (0.0 means no
         // limit in the framework)
         Ok(Setup {
@@ -120,8 +120,8 @@ impl Dealer for DealerFixed {
                 max_decoy_frac: self.client_limits.as_ref().map_or(0.0, |limits| {
                     sample_range_option_scaled(&limits.decoy_frac, scale, rng)
                 }),
-                max_blocking_frac: self.client_limits.as_ref().map_or(0.0, |limits| {
-                    sample_range_option_scaled(&limits.blocking_frac, scale, rng)
+                max_delay_frac: self.client_limits.as_ref().map_or(0.0, |limits| {
+                    sample_range_option_scaled(&limits.delay_frac, scale, rng)
                 }),
             },
             server: Params {
@@ -129,8 +129,8 @@ impl Dealer for DealerFixed {
                 max_decoy_frac: self.server_limits.as_ref().map_or(0.0, |limits| {
                     sample_range_option_scaled(&limits.decoy_frac, scale, rng)
                 }),
-                max_blocking_frac: self.server_limits.as_ref().map_or(0.0, |limits| {
-                    sample_range_option_scaled(&limits.blocking_frac, scale, rng)
+                max_delay_frac: self.server_limits.as_ref().map_or(0.0, |limits| {
+                    sample_range_option_scaled(&limits.delay_frac, scale, rng)
                 }),
             },
         })
@@ -178,15 +178,15 @@ fn set_machine_limits<R: RngCore>(
     rng: &mut R,
 ) {
     let decoy_budget = sample_range_option_scaled(&limits.decoy_budget, scale, rng);
-    let blocking_budget = sample_range_option_scaled(&limits.blocking_budget, scale, rng);
+    let delay_budget = sample_range_option_scaled(&limits.delay_budget, scale, rng);
 
     let n_machines_with_decoy_budget = machines
         .iter()
         .filter(|m| m.allowed_decoy_packets > 0)
         .count() as f64;
-    let n_machines_with_blocking_budget = machines
+    let n_machines_with_delay_budget = machines
         .iter()
-        .filter(|m| m.allowed_blocked_microsec > 0)
+        .filter(|m| m.allowed_delay_microsec > 0)
         .count() as f64;
 
     for m in machines.iter_mut() {
@@ -194,15 +194,15 @@ fn set_machine_limits<R: RngCore>(
         // this is more chaotic with several machines, because interactions are
         // harder to predict
         m.max_decoy_frac = 0.0;
-        m.max_blocking_frac = 0.0;
+        m.max_delay_frac = 0.0;
 
         // don't scale if the machine doesn't have a budget: if there's a
         // budget, split it evenly among the machines
         if m.allowed_decoy_packets > 0 && limits.decoy_budget.is_some() {
             m.allowed_decoy_packets = (decoy_budget / n_machines_with_decoy_budget) as u64;
         }
-        if m.allowed_blocked_microsec > 0 && limits.blocking_budget.is_some() {
-            m.allowed_blocked_microsec = (blocking_budget / n_machines_with_blocking_budget) as u64;
+        if m.allowed_delay_microsec > 0 && limits.delay_budget.is_some() {
+            m.allowed_delay_microsec = (delay_budget / n_machines_with_delay_budget) as u64;
         }
     }
 }

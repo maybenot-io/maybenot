@@ -115,7 +115,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use delay::agg_delay_on_blocking_expire;
+use delay::agg_delay_on_delay_expire;
 use integration::Integration;
 use log::debug;
 use network::{Network, NetworkBottleneck, WindowCount};
@@ -200,8 +200,8 @@ fn event_to_usize(e: &TriggerEvent) -> usize {
         TriggerEvent::NormalRecv => 4,
         TriggerEvent::DecoyRecv => 5,
         // begin before end
-        TriggerEvent::BlockingBegin { .. } => 6,
-        TriggerEvent::BlockingEnd => 7,
+        TriggerEvent::DelayBegin { .. } => 6,
+        TriggerEvent::DelayEnd => 7,
         TriggerEvent::TimerBegin { .. } => 8,
         TriggerEvent::TimerEnd { .. } => 9,
     }
@@ -241,10 +241,10 @@ pub struct SimState<M, R> {
     scheduled_action: Vec<Option<ScheduledAction>>,
     /// scheduled internal timers
     scheduled_internal_timer: Vec<Option<Instant>>,
-    /// blocking until time, active is set
-    blocking_until: Option<Instant>,
-    /// whether the active blocking bypassable or not
-    blocking_bypassable: bool,
+    /// delay until time, active is set
+    delay_until: Option<Instant>,
+    /// whether the active delay bypassable or not
+    delay_bypassable: bool,
     /// integration aspects for this state
     integration: Option<Integration>,
 }
@@ -257,7 +257,7 @@ where
         machines: M,
         current_time: Instant,
         max_decoy_frac: f64,
-        max_blocking_frac: f64,
+        max_delay_frac: f64,
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
     ) -> Self {
@@ -271,18 +271,12 @@ where
         let num_machines = machines.as_ref().len();
 
         Self {
-            framework: Framework::new(
-                machines,
-                max_decoy_frac,
-                max_blocking_frac,
-                current_time,
-                rng,
-            )
-            .unwrap(),
+            framework: Framework::new(machines, max_decoy_frac, max_delay_frac, current_time, rng)
+                .unwrap(),
             scheduled_action: vec![None; num_machines],
             scheduled_internal_timer: vec![None; num_machines],
-            blocking_until: None,
-            blocking_bypassable: false,
+            delay_until: None,
+            delay_bypassable: false,
             integration,
         }
     }
@@ -365,15 +359,15 @@ pub struct SimulatorArgs {
     /// The maximum fraction of decoy packets for the client's instance of the
     /// Maybenot framework.
     pub max_decoy_frac_client: f64,
-    /// The maximum fraction of blocking for the client's instance of the
+    /// The maximum fraction of delay for the client's instance of the
     /// Maybenot framework.
-    pub max_blocking_frac_client: f64,
+    pub max_delay_frac_client: f64,
     /// The maximum fraction of decoy packets for the server's instance of the
     /// Maybenot framework.
     pub max_decoy_frac_server: f64,
-    /// The maximum fraction of blocking for the server's instance of the
+    /// The maximum fraction of delay for the server's instance of the
     /// Maybenot framework.
-    pub max_blocking_frac_server: f64,
+    pub max_delay_frac_server: f64,
     /// The seed for the deterministic (insecure) Xoshiro256StarStar RNG. If
     /// None, the simulator will use the cryptographically secure thread_rng().
     pub insecure_rng_seed: Option<u64>,
@@ -393,9 +387,9 @@ impl SimulatorArgs {
             only_client_events: false,
             only_network_activity,
             max_decoy_frac_client: 0.0,
-            max_blocking_frac_client: 0.0,
+            max_delay_frac_client: 0.0,
             max_decoy_frac_server: 0.0,
-            max_blocking_frac_server: 0.0,
+            max_delay_frac_server: 0.0,
             insecure_rng_seed: None,
             client_integration: None,
             server_integration: None,
@@ -403,7 +397,7 @@ impl SimulatorArgs {
     }
 }
 
-/// Like [`sim`], but allows to (i) set the maximum decoy and blocking fractions
+/// Like [`sim`], but allows to (i) set the maximum decoy and delay fractions
 /// for the client and server, (ii) specify the maximum number of iterations to
 /// run the simulator for, and (iii) only returning client events.
 pub fn sim_advanced(
@@ -428,7 +422,7 @@ pub fn sim_advanced(
         machines_client,
         current_time,
         args.max_decoy_frac_client,
-        args.max_blocking_frac_client,
+        args.max_delay_frac_client,
         args.clone().client_integration,
         args.insecure_rng_seed,
     );
@@ -436,7 +430,7 @@ pub fn sim_advanced(
         machines_server,
         current_time,
         args.max_decoy_frac_server,
-        args.max_blocking_frac_server,
+        args.max_delay_frac_server,
         args.clone().server_integration,
         // if we have an insecure seed, we use the next number in the sequence
         // to avoid the same seed for both client and server
@@ -479,16 +473,16 @@ pub fn sim_advanced(
         } else {
             debug!("sim(): @server next\n{next:#?}");
         }
-        if let Some(blocking_until) = client.blocking_until {
+        if let Some(delay_until) = client.delay_until {
             debug!(
                 "sim(): client is blocked until time {:#?}",
-                blocking_until.duration_since(start_time)
+                delay_until.duration_since(start_time)
             );
         }
-        if let Some(blocking_until) = server.blocking_until {
+        if let Some(delay_until) = server.delay_until {
             debug!(
                 "sim(): server is blocked until time {:#?}",
-                blocking_until.duration_since(start_time)
+                delay_until.duration_since(start_time)
             );
         }
 
@@ -609,8 +603,7 @@ fn pick_next<M: AsRef<[Machine]>>(
     );
     debug!("\tpick_next(): peek_scheduled_internal_timer = {i:?}");
 
-    let (b, b_is_client) =
-        peek_blocked_exp(client.blocking_until, server.blocking_until, current_time);
+    let (b, b_is_client) = peek_blocked_exp(client.delay_until, server.delay_until, current_time);
     debug!("\tpick_next(): peek_blocked_exp = {b:?}");
 
     let n = network.peek_aggregate_delay(current_time);
@@ -645,30 +638,30 @@ fn pick_next<M: AsRef<[Machine]>>(
         return pick_next(sq, client, server, network, current_time);
     }
 
-    // next is blocking expiry, fundamental due to how we aggregate delay
+    // next is delay expiry, fundamental due to how we aggregate delay
     if b <= s && b <= i && b <= q {
-        debug!("\tpick_next(): picked blocking");
-        // create SimEvent and turn off blocking, ASSUMPTION: block outgoing is
+        debug!("\tpick_next(): picked delay");
+        // create SimEvent and turn off delay, ASSUMPTION: block outgoing is
         // reported from integration
         let delay: Duration;
         if b_is_client {
             delay = client.reporting_delay();
-            client.blocking_until = None;
+            client.delay_until = None;
         } else {
             delay = server.reporting_delay();
-            server.blocking_until = None;
+            server.delay_until = None;
         }
 
-        // determine if we have any aggregate delay to schedule (are we blocking
+        // determine if we have any aggregate delay to schedule (are we delay
         // anything?)
-        let (blocking, _) = sq.peek_blocking(false, b_is_client);
-        if let Some(event) = blocking {
-            // if the first blocking event is in the past, it was delayed by the
-            // blocking: note that the blocking ends at current_time + b
+        let (action_delay, _) = sq.peek_delay(false, b_is_client);
+        if let Some(event) = action_delay {
+            // if the first delay event is in the past, it was delayed by the
+            // delay: note that the delay ends at current_time + b
             if event.time < current_time + b {
                 //let blocked_duration = current_time + b - event.time;
                 let time_of_expiry = current_time + b;
-                if let Some(blocked_duration) = agg_delay_on_blocking_expire(
+                if let Some(blocked_duration) = agg_delay_on_delay_expire(
                     sq,
                     b_is_client,
                     time_of_expiry,
@@ -685,7 +678,7 @@ fn pick_next<M: AsRef<[Machine]>>(
 
         let e = SimEvent {
             client: b_is_client,
-            event: TriggerEvent::BlockingEnd,
+            event: TriggerEvent::DelayEnd,
             time: current_time + b + delay,
             integration_delay: delay,
             bypass: false,
@@ -719,7 +712,7 @@ fn pick_next<M: AsRef<[Machine]>>(
             )
             .unwrap();
         debug!("\tpick_next(): popped from queue {tmp:?}");
-        // check if blocking moves the event forward in time
+        // check if delay moves the event forward in time
         if current_time + q > tmp.time {
             // move the event forward in time
             tmp.time = current_time + q;
@@ -879,7 +872,7 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
             }
             Some(r)
         }
-        TriggerAction::BlockOutgoing {
+        TriggerAction::DelayTraffic {
             timeout: _,
             duration,
             bypass,
@@ -896,24 +889,24 @@ fn do_scheduled_action<M: AsRef<[Machine]>>(
             };
             let reported = a.time + total_delay;
 
-            // should we update client/server blocking?
+            // should we update client/server delay?
             if is_client {
-                if replace || block > client.blocking_until.unwrap_or(a.time) {
-                    client.blocking_until = Some(block);
-                    client.blocking_bypassable = bypass;
+                if replace || block > client.delay_until.unwrap_or(a.time) {
+                    client.delay_until = Some(block);
+                    client.delay_bypassable = bypass;
                 }
-                event_bypass = client.blocking_bypassable;
+                event_bypass = client.delay_bypassable;
             } else {
-                if replace || block > server.blocking_until.unwrap_or(a.time) {
-                    server.blocking_until = Some(block);
-                    server.blocking_bypassable = bypass;
+                if replace || block > server.delay_until.unwrap_or(a.time) {
+                    server.delay_until = Some(block);
+                    server.delay_bypassable = bypass;
                 }
-                event_bypass = server.blocking_bypassable;
+                event_bypass = server.delay_bypassable;
             }
 
             // event triggered regardless
             Some(vec![SimEvent {
-                event: TriggerEvent::BlockingBegin { machine },
+                event: TriggerEvent::DelayBegin { machine },
                 time: reported,
                 integration_delay: total_delay,
                 client: is_client,
@@ -973,7 +966,7 @@ fn trigger_update<M: AsRef<[Machine]>>(
                     time: *current_time + *timeout + trigger_delay,
                 });
             }
-            TriggerAction::BlockOutgoing {
+            TriggerAction::DelayTraffic {
                 timeout,
                 duration: _,
                 bypass: _,

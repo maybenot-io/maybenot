@@ -19,9 +19,9 @@ pub const MAX_SAMPLED_TIMEOUT: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 /// day in microseconds.
 pub const MAX_SAMPLED_TIMER_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 
-/// The maximum sampled blocking duration in a [`State`](crate::state), set to a
+/// The maximum sampled delay duration in a [`State`](crate::state), set to a
 /// day in microseconds.
-pub const MAX_SAMPLED_BLOCK_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
+pub const MAX_SAMPLED_DELAY_DURATION: f64 = 24.0 * 60.0 * 60.0 * 1000.0 * 1000.0;
 
 /// The maximum sampled number of decoy packets in a [`State`](crate::state),
 /// currently set to 10_000.

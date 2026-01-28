@@ -11,7 +11,7 @@ pub struct Integration {
     /// space might need to signal to kernel space to craft one. NOTE: we assume
     /// that the DecoyQueued event is triggered directly as decoy is sent from
     /// Maybenot, while we assume that the BlockingBegin event is triggered when
-    /// the blocking actually begins in the protocol and the event is
+    /// the delay actually begins in the protocol and the event is
     /// transported with a reporting delay.
     pub action_delay: BinDist,
     /// The *reporting* delay is the time between an event being created by the

@@ -18,7 +18,7 @@ use crate::environment::Environment;
 /// defense. Additionally, the load is defined per side (client and server),
 /// since decoy traffic can be asymmetric (just like common traffic to defend,
 /// e.g., web traffic). Delay is a single value, since decoy traffic and
-/// blocking on both sides cause aggregate delays from propagated delays (in a
+/// delay on both sides cause aggregate delays from propagated delays (in a
 /// realistic simulator).
 ///
 /// The minimal number of normal packets is a sanity check to ensure that the
@@ -207,10 +207,10 @@ struct Stats {
     /// sum of normal packets sent (from TriggerEvent:PacketSent without the
     /// decoy flag)
     normal: usize,
-    /// sum of blocking begin events
-    blocking_begin: usize,
-    /// sum of blocking end events
-    blocking_end: usize,
+    /// sum of delay begin events
+    delay_begin: usize,
+    /// sum of delay end events
+    delay_end: usize,
     /// sum of timer begin events
     timer_begin: usize,
     /// sum of timer end events
@@ -222,8 +222,8 @@ impl Stats {
         Self {
             decoy: 0,
             normal: 0,
-            blocking_begin: 0,
-            blocking_end: 0,
+            delay_begin: 0,
+            delay_end: 0,
             timer_begin: 0,
             timer_end: 0,
         }
@@ -232,8 +232,8 @@ impl Stats {
     pub fn len(&self) -> usize {
         self.decoy
             + self.normal
-            + self.blocking_begin
-            + self.blocking_end
+            + self.delay_begin
+            + self.delay_end
             + self.timer_begin
             + self.timer_end
     }
@@ -260,18 +260,18 @@ fn count_events(client: &mut Stats, server: &mut Stats, trace: &[SimEvent]) {
                     server.normal += 1;
                 }
             }
-            TriggerEvent::BlockingBegin { .. } => {
+            TriggerEvent::DelayBegin { .. } => {
                 if event.client {
-                    client.blocking_begin += 1;
+                    client.delay_begin += 1;
                 } else {
-                    server.blocking_begin += 1;
+                    server.delay_begin += 1;
                 }
             }
-            TriggerEvent::BlockingEnd => {
+            TriggerEvent::DelayEnd => {
                 if event.client {
-                    client.blocking_end += 1;
+                    client.delay_end += 1;
                 } else {
-                    server.blocking_end += 1;
+                    server.delay_end += 1;
                 }
             }
             TriggerEvent::TimerBegin { .. } => {
