@@ -9,7 +9,7 @@ pub const VERSION: u8 = 2;
 pub const MAX_DECOMPRESSED_SIZE: usize = 1 << 20;
 
 /// The number of [`Event`](crate::event)s in the framework.
-pub const EVENT_NUM: usize = 13;
+pub const EVENT_NUM: usize = 14;
 
 /// The maximum sampled timeout in a [`State`](crate::state), set to a day in
 /// microseconds.

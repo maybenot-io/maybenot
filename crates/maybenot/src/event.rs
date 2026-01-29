@@ -40,6 +40,8 @@ pub enum Event {
     TimerEnd,
     /// Signal is when a machine transitioned to [`STATE_SIGNAL`](crate::constants).
     Signal,
+    /// Congestion is when an integration-specific congestion event occurred.
+    Congestion,
 }
 
 impl fmt::Display for Event {
@@ -64,6 +66,7 @@ impl Event {
             TimerBegin,
             TimerEnd,
             Signal,
+            Congestion,
         ];
         EVENTS.iter()
     }
@@ -133,6 +136,12 @@ pub enum TriggerEvent {
     /// (This event _should not_ be sent in response to a timer being
     /// cancelled.)
     TimerEnd { machine: MachineId },
+    /// Congestion has occurred, by some measure.
+    ///
+    /// This is an integration-specific event that could be used to indicate,
+    /// for example, queued packets or ECN messages. Machines should likely be
+    /// designed for one semantic interpretation of this event.
+    Congestion,
 }
 
 impl TriggerEvent {
@@ -149,6 +158,7 @@ impl TriggerEvent {
             TriggerEvent::TimerEnd { .. } => e == Event::TimerEnd,
             TriggerEvent::PacketSent => e == Event::PacketSent,
             TriggerEvent::PacketRecv => e == Event::PacketRecv,
+            TriggerEvent::Congestion => e == Event::Congestion,
         }
     }
 }
@@ -167,6 +177,7 @@ impl fmt::Display for TriggerEvent {
             TriggerEvent::DelayEnd => write!(f, "be"),
             TriggerEvent::TimerBegin { .. } => write!(f, "tb"),
             TriggerEvent::TimerEnd { .. } => write!(f, "te"),
+            TriggerEvent::Congestion => write!(f, "c"),
         }
     }
 }
