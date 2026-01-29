@@ -328,7 +328,7 @@ mod tests {
     #[test]
     fn test_no_op() {
         assert!(no_op_machine().validate().is_ok());
-        assert_eq!(no_op_machine().serialize(), "02eNpjYEAHjOgCAAA0AAI=")
+        assert_eq!(no_op_machine().serialize(), "02eNpjYEAHjBgiAAA2AAI=")
     }
 
     #[test]
@@ -371,7 +371,7 @@ mod tests {
         let m = Machine::new(u64::MAX, 1.0, 0, 0.0, states).unwrap();
         assert_eq!(
             m.serialize(),
-            "02eNp9zMENABAMRuFXI1hIzGAhIxrFAkI0pD2I79Ck/+GNeaB64gp6RQSqrez/qcWS+XN1F7P6Aj51DlE="
+            "02eNp9zMEJACAMQ9HUEVyoOIMLOaKjdAFRDIoi0nfI4R/S+gIyxRa4IgKUU2fBX405wWf6BJ5d9wNXrw5R"
         );
     }
 
@@ -416,7 +416,7 @@ mod tests {
         let m = Machine::new(u64::MAX, 1.0, 0, 0.0, states).unwrap();
         assert_eq!(
             m.serialize(),
-            "02eNp9zcsJACAMA9DEgVyhuFkPDuwC4o8WKogPCs0l6cPgaAKX1pEEVMJjdnzSmgv+woaXXeUTzmYPEQ=="
+            "02eNp9zcsJACAMA9DUgVyhuFkPDuwC4g8DFaQPCs0l6ePC0RSU1okIYOoe2vnLai6IuRGWve0T6SIPEQ=="
         );
     }
 }

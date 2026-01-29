@@ -45,7 +45,7 @@
 //!
 //! // A simple machine that sends one decoy packet 20 milliseconds after the
 //! // first normal packet is sent.
-//! let m = "02eNp9ycEJACAMQ9EfF6ujeXQ/F3EEEcFDafsuIQl47YUkGPbnW2NzdWrbsucAyNsDkQ==";
+//! let m = "02eNp9ycEJACAMQ9EfF6ujeXQ/F3EEEQ9CafsuIQl47YUkGPb322NzdWrb0usAzTEDkQ==";
 //! let m = Machine::from_str(m).unwrap();
 //!
 //! // Run the simulator with the machine at the client. Run the simulation up
@@ -204,6 +204,7 @@ fn event_to_usize(e: &TriggerEvent) -> usize {
         TriggerEvent::DelayEnd => 7,
         TriggerEvent::TimerBegin { .. } => 8,
         TriggerEvent::TimerEnd { .. } => 9,
+        TriggerEvent::Congestion => 10,
     }
 }
 
