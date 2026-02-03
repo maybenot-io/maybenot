@@ -20,7 +20,6 @@ fuzzing = []
 afl = "0.15.13"
 rand = "0.9"
 rand_xoshiro = "0.7"
-rand_core = "0.9"
 maybenot = { path = "../crates/maybenot/" }
 
 [[bin]]

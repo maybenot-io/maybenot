@@ -29,7 +29,6 @@ maybenot-gen = { version = "1.0.1", path = "../maybenot-gen" }
 maybenot-machines = { version = "1.0.1", path = "../maybenot-machines" }
 num_cpus = "1.17"
 rand = "0.9"
-rand_core = "0.9"
 rand_seeder = "0.4"
 rand_xoshiro = "0.7"
 rayon = "1.10"
