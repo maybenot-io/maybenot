@@ -45,7 +45,6 @@ struct MachineRuntime<T: crate::time::Instant> {
     current_state: usize,
     state_limit: u64,
     decoys_sent: u64,
-    normal_sent: u64,
     allowed_delay_microsec: T::Duration,
     counter_a: u64,
     counter_b: u64,
@@ -147,7 +146,6 @@ where
                 current_state: 0,
                 state_limit: 0,
                 decoys_sent: 0,
-                normal_sent: 0,
                 allowed_delay_microsec: T::Duration::from_micros(m.allowed_delay_microsec),
                 counter_a: 0,
                 counter_b: 0,
@@ -296,8 +294,6 @@ where
                 self.normal_sent_packets = self.normal_sent_packets.saturating_add(1);
 
                 for mi in 0..self.runtime.len() {
-                    self.runtime[mi].normal_sent = self.runtime[mi].normal_sent.saturating_add(1);
-
                     self.transition(mi, Event::NormalQueued);
                 }
             }
@@ -2496,7 +2492,7 @@ mod tests {
 
         // decoy accounting correct
         assert_eq!(f.runtime[0].decoys_sent, 4);
-        assert_eq!(f.runtime[0].normal_sent, 1);
+        assert_eq!(f.normal_sent_packets, 1);
 
         // limit should be reached after 4 decoys, delay next action
         assert_eq!(f.actions[0], None);
