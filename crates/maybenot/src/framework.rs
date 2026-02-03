@@ -646,6 +646,12 @@ where
     }
 
     fn below_limit_decoy(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
+        // we always allow traffic if no traffic has been sent
+        let total = self.decoys_sent_packets + self.normal_sent_packets;
+        if total == 0 {
+            return true;
+        }
+
         // no limits apply if not made up decoy count
         if runtime.decoys_sent < machine.allowed_decoy_packets {
             return runtime.state_limit > 0;
@@ -653,10 +659,6 @@ where
 
         // hit global limits?
         if self.max_decoy_frac > 0.0 {
-            let total = self.decoys_sent_packets + self.normal_sent_packets;
-            if total == 0 {
-                return true;
-            }
             if self.decoys_sent_packets as f64 / total as f64 >= self.max_decoy_frac {
                 return false;
             }
