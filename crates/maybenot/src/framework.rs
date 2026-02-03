@@ -41,11 +41,10 @@ impl MachineId {
 }
 
 #[derive(Debug, Clone)]
-struct MachineRuntime<T: crate::time::Instant> {
+struct MachineRuntime {
     current_state: usize,
     state_limit: u64,
     decoys_sent: u64,
-    allowed_delay_microsec: T::Duration,
     counter_a: u64,
     counter_b: u64,
 }
@@ -87,7 +86,7 @@ where
     // the machines are immutable, but we need to keep track of their runtime
     // state (size independent of number of states in the machine).
     machines: M,
-    runtime: Vec<MachineRuntime<T>>,
+    runtime: Vec<MachineRuntime>,
     // decoy accounting
     max_decoy_frac: f64,
     normal_sent_packets: u64,
@@ -146,7 +145,6 @@ where
                 current_state: 0,
                 state_limit: 0,
                 decoys_sent: 0,
-                allowed_delay_microsec: T::Duration::from_micros(m.allowed_delay_microsec),
                 counter_a: 0,
                 counter_b: 0,
             });
@@ -586,7 +584,7 @@ where
         }
     }
 
-    fn below_action_limits(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
+    fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
 
         let Some(action) = current.action else {
@@ -601,7 +599,7 @@ where
         }
     }
 
-    fn below_limit_delay(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
+    fn below_limit_delay(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
 
         // special case: we always allow overwriting existing delay
@@ -631,7 +629,7 @@ where
 
         // machine allowed delay duration first, since it bypasses the other two
         // types of limits
-        if m_delay_dur < runtime.allowed_delay_microsec {
+        if m_delay_dur < T::Duration::from_micros(machine.allowed_delay_microsec) {
             // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
@@ -651,7 +649,7 @@ where
         runtime.state_limit > 0
     }
 
-    fn below_limit_decoy(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
+    fn below_limit_decoy(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
         // no limits apply if not made up decoy count
         if runtime.decoys_sent < machine.allowed_decoy_packets {
             return runtime.state_limit > 0;
