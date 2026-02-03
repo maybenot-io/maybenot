@@ -48,8 +48,6 @@ pub struct RandomMachineConfig {
     pub allow_expressive: Option<bool>,
     /// Whether the machine can use fixed budgets.
     pub allow_fixed_budget: Option<bool>,
-    /// Whether the machine can use fractional limits.
-    pub allow_frac_limits: Option<bool>,
     /// Reference point for actions involving durations of time, such as action
     /// timeouts or delay duration.
     pub duration_point: Option<RangeInclusive<f64>>,
@@ -77,7 +75,6 @@ impl RandomMachineConfig {
 
         let expressive = self.allow_expressive.unwrap_or(rng.random_bool(0.5));
         let fixed_budget = self.allow_fixed_budget.unwrap_or(rng.random_bool(0.5));
-        let frac_limit = self.allow_frac_limits.unwrap_or(rng.random_bool(0.5));
 
         let duration_ref_point = self
             .duration_point
@@ -99,7 +96,6 @@ impl RandomMachineConfig {
             Some(true) => random_circpad_compatible_machine(
                 num_states,
                 fixed_budget,
-                frac_limit,
                 duration_ref_point,
                 count_ref_point,
                 min_action_timeout,
@@ -110,7 +106,6 @@ impl RandomMachineConfig {
                 action_block,
                 expressive,
                 fixed_budget,
-                frac_limit,
                 duration_ref_point,
                 count_ref_point,
                 min_action_timeout,

@@ -80,7 +80,7 @@ fn gen_front(padding_window: f64, padding_budget: u32, num_states: usize) -> Vec
         stdev,
     ));
 
-    vec![Machine::new(u64::MAX, 0.0, 0, 0.0, states).unwrap()]
+    vec![Machine::new(u64::MAX, 0, states).unwrap()]
 }
 
 // Generate a PADDING state for a machine.

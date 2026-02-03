@@ -26,8 +26,8 @@ fn test_derive_seed_42() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stdout.contains("successfully derived defense in 2 attempts"),
-        "Expected 'successfully derived defense in 2 attempts' in output.\nStdout: {stdout}\nStderr: {stderr}"
+        stdout.contains("successfully derived defense in 1 attempts"),
+        "Expected 'successfully derived defense in 1 attempts' in output.\nStdout: {stdout}\nStderr: {stderr}"
     );
 }
 

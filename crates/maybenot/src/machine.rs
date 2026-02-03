@@ -22,15 +22,11 @@ use self::state::State;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Machine {
     /// The number of decoy packets the machine is allowed to generate as
-    /// actions before other limits apply.
+    /// actions before other limits apply. Use with care.
     pub allowed_decoy_packets: u64,
-    /// The maximum fraction of decoy packets to allow as actions.
-    pub max_decoy_frac: f64,
     /// The number of microseconds of delay a machine is allowed to generate as
-    /// actions before other limits apply.
+    /// actions before other limits apply. Use with care.
     pub allowed_delay_microsec: u64,
-    /// The maximum fraction of delaying (microseconds) to allow as actions.
-    pub max_delay_frac: f64,
     /// The states that make up the machine.
     pub states: Vec<State>,
 }
@@ -40,16 +36,12 @@ impl Machine {
     /// error if the machine or any of its states are invalid.
     pub fn new(
         allowed_decoy_packets: u64,
-        max_decoy_frac: f64,
         allowed_delay_microsec: u64,
-        max_delay_frac: f64,
         states: Vec<State>,
     ) -> Result<Self, Error> {
         let machine = Machine {
             allowed_decoy_packets,
-            max_decoy_frac,
             allowed_delay_microsec,
-            max_delay_frac,
             states,
         };
         machine.validate()?;
@@ -77,20 +69,6 @@ impl Machine {
     /// Validates that the machine is in a valid state (machines that are
     /// mutated may get into an invalid state).
     pub fn validate(&self) -> Result<(), Error> {
-        // sane limits
-        if self.max_decoy_frac < 0.0 || self.max_decoy_frac > 1.0 {
-            return Err(Error::Machine(format!(
-                "max_decoy_frac has to be [0.0, 1.0], got {}",
-                self.max_decoy_frac
-            )));
-        }
-        if self.max_delay_frac < 0.0 || self.max_delay_frac > 1.0 {
-            return Err(Error::Machine(format!(
-                "max_delay_frac has to be [0.0, 1.0], got {}",
-                self.max_delay_frac
-            )));
-        }
-
         // sane number of states
         let num_states = self.states.len();
 
@@ -168,16 +146,12 @@ impl fmt::Display for Machine {
             f,
             "Machine {}\n\
             - allowed_decoy_packets: {}\n\
-            - max_decoy_frac: {}\n\
             - allowed_delay_microsec: {}\n\
-            - max_delay_frac: {}\n\
             States:\n\
             {}",
             self.name(),
             self.allowed_decoy_packets,
-            self.max_decoy_frac,
             self.allowed_delay_microsec,
-            self.max_delay_frac,
             self.states
                 .iter()
                 .map(|s| format!("{s}"))
@@ -202,56 +176,16 @@ mod tests {
         });
 
         // machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0]).unwrap();
 
         // name generation should be deterministic
         assert_eq!(m.name(), m.name());
     }
 
     #[test]
-    fn validate_machine_limits() {
-        let s0 = State::new(enum_map! {
-               Event::DecoyQueued => vec![Trans(0, 1.0)],
-             _ => vec![],
-        });
-
-        let mut m = Machine::new(1000, 1.0, 0, 0.0, vec![s0]).unwrap();
-
-        // max_decoy_frac
-        m.max_decoy_frac = -0.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-
-        m.max_decoy_frac = 1.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-
-        m.max_decoy_frac = 0.5;
-        let r = m.validate();
-        assert!(r.is_ok());
-
-        // max delay frac
-        m.max_delay_frac = -0.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-
-        m.max_delay_frac = 1.1;
-        let r = m.validate();
-        println!("{:?}", r.as_ref().err());
-        assert!(r.is_err());
-
-        m.max_delay_frac = 0.5;
-        let r = m.validate();
-        assert!(r.is_ok());
-    }
-
-    #[test]
     fn validate_machine_num_states() {
         // invalid machine lacking state
-        let r = Machine::new(1000, 1.0, 0, 0.0, vec![]);
+        let r = Machine::new(1000, 0, vec![]);
 
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
@@ -265,7 +199,7 @@ mod tests {
              _ => vec![],
         });
         // machine with broken state
-        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0]);
+        let r = Machine::new(1000, 0, vec![s0]);
         println!("{:?}", r.as_ref().err());
         assert!(r.is_err());
 
@@ -274,7 +208,7 @@ mod tests {
                  Event::DecoyQueued => vec![Trans(0, 0.8)],
              _ => vec![],
         });
-        let r = Machine::new(1000, 1.0, 0, 0.0, vec![s0]);
+        let r = Machine::new(1000, 0, vec![s0]);
         assert!(r.is_ok());
     }
 }

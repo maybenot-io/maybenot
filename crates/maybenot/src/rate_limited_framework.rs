@@ -213,7 +213,7 @@ mod tests {
             limit: None,
         });
 
-        let m = Machine::new(1_000_000, 0.0, 0, 0.0, vec![state]).unwrap();
+        let m = Machine::new(1_000_000, 0, vec![state]).unwrap();
         Framework::new(vec![m], 0.0, 0.0, StdInstant::now(), rand::rng()).unwrap()
     }
 

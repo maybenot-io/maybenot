@@ -22,7 +22,6 @@ use crate::{
 pub(crate) fn random_circpad_compatible_machine<R: Rng>(
     num_states: usize,
     fixed_budget: bool,
-    frac_limit: bool,
     duration_point: RangeInclusive<f64>,
     count_point: RangeInclusive<u64>,
     min_action_timeout: RangeInclusive<f64>,
@@ -34,13 +33,6 @@ pub(crate) fn random_circpad_compatible_machine<R: Rng>(
         rng.random_range(0..=p)
     } else {
         0
-    };
-
-    // this is circpad_machine_spec_t->max_padding_percent
-    let max_decoy_frac = if frac_limit {
-        round_f64(rng.random_range(0.0..=1.0))
-    } else {
-        0.0
     };
 
     loop {
@@ -56,7 +48,7 @@ pub(crate) fn random_circpad_compatible_machine<R: Rng>(
             })
             .collect();
         if check_machine_states(&states) {
-            let m = Machine::new(allowed_decoy_packets, max_decoy_frac, 0, 0.0, states);
+            let m = Machine::new(allowed_decoy_packets, 0, states);
             if let Ok(m) = m {
                 return m;
             }

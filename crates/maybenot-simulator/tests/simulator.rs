@@ -76,7 +76,7 @@ fn test_simple_pad_machine() {
         },
         limit: None,
     });
-    let m = Machine::new(0, 1.0, 0, 1.0, vec![s0, s1]).unwrap();
+    let m = Machine::new(0, 0, vec![s0, s1]).unwrap();
 
     // client machine and client output
     run_test_sim(
@@ -172,7 +172,7 @@ fn test_simple_block_machine() {
         },
         limit: None,
     });
-    let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1]).unwrap();
+    let m = Machine::new(0, 0, vec![s0, s1]).unwrap();
 
     // client
     // note in the output how 18,nq should be delayed until 20,nq due to delay
@@ -243,7 +243,7 @@ fn test_both_block_machine() {
         },
         limit: None,
     });
-    let client = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1]).unwrap();
+    let client = Machine::new(0, 0, vec![s0, s1]).unwrap();
 
     let server = client.clone();
 
@@ -339,7 +339,7 @@ fn test_block_and_decoy() {
             max: 0.0,
         }),
     });
-    let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+    let m = Machine::new(0, 0, vec![s0, s1, s2]).unwrap();
 
     // client
     run_test_sim(
@@ -441,7 +441,7 @@ fn test_bypass_machine() {
             max: 0.0,
         }),
     });
-    let mut m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+    let mut m = Machine::new(0, 0, vec![s0, s1, s2]).unwrap();
 
     // client
     run_test_sim(
@@ -635,7 +635,7 @@ fn test_bypass_replace_machine() {
             max: 0.0,
         }),
     });
-    let mut m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+    let mut m = Machine::new(0, 0, vec![s0, s1, s2]).unwrap();
 
     // client, without any bypass or replace
     run_test_sim(
@@ -845,7 +845,7 @@ fn test_timer_action_basic() {
         },
         limit: None,
     });
-    let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3]).unwrap();
+    let m = Machine::new(0, 0, vec![s0, s1, s2, s3]).unwrap();
 
     run_test_sim(
         "0,nq 3,nq 6,nr 6,nr 7,nq",
@@ -924,7 +924,7 @@ fn test_timer_action_longest() {
         },
         limit: None,
     });
-    let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3]).unwrap();
+    let m = Machine::new(0, 0, vec![s0, s1, s2, s3]).unwrap();
 
     run_test_sim(
         "0,nq 3,nq 6,nr 6,nr 7,nq",
@@ -1003,7 +1003,7 @@ fn test_timer_action_replace() {
         },
         limit: None,
     });
-    let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3]).unwrap();
+    let m = Machine::new(0, 0, vec![s0, s1, s2, s3]).unwrap();
 
     run_test_sim(
         "0,nq 3,nq 6,nr 6,nr 7,nq",
@@ -1074,7 +1074,7 @@ fn test_action_cancel_timer_internal() {
         timer: Timer::Internal,
     });
 
-    let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3]).unwrap();
+    let m = Machine::new(0, 0, vec![s0, s1, s2, s3]).unwrap();
 
     run_test_sim(
         "0,nq 1,nq 6,nr 7,nq",
@@ -1145,7 +1145,7 @@ fn test_action_cancel_timer_action() {
         timer: Timer::Action,
     });
 
-    let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3]).unwrap();
+    let m = Machine::new(0, 0, vec![s0, s1, s2, s3]).unwrap();
 
     run_test_sim(
         "0,nq 1,nq 6,nr 7,nq",
@@ -1214,7 +1214,7 @@ fn test_action_cancel_timer_both() {
     });
     s3.action = Some(Action::Cancel { timer: Timer::All });
 
-    let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3]).unwrap();
+    let m = Machine::new(0, 0, vec![s0, s1, s2, s3]).unwrap();
 
     run_test_sim(
         "0,nq 1,nq 6,nr 7,nq",
@@ -1304,7 +1304,7 @@ fn test_counter_machine() {
         },
         limit: None,
     });
-    let mut m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3, s4]).unwrap();
+    let mut m = Machine::new(0, 0, vec![s0, s1, s2, s3, s4]).unwrap();
 
     run_test_sim(
         "0,nq 6,nr 6,nr 7,nq 7,nq 7,nq",

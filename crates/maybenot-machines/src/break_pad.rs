@@ -43,7 +43,7 @@ pub fn break_pad_client() -> Vec<Machine> {
         make_pareto(1.9667283364576538, 0.05282296143414936),
     ));
 
-    vec![Machine::new(1500, 0.5, 0, 0.0, states).unwrap()]
+    vec![Machine::new(1500, 0, states).unwrap()]
 }
 
 pub fn break_pad_server() -> Vec<Machine> {
@@ -76,7 +76,7 @@ pub fn break_pad_server() -> Vec<Machine> {
         make_pareto(7.009539453953314, -1.7523848634883286),
     ));
 
-    vec![Machine::new(1500, 0.5, 0, 0.0, states).unwrap()]
+    vec![Machine::new(1500, 0, states).unwrap()]
 }
 
 fn make_wait_states(start: usize, threshold: Dist) -> Vec<State> {

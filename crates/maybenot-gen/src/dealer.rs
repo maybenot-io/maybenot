@@ -192,10 +192,6 @@ fn set_machine_limits<R: RngCore>(
     for m in machines.iter_mut() {
         // we use framework fraction limits and disable machine-specific ones:
         // this is more chaotic with several machines, because interactions are
-        // harder to predict
-        m.max_decoy_frac = 0.0;
-        m.max_delay_frac = 0.0;
-
         // don't scale if the machine doesn't have a budget: if there's a
         // budget, split it evenly among the machines
         if m.allowed_decoy_packets > 0 && limits.decoy_budget.is_some() {

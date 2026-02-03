@@ -321,7 +321,7 @@ fn ratio3_machine() -> Machine {
     });
     states.push(padding_state);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }
 
 fn delay_machine(delay_duration: DistType, padding_delay: DistType) -> Machine {
@@ -381,7 +381,7 @@ fn delay_machine(delay_duration: DistType, padding_delay: DistType) -> Machine {
         },
         limit: None,
     });
-    Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2]).unwrap()
+    Machine::new(0, 0, vec![s0, s1, s2]).unwrap()
 }
 
 #[test_log::test]

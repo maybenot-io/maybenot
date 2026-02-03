@@ -225,7 +225,6 @@ min_action_timeout = [0.0, 1000.0]
                 assert_eq!(derive_config.machine.allow_delay_server, Some(false));
                 assert_eq!(derive_config.machine.allow_expressive, Some(true));
                 assert_eq!(derive_config.machine.allow_fixed_budget, Some(false));
-                assert_eq!(derive_config.machine.allow_frac_limits, Some(true));
                 assert_eq!(
                     derive_config
                         .machine

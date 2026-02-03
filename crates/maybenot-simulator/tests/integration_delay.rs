@@ -48,7 +48,7 @@ fn get_test_machine() -> Machine {
         limit: None,
     });
 
-    Machine::new(0, 0.0, 0, 0.0, vec![s0, s1]).unwrap()
+    Machine::new(0, 0, vec![s0, s1]).unwrap()
 }
 
 fn run_sim(

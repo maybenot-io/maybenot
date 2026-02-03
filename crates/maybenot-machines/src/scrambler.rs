@@ -123,7 +123,7 @@ pub fn scrambler_client() -> Vec<Machine> {
     });
     states.push(padding);
 
-    vec![Machine::new(0, 0.0, 0, 0.0, states).unwrap()]
+    vec![Machine::new(0, 0, states).unwrap()]
 }
 
 // Generate Machine #1 with the specified parameters.
@@ -151,7 +151,7 @@ fn generate_machine_one(interval: f64, min_count: f64, min_trail: f64, max_trail
         max_trail / 4.0,
     ));
 
-    Machine::new(0, 0.0, 0, 0.0, states).unwrap()
+    Machine::new(0, 0, states).unwrap()
 }
 
 // Generate the START state for Machine #1.
@@ -368,7 +368,7 @@ fn generate_machine_two(min_count: f64) -> Machine {
     states.push(generate_count_right_state(min_count));
     states.push(generate_signal_state());
 
-    Machine::new(0, 0.0, 0, 0.0, states).unwrap()
+    Machine::new(0, 0, states).unwrap()
 }
 
 // Generate the L state for Machine #2.

@@ -79,7 +79,7 @@ pub fn interspace_client<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     });
     states.push(padding);
 
-    vec![Machine::new(1500, 0.5, 0, 0.0, states).unwrap()]
+    vec![Machine::new(1500, 0, states).unwrap()]
 }
 
 // based on
@@ -184,7 +184,7 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     });
     states.push(fake);
 
-    vec![Machine::new(1500, 0.5, 0, 0.0, states).unwrap()]
+    vec![Machine::new(1500, 0, states).unwrap()]
 }
 
 fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
@@ -274,7 +274,7 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     });
     states.push(s3);
 
-    vec![Machine::new(1500, 0.5, 0, 0.0, states).unwrap()]
+    vec![Machine::new(1500, 0, states).unwrap()]
 }
 
 fn random_pareto<R: RngCore>(start: f64, max: f64, rng: &mut R) -> Dist {

@@ -185,7 +185,7 @@ fn make_regulator_block_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine
     });
     states.push(block);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }
 
 fn make_regulator_budget_machine(budget: f64) -> Machine {
@@ -279,7 +279,7 @@ fn make_regulator_budget_machine(budget: f64) -> Machine {
     });
     states.push(end);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }
 
 fn make_regulator_echo_machine() -> Machine {
@@ -291,7 +291,7 @@ fn make_regulator_echo_machine() -> Machine {
     });
     states.push(echo);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }
 
 // mirror make_regulator_rate_machine(), triggering a "surge" (reset) if we ever
@@ -388,7 +388,7 @@ fn make_regulator_surge_machine(r: f64, d: f64, threshold: f64, num_bins: usize)
     });
     states.push(tail);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }
 
 // After signal, send packets at rate RD^t. Another signal restarts the machine.
@@ -493,7 +493,7 @@ fn make_regulator_rate_machine(r: f64, d: f64, num_bins: usize) -> Machine {
     });
     states.push(pad);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }
 
 // returns the number of seconds for each bin, and the rates for each bin
@@ -561,7 +561,7 @@ fn make_regulator_boot_machine(pps: f64, n: usize) -> Machine {
     });
     states.push(pad);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }
 
 // RegulaTor, both sides:
@@ -613,7 +613,7 @@ fn make_regulator_seal_machine() -> Machine {
     });
     states.push(block);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }
 
 // RegulaTor, client side (1/2):
@@ -653,7 +653,7 @@ fn make_regulator_loop_machine(upload_ratio: f64) -> Machine {
     // loop cluster
     push_loop_cluster(&mut states, upload_ratio);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }
 
 // (Related to the "loop machine") count approximately upload_ratio packets
@@ -835,5 +835,5 @@ fn make_regulator_client_queue_machine(c: f64) -> Machine {
     });
     states.push(block);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }

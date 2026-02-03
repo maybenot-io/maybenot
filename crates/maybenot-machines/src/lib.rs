@@ -310,7 +310,7 @@ fn no_op_machine() -> Machine {
     let s0 = State::new(enum_map! {
         _ => vec![],
     });
-    Machine::new(0, 0.0, 0, 0.0, vec![s0]).unwrap()
+    Machine::new(0, 0, vec![s0]).unwrap()
 }
 
 // serialization tests for hardcoded machines handed out at different times
@@ -328,7 +328,7 @@ mod tests {
     #[test]
     fn test_no_op() {
         assert!(no_op_machine().validate().is_ok());
-        assert_eq!(no_op_machine().serialize(), "02eNpjYEAHjBgiAAA2AAI=")
+        assert_eq!(no_op_machine().serialize(), "02eNpjYGBkQAcAACYAAg==")
     }
 
     #[test]
@@ -368,10 +368,10 @@ mod tests {
         });
         states.push(padding_state);
 
-        let m = Machine::new(u64::MAX, 1.0, 0, 0.0, states).unwrap();
+        let m = Machine::new(u64::MAX, 0, states).unwrap();
         assert_eq!(
             m.serialize(),
-            "02eNp9zMEJACAMQ9HUEVyoOIMLOaKjdAFRDIoi0nfI4R/S+gIyxRa4IgKUU2fBX405wWf6BJ5d9wNXrw5R"
+            "02eNp9zFEJACAMANGbESw0zGAhIxrFAqJMBEVk7/M+ro+NgBERKMph4avGnPA1fcKaXfsJMP8NIg=="
         );
     }
 
@@ -413,10 +413,10 @@ mod tests {
         });
         states.push(padding_state);
 
-        let m = Machine::new(u64::MAX, 1.0, 0, 0.0, states).unwrap();
+        let m = Machine::new(u64::MAX, 0, states).unwrap();
         assert_eq!(
             m.serialize(),
-            "02eNp9zcsJACAMA9DUgVyhuFkPDuwC4g8DFaQPCs0l6ePC0RSU1okIYOoe2vnLai6IuRGWve0T6SIPEQ=="
+            "02eNp9zLEJACAQQ9EfB3KFw82ucGAXEEVQkEN8VZIifWwkQBK4XeFY/clrLvw1C0N8n7tYDeI="
         );
     }
 }

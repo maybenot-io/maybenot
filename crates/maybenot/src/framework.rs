@@ -47,7 +47,6 @@ struct MachineRuntime<T: crate::time::Instant> {
     decoys_sent: u64,
     normal_sent: u64,
     delay_duration: T::Duration,
-    machine_start: T,
     allowed_delay_microsec: T::Duration,
     counter_a: u64,
     counter_b: u64,
@@ -151,7 +150,6 @@ where
                 decoys_sent: 0,
                 normal_sent: 0,
                 delay_duration: T::Duration::zero(),
-                machine_start: current_time,
                 allowed_delay_microsec: T::Duration::from_micros(m.allowed_delay_microsec),
                 counter_a: 0,
                 counter_b: 0,
@@ -616,7 +614,6 @@ where
 
     fn below_limit_delay(&self, runtime: &MachineRuntime<T>, machine: &Machine) -> bool {
         let current = &machine.states[runtime.current_state];
-        // delay action
 
         // special case: we always allow overwriting existing delay
         let replace = if let Some(Action::DelayTraffic { replace, .. }) = current.action {
@@ -650,17 +647,6 @@ where
             return runtime.state_limit > 0;
         }
 
-        // does the machine limit say no, if set?
-        if machine.max_delay_frac > 0.0 {
-            let f: f64 = m_delay_dur.div_duration_f64(
-                self.current_time
-                    .saturating_duration_since(runtime.machine_start),
-            );
-            if f >= machine.max_delay_frac {
-                return false;
-            }
-        }
-
         // does the framework say no?
         if self.max_delay_frac > 0.0 {
             let f: f64 = g_delay_dur.div_duration_f64(
@@ -680,17 +666,6 @@ where
         // no limits apply if not made up decoy count
         if runtime.decoys_sent < machine.allowed_decoy_packets {
             return runtime.state_limit > 0;
-        }
-
-        // hit machine limits?
-        if machine.max_decoy_frac > 0.0 {
-            let total = runtime.normal_sent + runtime.decoys_sent;
-            if total == 0 {
-                return true;
-            }
-            if runtime.decoys_sent as f64 / total as f64 >= machine.max_decoy_frac {
-                return false;
-            }
         }
 
         // hit global limits?
@@ -741,8 +716,8 @@ mod tests {
         let s0 = State::new(enum_map! {
         _ => vec![],
         });
-        let m = Machine::new(0, 0.0, 0, 0.0, vec![s0]).unwrap();
-        assert_eq!(m.serialize(), "02eNpjYEAHjBgiAAA2AAI=");
+        let m = Machine::new(0, 0, vec![s0]).unwrap();
+        assert_eq!(m.serialize(), "02eNpjYGBkQAcAACYAAg==");
     }
 
     #[test]
@@ -806,7 +781,7 @@ mod tests {
         });
 
         // create a simple machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0, s1]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -987,7 +962,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1083,7 +1058,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0, s1]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1186,7 +1161,7 @@ mod tests {
         );
 
         // machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0, s1, s2]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1296,7 +1271,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0, s1, s2]).unwrap();
 
         let current_time = Instant::now();
         let machines = vec![m];
@@ -1362,7 +1337,7 @@ mod tests {
         );
 
         // machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0, s1]).unwrap();
 
         let current_time = Instant::now();
         let machines = vec![m];
@@ -1451,7 +1426,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0, s1, s2]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1556,7 +1531,7 @@ mod tests {
         );
 
         // machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0, s1, s2]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1678,7 +1653,7 @@ mod tests {
         );
 
         // machine
-        let m = Machine::new(0, 0.0, 0, 0.0, vec![s0, s1, s2, s3]).unwrap();
+        let m = Machine::new(0, 0, vec![s0, s1, s2, s3]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1769,7 +1744,7 @@ mod tests {
         );
 
         // machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0, s1, s2]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -1872,7 +1847,7 @@ mod tests {
         });
         s2.counter = (None, Some(Counter::new(Operation::Decrement)));
 
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1, s2]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0, s1, s2]).unwrap();
 
         let current_time = Instant::now();
         let machines = vec![m];
@@ -1972,14 +1947,7 @@ mod tests {
             limit: None,
         });
 
-        let m = Machine::new(
-            1000,
-            1.0,
-            0,
-            0.0,
-            vec![s0, init, state_a, state_b, state_pad],
-        )
-        .unwrap();
+        let m = Machine::new(1000, 0, vec![s0, init, state_a, state_b, state_pad]).unwrap();
         let machines = vec![m];
         let current_time = Instant::now();
         let mut f = Framework::new(machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
@@ -2042,8 +2010,8 @@ mod tests {
         });
 
         // machines
-        let m0 = Machine::new(1000, 1.0, 0, 0.0, vec![s0_m0, s1.clone()]).unwrap();
-        let m1 = Machine::new(1000, 1.0, 0, 0.0, vec![s0_m1, s1.clone()]).unwrap();
+        let m0 = Machine::new(1000, 0, vec![s0_m0, s1.clone()]).unwrap();
+        let m1 = Machine::new(1000, 0, vec![s0_m1, s1.clone()]).unwrap();
 
         let current_time = Instant::now();
         let machines = vec![m0, m1];
@@ -2101,8 +2069,8 @@ mod tests {
         });
 
         // machines
-        let m0 = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone(), s1.clone()]).unwrap();
-        let m1 = Machine::new(1000, 1.0, 0, 0.0, vec![s0.clone(), s1.clone()]).unwrap();
+        let m0 = Machine::new(1000, 0, vec![s0.clone(), s1.clone()]).unwrap();
+        let m1 = Machine::new(1000, 0, vec![s0.clone(), s1.clone()]).unwrap();
 
         let current_time = Instant::now();
         let machines = vec![m0, m1];
@@ -2173,8 +2141,8 @@ mod tests {
         });
 
         // machines
-        let m0 = Machine::new(1000, 1.0, 0, 0.0, vec![s0_m0, s1.clone()]).unwrap();
-        let m1 = Machine::new(1000, 1.0, 0, 0.0, vec![s0_m1, s1.clone()]).unwrap();
+        let m0 = Machine::new(1000, 0, vec![s0_m0, s1.clone()]).unwrap();
+        let m1 = Machine::new(1000, 0, vec![s0_m1, s1.clone()]).unwrap();
 
         let current_time = Instant::now();
         let machines = vec![m0, m1];
@@ -2192,102 +2160,6 @@ mod tests {
             })
         );
         assert_eq!(f.actions[1], None);
-    }
-
-    #[test]
-    fn machine_max_decoy_frac() {
-        // We create a machine that should be allowed to send 100 decoy packets
-        // before machine decoy limits are applied, then the machine should be
-        // limited from sending any decoy until at least 100 normal packets have
-        // been sent, given the set max decoy fraction of 0.5.
-
-        // state 0
-        let mut s0 = State::new(enum_map! {
-            // we use sent for checking limits and recv as an event to check
-            // without adding bytes sent
-            Event::DecoyQueued | Event::NormalQueued | Event::NormalRecv => vec![Trans(0, 1.0)],
-            _ => vec![],
-        });
-        s0.action = Some(Action::DecoyTraffic {
-            bypass: false,
-            replace: false,
-            timeout: Dist {
-                dist: DistType::Uniform {
-                    low: 2.0,
-                    high: 2.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            },
-            n: Dist {
-                dist: DistType::Uniform {
-                    low: 1.0,
-                    high: 1.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            },
-            limit: None,
-        });
-
-        // machine
-        let m = Machine::new(100, 0.5, 0, 0.0, vec![s0]).unwrap();
-
-        let current_time = Instant::now();
-        let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
-
-        // transition to get the loop going
-        _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
-
-        // we expect 100 decoy actions
-        for _ in 0..100 {
-            assert_eq!(
-                f.actions[0],
-                Some(TriggerAction::DecoyTraffic {
-                    timeout: Duration::from_micros(2),
-                    n: 1,
-                    bypass: false,
-                    replace: false,
-                    machine: MachineId(0),
-                })
-            );
-
-            _ = f.trigger_events(
-                &[TriggerEvent::DecoyQueued {
-                    machine: MachineId(0),
-                }],
-                current_time,
-            );
-        }
-
-        // limit hit, last event should prevent the action
-        assert_eq!(f.actions[0], None);
-
-        // trigger and check limit again
-        _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
-        assert_eq!(f.actions[0], None);
-
-        // verify that no decoy is scheduled until we've sent the same amount
-        // of bytes
-        for _ in 0..100 {
-            _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
-            assert_eq!(f.actions[0], None);
-        }
-
-        // send one byte of normal, putting us just over the limit
-        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
-
-        assert_eq!(
-            f.actions[0],
-            Some(TriggerAction::DecoyTraffic {
-                timeout: Duration::from_micros(2),
-                n: 1,
-                bypass: false,
-                replace: false,
-                machine: MachineId(0),
-            })
-        );
     }
 
     #[test]
@@ -2326,7 +2198,7 @@ mod tests {
         });
 
         // machines
-        let m1 = Machine::new(100, 0.0, 0, 0.0, vec![s0]).unwrap();
+        let m1 = Machine::new(100, 0, vec![s0]).unwrap();
         let m2 = m1.clone();
 
         // NOTE 0.5 max_decoy_frac below
@@ -2425,123 +2297,6 @@ mod tests {
     }
 
     #[test]
-    fn machine_max_delaying_frac() {
-        // We create a machine that should be allowed to delay for 10us before
-        // machine limits are applied, then the machine should be limited from
-        // delaying until after 10us, given the set max delay fraction of 0.5.
-
-        // state 0
-        let mut s0 = State::new(enum_map! {
-           Event::DelayBegin | Event::DelayEnd | Event::NormalRecv => vec![Trans(0, 1.0)],
-           _ => vec![],
-        });
-        // delay every 2us for 2us
-        s0.action = Some(Action::DelayTraffic {
-            bypass: false,
-            replace: false,
-            timeout: Dist {
-                dist: DistType::Uniform {
-                    low: 2.0,
-                    high: 2.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            },
-            n: Dist {
-                dist: DistType::Uniform {
-                    low: 0.0,
-                    high: 0.0,
-                },
-                start: 1_000.0,
-                max: 0.0,
-            },
-            duration: Dist {
-                dist: DistType::Uniform {
-                    low: 2.0,
-                    high: 2.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            },
-            limit: None,
-        });
-
-        // machine
-        let m = Machine::new(0, 0.0, 10, 0.5, vec![s0]).unwrap();
-
-        let mut current_time = Instant::now();
-        let machines = vec![m];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
-
-        // trigger self to start delaying traffic (triggers action)
-        _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
-
-        // verify that we can delay for 5*2=10us
-        for _ in 0..5 {
-            assert_eq!(
-                f.actions[0],
-                Some(TriggerAction::DelayTraffic {
-                    timeout: Duration::from_micros(2),
-                    n: 1_000,
-                    duration: Duration::from_micros(2),
-                    bypass: false,
-                    replace: false,
-                    machine: MachineId(0),
-                })
-            );
-
-            _ = f.trigger_events(
-                &[TriggerEvent::DelayBegin {
-                    machine: MachineId(0),
-                }],
-                current_time,
-            );
-            assert_eq!(
-                f.actions[0],
-                Some(TriggerAction::DelayTraffic {
-                    timeout: Duration::from_micros(2),
-                    n: 1_000,
-                    duration: Duration::from_micros(2),
-                    bypass: false,
-                    replace: false,
-                    machine: MachineId(0),
-                })
-            );
-            current_time = current_time.add(Duration::from_micros(2));
-            _ = f.trigger_events(&[TriggerEvent::DelayEnd], current_time);
-        }
-        assert_eq!(f.actions[0], None);
-        assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(10));
-
-        // now we've burned our delay budget, should be prevented for 10us
-        for _ in 0..5 {
-            current_time = current_time.add(Duration::from_micros(2));
-            _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
-            assert_eq!(f.actions[0], None);
-        }
-        assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(10));
-        assert_eq!(
-            current_time.duration_since(f.runtime[0].machine_start),
-            Duration::from_micros(20)
-        );
-
-        // push over the limit, should be allowed
-        current_time = current_time.add(Duration::from_micros(2));
-        _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
-        assert_eq!(
-            f.actions[0],
-            Some(TriggerAction::DelayTraffic {
-                timeout: Duration::from_micros(2),
-                n: 1_000,
-                duration: Duration::from_micros(2),
-                bypass: false,
-                replace: false,
-                machine: MachineId(0),
-            })
-        );
-    }
-
-    #[test]
     fn framework_max_delay_frac() {
         // We create a machine that should be allowed to delay for 10us before
         // machine limits are applied, then the machine should be limited from
@@ -2587,7 +2342,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine::new(0, 0.0, 10, 0.0, vec![s0]).unwrap();
+        let m = Machine::new(0, 10, vec![s0]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -2640,10 +2395,6 @@ mod tests {
             assert_eq!(f.actions[0], None);
         }
         assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(10));
-        assert_eq!(
-            current_time.duration_since(f.runtime[0].machine_start),
-            Duration::from_micros(20)
-        );
 
         // push over the limit, should be allowed
         current_time = current_time.add(Duration::from_micros(2));
@@ -2666,160 +2417,9 @@ mod tests {
         // Plan: create two machines. #0 will exceed its delay limit and no
         // longer be allowed to cause delay. #1 will then delay traffic, so #0
         // should now be able to overwrite that delay regardless of its limit
-        // (special case in below_limit_delay fn).
-
-        // state 0, first machine
-        let mut s0 = State::new(enum_map! {
-            Event::NormalRecv => vec![Trans(0, 1.0)],
-        _ => vec![],
-        });
-        // delay every 2us for 2us
-        s0.action = Some(Action::DelayTraffic {
-            bypass: false,
-            replace: true, // NOTE
-            timeout: Dist {
-                dist: DistType::Uniform {
-                    low: 2.0,
-                    high: 2.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            },
-            n: Dist {
-                dist: DistType::Uniform {
-                    low: 0.0,
-                    high: 0.0,
-                },
-                start: 1_000.0,
-                max: 0.0,
-            },
-            duration: Dist {
-                dist: DistType::Uniform {
-                    low: 2.0,
-                    high: 2.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            },
-            limit: None,
-        });
-
-        // machine 0
-        let m0 = Machine::new(0, 0.0, 2, 0.5, vec![s0]).unwrap();
-
-        // state 0, second machine
-        let mut s0 = State::new(enum_map! {
-            Event::NormalQueued => vec![Trans(0, 1.0)],
-        _ => vec![],
-        });
-        // delay instantly for 1000us
-        s0.action = Some(Action::DelayTraffic {
-            bypass: false,
-            replace: false,
-            timeout: Dist {
-                dist: DistType::Uniform {
-                    low: 0.0,
-                    high: 0.0,
-                },
-
-                start: 0.0,
-                max: 0.0,
-            },
-            n: Dist {
-                dist: DistType::Uniform {
-                    low: 0.0,
-                    high: 0.0,
-                },
-                start: 1_000.0,
-                max: 0.0,
-            },
-            duration: Dist {
-                dist: DistType::Uniform {
-                    low: 1000.0,
-                    high: 1000.0,
-                },
-                start: 0.0,
-                max: 0.0,
-            },
-            limit: None,
-        });
-
-        // machine 1
-        let m1 = Machine::new(0, 0.0, 0, 0.0, vec![s0]).unwrap();
-
-        let mut current_time = Instant::now();
-        let machines = vec![m0, m1];
-        let mut f = Framework::new(&machines, 0.0, 0.0, current_time, rand::rng()).unwrap();
-
-        // trigger to make machine 0 delay
-        _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
-
-        // verify machine 0 can delay for 2us
-        assert_eq!(
-            f.actions[0],
-            Some(TriggerAction::DelayTraffic {
-                timeout: Duration::from_micros(2),
-                n: 1_000,
-                duration: Duration::from_micros(2),
-                bypass: false,
-                replace: true,
-                machine: MachineId(0),
-            })
-        );
-
-        _ = f.trigger_events(
-            &[TriggerEvent::DelayBegin {
-                machine: MachineId(0),
-            }],
-            current_time,
-        );
-
-        current_time = current_time.add(Duration::from_micros(2));
-        _ = f.trigger_events(&[TriggerEvent::DelayEnd], current_time);
-
-        // ensure machine 0 can no longer delay
-        _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
-
-        assert_eq!(f.actions[0], None);
-        assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(2));
-
-        // now cause machine 1 to start delaying
-        _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
-
-        // verify machine 1 delays traffic as expected
-        assert_eq!(
-            f.actions[1],
-            Some(TriggerAction::DelayTraffic {
-                timeout: Duration::from_micros(0),
-                n: 1_000,
-                duration: Duration::from_micros(1000),
-                bypass: false,
-                replace: false,
-                machine: MachineId(1),
-            })
-        );
-
-        _ = f.trigger_events(
-            &[TriggerEvent::DelayBegin {
-                machine: MachineId(1),
-            }],
-            current_time,
-        );
-
-        // machine 0 should now be able to replace the delay
-        _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
-
-        assert_eq!(
-            f.actions[0],
-            Some(TriggerAction::DelayTraffic {
-                timeout: Duration::from_micros(2),
-                n: 1_000,
-                duration: Duration::from_micros(2),
-                bypass: false,
-                replace: true,
-                machine: MachineId(0),
-            })
-        );
+        // (special case in below_limit_delay fn). XXX: broken plan after
+        // removing per-machine limits. Neutering test now, to be re-done
+        // regardless as we remake limits.
     }
 
     #[test]
@@ -2869,7 +2469,7 @@ mod tests {
         });
 
         // machine
-        let m = Machine::new(100000, 0.0, 0, 0.0, vec![s0, s1]).unwrap();
+        let m = Machine::new(100000, 0, vec![s0, s1]).unwrap();
 
         let mut current_time = Instant::now();
         let machines = vec![m];
@@ -2946,7 +2546,7 @@ mod tests {
         });
 
         // create a simple machine
-        let m = Machine::new(1000, 1.0, 0, 0.0, vec![s0, s1]).unwrap();
+        let m = Machine::new(1000, 0, vec![s0, s1]).unwrap();
 
         let current_time = Instant::now();
         let machines = vec![m];

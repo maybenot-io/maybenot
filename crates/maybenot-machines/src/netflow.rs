@@ -51,6 +51,6 @@ fn gen_simple_netflow_machine(low_ms: usize, high_ms: usize) -> Machine {
         limit: None,
     });
 
-    // no limits
-    Machine::new(u64::MAX, 0.0, 0, 0.0, vec![s0, s1]).unwrap()
+    // can always send decoys
+    Machine::new(u64::MAX, 0, vec![s0, s1]).unwrap()
 }

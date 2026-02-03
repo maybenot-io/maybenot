@@ -93,7 +93,7 @@ fn make_padding_machine(p: f64) -> Machine {
     });
     states.push(padding);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }
 
 // make a machine that tracks the stop state of Tamaraw with a soft stop
@@ -245,5 +245,5 @@ fn make_soft_stop_machine(stop_window: f64) -> Machine {
     });
     states.push(end);
 
-    Machine::new(u64::MAX, 0.0, u64::MAX, 0.0, states).unwrap()
+    Machine::new(u64::MAX, u64::MAX, states).unwrap()
 }

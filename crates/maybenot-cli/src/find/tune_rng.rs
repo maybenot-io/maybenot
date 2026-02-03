@@ -174,12 +174,6 @@ fn wiggle_wf_cfg(cfg: &mut Config, prob: f64, rng: &mut Xoshiro256StarStar) -> S
         fname.push_str(format!("states{:?}", machine.num_states).as_str());
     }
 
-    // allow_frac_limits
-    if rng.random_bool(prob) {
-        machine.allow_frac_limits = Some(rng.random_bool(0.5));
-        fname.push_str(format!("fl{}", machine.allow_frac_limits.unwrap()).as_str());
-    }
-
     // duration ref point
     if rng.random_bool(prob) {
         let max = round_f64(rng.random_range(1.0..=1_000_000.0));
@@ -302,12 +296,6 @@ fn wiggle_cf_cfg(cfg: &mut Config, prob: f64, rng: &mut Xoshiro256StarStar) -> S
         let min = rng.random_range(1..=max);
         machine.num_states = min..=max;
         fname.push_str(format!("states{:?}", machine.num_states).as_str());
-    }
-
-    // allow_frac_limits
-    if rng.random_bool(prob) {
-        machine.allow_frac_limits = Some(rng.random_bool(0.5));
-        fname.push_str(format!("fl{}", machine.allow_frac_limits.unwrap()).as_str());
     }
 
     // duration ref point

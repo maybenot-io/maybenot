@@ -11,7 +11,7 @@ use rand_xoshiro::Xoshiro256StarStar;
 use crate::storage::load_defenses;
 use crate::storage::save_defenses;
 
-const BUDGETS: [&str; 4] = ["abs_pad", "abs_block", "max_pad", "max_block"];
+const BUDGETS: [&str; 2] = ["abs_pad", "abs_block"];
 
 pub fn budget(
     input: PathBuf,
@@ -109,16 +109,6 @@ fn update_budgets<R: RngCore>(
             "abs_block" => {
                 if machine.allowed_delay_microsec == 0 || !soft {
                     machine.allowed_delay_microsec = rng.random_range(range).round() as u64;
-                }
-            }
-            "max_pad" => {
-                if machine.max_decoy_frac == 0.0 || !soft {
-                    machine.max_decoy_frac = rng.random_range(range).clamp(0.0, 1.0);
-                }
-            }
-            "max_block" => {
-                if machine.max_delay_frac == 0.0 || !soft {
-                    machine.max_delay_frac = rng.random_range(range).clamp(0.0, 1.0);
                 }
             }
             _ => unreachable!(),
