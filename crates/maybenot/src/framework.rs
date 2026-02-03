@@ -46,7 +46,6 @@ struct MachineRuntime<T: crate::time::Instant> {
     state_limit: u64,
     decoys_sent: u64,
     normal_sent: u64,
-    delay_duration: T::Duration,
     allowed_delay_microsec: T::Duration,
     counter_a: u64,
     counter_b: u64,
@@ -149,7 +148,6 @@ where
                 state_limit: 0,
                 decoys_sent: 0,
                 normal_sent: 0,
-                delay_duration: T::Duration::zero(),
                 allowed_delay_microsec: T::Duration::from_micros(m.allowed_delay_microsec),
                 counter_a: 0,
                 counter_b: 0,
@@ -345,21 +343,16 @@ where
                 }
             }
             TriggerEvent::DelayEnd => {
-                let mut delayed = T::Duration::zero();
                 if self.delay_active {
-                    delayed = self
+                    let delayed = self
                         .current_time
                         .saturating_duration_since(self.delay_started);
                     self.delay_duration += delayed; // Duration has AddAssign trait with overflow protection
                     self.delay_active = false;
                 }
 
+                // delaying traffic is a global event
                 for mi in 0..self.runtime.len() {
-                    // since delaying is global, every machine has been delayed
-                    // for the same duration
-                    if !delayed.is_zero() {
-                        self.runtime[mi].delay_duration += delayed; // Duration has AddAssign trait with overflow protection
-                    }
                     self.transition(mi, Event::DelayEnd);
                 }
             }
@@ -628,7 +621,7 @@ where
         }
 
         // compute durations we've been delaying
-        let mut m_delay_dur = runtime.delay_duration;
+        let mut m_delay_dur = self.delay_duration;
         let mut g_delay_dur = self.delay_duration;
         if self.delay_active {
             // account for ongoing delay as well, add duration
@@ -2386,7 +2379,7 @@ mod tests {
             _ = f.trigger_events(&[TriggerEvent::DelayEnd], current_time);
         }
         assert_eq!(f.actions[0], None);
-        assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(10));
+        assert_eq!(f.delay_duration, Duration::from_micros(10));
 
         // now we've burned our delay budget, should be blocked for 10us
         for _ in 0..5 {
@@ -2394,7 +2387,7 @@ mod tests {
             _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
             assert_eq!(f.actions[0], None);
         }
-        assert_eq!(f.runtime[0].delay_duration, Duration::from_micros(10));
+        assert_eq!(f.delay_duration, Duration::from_micros(10));
 
         // push over the limit, should be allowed
         current_time = current_time.add(Duration::from_micros(2));
