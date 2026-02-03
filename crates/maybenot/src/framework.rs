@@ -614,29 +614,25 @@ where
             return runtime.state_limit > 0;
         }
 
-        // compute durations we've been delaying
-        let mut m_delay_dur = self.delay_duration;
-        let mut g_delay_dur = self.delay_duration;
+        // compute duration we've been delaying
+        let mut total_delay_duration = self.delay_duration;
         if self.delay_active {
             // account for ongoing delay as well, add duration
-            m_delay_dur += self
-                .current_time
-                .saturating_duration_since(self.delay_started);
-            g_delay_dur += self
+            total_delay_duration += self
                 .current_time
                 .saturating_duration_since(self.delay_started);
         }
 
         // machine allowed delay duration first, since it bypasses the other two
         // types of limits
-        if m_delay_dur < T::Duration::from_micros(machine.allowed_delay_microsec) {
+        if total_delay_duration < T::Duration::from_micros(machine.allowed_delay_microsec) {
             // we still check against state limit, because it's machine internal
             return runtime.state_limit > 0;
         }
 
         // does the framework say no?
         if self.max_delay_frac > 0.0 {
-            let f: f64 = g_delay_dur.div_duration_f64(
+            let f: f64 = total_delay_duration.div_duration_f64(
                 self.current_time
                     .saturating_duration_since(self.framework_start),
             );
