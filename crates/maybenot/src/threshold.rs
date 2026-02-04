@@ -3,8 +3,10 @@
 //! [`ThresholdDecoy`]: Controls decoy traffic generation through rate limiting
 //!   and event notifications.
 //!
-//! [`ThresholdDecoyFrac`]: A simple implementation of [`DecoyThreshold`] that
-//!   limits decoy traffic to a fraction of total queued traffic.
+//! [`ThresholdDecoyNone`]: A no-op implementation that always allows decoys.
+//!
+//! [`ThresholdDecoyFrac`]: An implementation that limits decoy traffic to a
+//!   fraction of total queued traffic.
 
 use crate::MachineId;
 
@@ -31,6 +33,31 @@ pub trait ThresholdDecoy<T: crate::time::Instant> {
 
     /// Called for every DecoyQueued event triggered in the framework.
     fn decoy_queued(&mut self, current_time: T, machine: MachineId);
+}
+
+/// A no-op threshold that always allows decoys.
+///
+/// Use this when you don't want any framework-level decoy limiting. Per-machine
+/// limits
+/// ([`Machine::allowed_decoy_packets`](crate::Machine::allowed_decoy_packets))
+/// still apply.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ThresholdDecoyNone;
+
+impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyNone {
+    fn allow_decoy(&self, _current_time: T, _machine: MachineId) -> bool {
+        true
+    }
+
+    fn max_decoys(&self, _current_time: T, _machine: MachineId) -> usize {
+        usize::MAX
+    }
+
+    fn packet_sent(&mut self, _current_time: T) {}
+
+    fn normal_queued(&mut self, _current_time: T) {}
+
+    fn decoy_queued(&mut self, _current_time: T, _machine: MachineId) {}
 }
 
 /// A threshold that limits decoy traffic to a fraction of total queued traffic.
@@ -127,6 +154,15 @@ impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyFrac {
 mod tests {
     use super::*;
     use std::time::Instant;
+
+    #[test]
+    fn decoy_none_always_allows() {
+        let t = ThresholdDecoyNone;
+        let now = Instant::now();
+        let mid = MachineId::from_raw(0);
+        assert!(t.allow_decoy(now, mid));
+        assert_eq!(t.max_decoys(now, mid), usize::MAX);
+    }
 
     #[test]
     fn decoy_frac_zero() {

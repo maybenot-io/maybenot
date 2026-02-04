@@ -20,7 +20,7 @@
 //!
 //! ## Example usage
 //! ```
-//! use maybenot::{Framework, Machine, TriggerAction, TriggerEvent};
+//! use maybenot::{Framework, Machine, ThresholdDecoyNone, TriggerAction, TriggerEvent};
 //! use std::{str::FromStr, time::Instant};
 //! // This is a large example usage of the Maybenot framework. Some parts
 //! // are a bit odd due to avoiding everything async but should convey the
@@ -55,7 +55,7 @@
 //! //
 //! // The framework validates all machines (like ::From_str() above) and
 //! // verifies that the fractions are fractions, so it can return an error.
-//! let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::rng()).unwrap();
+//! let mut f = Framework::new(&m, ThresholdDecoyNone, 0.0, Instant::now(), rand::rng()).unwrap();
 //!
 //! // Below is the main loop for operating the framework. This should run
 //! // for as long as the underlying connection the framework is attached to
@@ -290,7 +290,7 @@ pub use crate::action::{Timer, TriggerAction};
 pub use crate::error::Error;
 pub use crate::event::TriggerEvent;
 pub use crate::rate_limited_framework::RateLimitedFramework;
-pub use crate::threshold::ThresholdDecoyFrac;
+pub use crate::threshold::{ThresholdDecoy, ThresholdDecoyFrac, ThresholdDecoyNone};
 pub use framework::{Framework, MachineId};
 pub use machine::Machine;
 
@@ -304,7 +304,7 @@ mod tests {
 
     #[test]
     fn example_usage() {
-        use crate::{Framework, Machine, TriggerAction, TriggerEvent};
+        use crate::{Framework, Machine, ThresholdDecoyNone, TriggerAction, TriggerEvent};
         use std::{str::FromStr, time::Instant};
         // This is a large example usage of the Maybenot framework. Some parts
         // are a bit odd due to avoiding everything async but should convey the
@@ -339,7 +339,8 @@ mod tests {
         //
         // The framework validates all machines (like ::From_str() above) and
         // verifies that the fractions are fractions, so it can return an error.
-        let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::rng()).unwrap();
+        let mut f =
+            Framework::new(&m, ThresholdDecoyNone, 0.0, Instant::now(), rand::rng()).unwrap();
 
         // Below is the main loop for operating the framework. This should run
         // for as long as the underlying connection the framework is attached to

@@ -8,6 +8,7 @@
 //! The sliding window algorithm is based on the approach described in Cloudflare's
 //! blog post: <https://blog.cloudflare.com/counting-things-a-lot-of-different-things/>
 
+use crate::threshold::{ThresholdDecoy, ThresholdDecoyFrac};
 use crate::time::{Duration, Instant};
 use crate::{Framework, Machine, TriggerAction, TriggerEvent};
 use rand_core::RngCore;
@@ -28,12 +29,12 @@ use std::time::Instant as StdInstant;
 ///
 /// # Example
 /// ```
-/// use maybenot::{Framework, RateLimitedFramework, Machine, TriggerEvent};
+/// use maybenot::{Framework, RateLimitedFramework, Machine, ThresholdDecoyNone, TriggerEvent};
 /// use std::time::Instant;
 ///
 /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let machines = vec![];
-/// let framework = Framework::new(machines, 0.0, 0.0, Instant::now(), rand::rng())?;
+/// let framework = Framework::new(machines, ThresholdDecoyNone, 0.0, Instant::now(), rand::rng())?;
 /// let mut rate_limited = RateLimitedFramework::new(framework);
 ///
 /// let events = [TriggerEvent::NormalQueued];
@@ -43,14 +44,15 @@ use std::time::Instant as StdInstant;
 /// # Ok(())
 /// # }
 /// ```
-pub struct RateLimitedFramework<M, R, T = StdInstant>
+pub struct RateLimitedFramework<M, R, T = StdInstant, D = ThresholdDecoyFrac>
 where
     M: AsRef<[Machine]>,
     R: RngCore,
     T: Instant,
     T::Duration: Sub<Output = T::Duration>,
+    D: ThresholdDecoy<T>,
 {
-    framework: Framework<M, R, T>,
+    framework: Framework<M, R, T, D>,
     /// Count of events in the previous 1-second window
     prev: f64,
     /// Count of events in the current 1-second window
@@ -59,12 +61,13 @@ where
     tick: T,
 }
 
-impl<M, R, T> RateLimitedFramework<M, R, T>
+impl<M, R, T, D> RateLimitedFramework<M, R, T, D>
 where
     M: AsRef<[Machine]>,
     R: RngCore,
     T: Instant,
     T::Duration: Sub<Output = T::Duration>,
+    D: ThresholdDecoy<T>,
 {
     /// Creates a new rate-limited framework wrapper.
     ///
@@ -77,7 +80,7 @@ where
     ///
     /// # Returns
     /// A new `RateLimitedFramework` instance
-    pub fn new(framework: Framework<M, R, T>) -> Self {
+    pub fn new(framework: Framework<M, R, T, D>) -> Self {
         let tick = framework.current_time;
 
         Self {
@@ -162,7 +165,7 @@ where
     /// Returns a reference to the underlying framework.
     ///
     /// This provides read-only access to the wrapped framework instance.
-    pub fn framework(&self) -> &Framework<M, R, T> {
+    pub fn framework(&self) -> &Framework<M, R, T, D> {
         &self.framework
     }
 
@@ -170,7 +173,7 @@ where
     ///
     /// This provides mutable access to the wrapped framework instance for
     /// advanced use cases that need to modify the framework state directly.
-    pub fn framework_mut(&mut self) -> &mut Framework<M, R, T> {
+    pub fn framework_mut(&mut self) -> &mut Framework<M, R, T, D> {
         &mut self.framework
     }
 }
@@ -182,7 +185,7 @@ mod tests {
     use crate::dist::{Dist, DistType};
     use crate::event::Event;
     use crate::state::{State, Trans};
-    use crate::{Framework, Machine, MachineId, TriggerEvent};
+    use crate::{Framework, Machine, MachineId, ThresholdDecoyNone, TriggerEvent};
     use enum_map::enum_map;
     use std::time::Instant as StdInstant;
 
@@ -214,7 +217,14 @@ mod tests {
         });
 
         let m = Machine::new(1_000_000, 0, vec![state]).unwrap();
-        Framework::new(vec![m], 0.0, 0.0, StdInstant::now(), rand::rng()).unwrap()
+        Framework::new(
+            vec![m],
+            ThresholdDecoyNone,
+            0.0,
+            StdInstant::now(),
+            rand::rng(),
+        )
+        .unwrap()
     }
 
     #[test]

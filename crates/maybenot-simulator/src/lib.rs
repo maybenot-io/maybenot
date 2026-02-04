@@ -121,10 +121,59 @@ use log::debug;
 use network::{Network, NetworkBottleneck, WindowCount};
 use queue::SimQueue;
 
-use maybenot::{Framework, Machine, MachineId, Timer, TriggerAction, TriggerEvent};
+use maybenot::{
+    Framework, Machine, MachineId, ThresholdDecoy, ThresholdDecoyFrac, ThresholdDecoyNone, Timer,
+    TriggerAction, TriggerEvent,
+};
 use rand::{RngCore, rngs::ThreadRng};
 use rand_xoshiro::Xoshiro256StarStar;
 use rand_xoshiro::rand_core::SeedableRng;
+
+/// A dynamic threshold that can be either no threshold or a fraction-based
+/// threshold. This allows the simulator to choose the threshold type at
+/// runtime.
+#[derive(Debug, Clone)]
+enum DynamicThresholdDecoy {
+    None(ThresholdDecoyNone),
+    Frac(ThresholdDecoyFrac),
+}
+
+impl ThresholdDecoy<Instant> for DynamicThresholdDecoy {
+    fn allow_decoy(&self, current_time: Instant, machine: MachineId) -> bool {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.allow_decoy(current_time, machine),
+            DynamicThresholdDecoy::Frac(t) => t.allow_decoy(current_time, machine),
+        }
+    }
+
+    fn max_decoys(&self, current_time: Instant, machine: MachineId) -> usize {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.max_decoys(current_time, machine),
+            DynamicThresholdDecoy::Frac(t) => t.max_decoys(current_time, machine),
+        }
+    }
+
+    fn packet_sent(&mut self, current_time: Instant) {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.packet_sent(current_time),
+            DynamicThresholdDecoy::Frac(t) => t.packet_sent(current_time),
+        }
+    }
+
+    fn normal_queued(&mut self, current_time: Instant) {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.normal_queued(current_time),
+            DynamicThresholdDecoy::Frac(t) => t.normal_queued(current_time),
+        }
+    }
+
+    fn decoy_queued(&mut self, current_time: Instant, machine: MachineId) {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.decoy_queued(current_time, machine),
+            DynamicThresholdDecoy::Frac(t) => t.decoy_queued(current_time, machine),
+        }
+    }
+}
 
 use crate::{
     network::sim_network_stack,
@@ -237,7 +286,7 @@ pub struct ScheduledAction {
 #[derive(Debug)]
 pub struct SimState<M, R> {
     /// an instance of the Maybenot framework
-    framework: Framework<M, R>,
+    framework: Framework<M, R, Instant, DynamicThresholdDecoy>,
     /// scheduled action timers
     scheduled_action: Vec<Option<ScheduledAction>>,
     /// scheduled internal timers
@@ -271,8 +320,15 @@ where
 
         let num_machines = machines.as_ref().len();
 
+        // Convert max_decoy_frac to threshold: if 0, use no threshold (allows all decoys)
+        let decoy_threshold = if max_decoy_frac > 0.0 {
+            DynamicThresholdDecoy::Frac(ThresholdDecoyFrac::new(max_decoy_frac))
+        } else {
+            DynamicThresholdDecoy::None(ThresholdDecoyNone)
+        };
+
         Self {
-            framework: Framework::new(machines, max_decoy_frac, max_delay_frac, current_time, rng)
+            framework: Framework::new(machines, decoy_threshold, max_delay_frac, current_time, rng)
                 .unwrap(),
             scheduled_action: vec![None; num_machines],
             scheduled_internal_timer: vec![None; num_machines],

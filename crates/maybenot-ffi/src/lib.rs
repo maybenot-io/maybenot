@@ -1,7 +1,10 @@
 use core::{mem::MaybeUninit, str::FromStr, time::Duration};
 use std::time::Instant;
 
-use maybenot::{Framework, Machine, MachineId, TriggerEvent};
+use maybenot::{
+    Framework, Machine, MachineId, ThresholdDecoy, ThresholdDecoyFrac, ThresholdDecoyNone,
+    TriggerEvent,
+};
 
 mod error;
 pub use error::MaybenotResult;
@@ -10,13 +13,58 @@ mod ffi;
 pub use ffi::*;
 use rand::rngs::{OsRng, ReseedingRng};
 
+/// A dynamic threshold that can be either no threshold or a fraction-based
+/// threshold. This allows FFI to choose the threshold type at runtime.
+#[derive(Debug, Clone)]
+enum DynamicThresholdDecoy {
+    None(ThresholdDecoyNone),
+    Frac(ThresholdDecoyFrac),
+}
+
+impl ThresholdDecoy<Instant> for DynamicThresholdDecoy {
+    fn allow_decoy(&self, current_time: Instant, machine: MachineId) -> bool {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.allow_decoy(current_time, machine),
+            DynamicThresholdDecoy::Frac(t) => t.allow_decoy(current_time, machine),
+        }
+    }
+
+    fn max_decoys(&self, current_time: Instant, machine: MachineId) -> usize {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.max_decoys(current_time, machine),
+            DynamicThresholdDecoy::Frac(t) => t.max_decoys(current_time, machine),
+        }
+    }
+
+    fn packet_sent(&mut self, current_time: Instant) {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.packet_sent(current_time),
+            DynamicThresholdDecoy::Frac(t) => t.packet_sent(current_time),
+        }
+    }
+
+    fn normal_queued(&mut self, current_time: Instant) {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.normal_queued(current_time),
+            DynamicThresholdDecoy::Frac(t) => t.normal_queued(current_time),
+        }
+    }
+
+    fn decoy_queued(&mut self, current_time: Instant, machine: MachineId) {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.decoy_queued(current_time, machine),
+            DynamicThresholdDecoy::Frac(t) => t.decoy_queued(current_time, machine),
+        }
+    }
+}
+
 /// A running Maybenot instance.
 ///
 /// - Create it: [maybenot_start].
 /// - Feed it actions: [maybenot_on_events].
 /// - Stop it: [maybenot_stop].
 pub struct MaybenotFramework {
-    framework: Framework<Vec<Machine>, Rng>,
+    framework: Framework<Vec<Machine>, Rng, Instant, DynamicThresholdDecoy>,
 
     /// A buffer used internally for converting from [MaybenotEvent]s.
     events_buf: Vec<TriggerEvent>,
@@ -157,9 +205,16 @@ impl MaybenotFramework {
 
         let rng = Rng::new(RNG_RESEED_THRESHOLD, OsRng).unwrap();
 
+        // Convert max_decoy_frac to threshold: if 0, use no threshold (allows all decoys)
+        let decoy_threshold = if max_decoy_frac > 0.0 {
+            DynamicThresholdDecoy::Frac(ThresholdDecoyFrac::new(max_decoy_frac))
+        } else {
+            DynamicThresholdDecoy::None(ThresholdDecoyNone)
+        };
+
         let framework = Framework::new(
             machines,
-            max_decoy_frac,
+            decoy_threshold,
             max_delay_frac,
             Instant::now(),
             rng,

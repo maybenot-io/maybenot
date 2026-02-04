@@ -53,8 +53,8 @@ use std::{str::FromStr, time::Instant};
 let s = "02eNpjYEAHjOgCAAA0AAI=";
 let m = vec![Machine::from_str(s).unwrap()];
 
-// create framework instance
-let mut f = Framework::new(&m, 0.0, 0.0, Instant::now(), rand::rng()).unwrap();
+// create framework instance (ThresholdDecoyNone allows all decoys)
+let mut f = Framework::new(&m, ThresholdDecoyNone, 0.0, Instant::now(), rand::rng()).unwrap();
 
 loop {
     // collect one or more events
