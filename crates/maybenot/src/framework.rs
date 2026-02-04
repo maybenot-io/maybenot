@@ -456,31 +456,21 @@ where
                     // if the threshold allowed us to schedule the action, apply
                     // any max values
                     if apply_thresholds {
-                        match &mut self.actions[mi] {
-                            Some(action) => match action {
-                                TriggerAction::DecoyTraffic {
-                                    timeout: _,
-                                    n,
-                                    bypass: _,
-                                    replace: _,
-                                    machine,
-                                } => {
-                                    // respect the threshold, but never schedule
-                                    // less than 1 decoy (this can happen due to
-                                    // rounding in ThresholdDecoy
-                                    // implementations)
-                                    *n = (*n)
-                                        .min(
-                                            self.decoy_threshold
-                                                .max_decoys(self.current_time, *machine),
-                                        )
-                                        .max(1)
-                                }
-                                //TriggerAction::DelayTraffic { timeout, n, duration, bypass, replace, machine } => todo!(),
-                                _ => {}
-                            },
-                            _ => {}
-                        };
+                        if let Some(TriggerAction::DecoyTraffic {
+                            timeout: _,
+                            n,
+                            bypass: _,
+                            replace: _,
+                            machine,
+                        }) = &mut self.actions[mi]
+                        {
+                            // respect the threshold, but never schedule less
+                            // than 1 decoy (this can happen due to rounding in
+                            // ThresholdDecoy implementations)
+                            *n = (*n)
+                                .min(self.decoy_threshold.max_decoys(self.current_time, *machine))
+                                .max(1)
+                        }
                     }
                 }
 

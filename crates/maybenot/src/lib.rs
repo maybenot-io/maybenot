@@ -288,7 +288,10 @@ pub mod time;
 pub use crate::action::{Timer, TriggerAction};
 pub use crate::error::Error;
 pub use crate::event::TriggerEvent;
-pub use crate::threshold::{ThresholdDecoy, ThresholdDecoyFrac, ThresholdDecoyNone};
+pub use crate::threshold::{
+    ThresholdDecoy, ThresholdDecoyFrac, ThresholdDecoyNone, ThresholdDelay, ThresholdDelayFrac,
+    ThresholdDelayNone,
+};
 pub use framework::{Framework, MachineId};
 pub use machine::Machine;
 
