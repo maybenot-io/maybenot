@@ -283,12 +283,14 @@ mod framework;
 mod machine;
 mod rate_limited_framework;
 pub mod state;
+pub mod threshold;
 pub mod time;
 
 pub use crate::action::{Timer, TriggerAction};
 pub use crate::error::Error;
 pub use crate::event::TriggerEvent;
 pub use crate::rate_limited_framework::RateLimitedFramework;
+pub use crate::threshold::ThresholdDecoyFrac;
 pub use framework::{Framework, MachineId};
 pub use machine::Machine;
 
