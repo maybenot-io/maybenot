@@ -15,14 +15,13 @@ pub trait ThresholdDecoy<T: crate::time::Instant> {
     /// Returns true if a decoy action is allowed to be *scheduled* at the
     /// current time.
     ///
-    /// If this function returns true, [`max_decoys`] MUST return > 0.
+    /// If this function returns true, [`max_decoys`] SHOULD return > 0.
     fn allow_decoy(&self, current_time: T, machine: MachineId) -> bool;
 
     /// Returns the maximum number of decoy packets allowed to be scheduled.
-    /// Used to cap the number of packets in scheduled decoy actions. Set to
-    /// usize::MAX to let machines decide.
+    /// Return usize::MAX to let machines decide.
     ///
-    /// If this function returns > 0, [`max_decoys`] MUST return true.
+    /// If this function returns > 0, [`max_decoys`] SHOULD return true.
     fn max_decoys(&self, current_time: T, machine: MachineId) -> usize;
 
     /// Called for every PacketSent event triggered in the framework.
@@ -148,6 +147,36 @@ impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyFrac {
     fn decoy_queued(&mut self, _current_time: T, _machine: MachineId) {
         self.decoy_queued = self.decoy_queued.saturating_add(1);
     }
+}
+
+/// A trait for controlling delay actions from an instance of the framework.
+pub trait ThresholdDelay<T: crate::time::Instant, D: crate::time::Duration> {
+    /// Returns true if a delay action is allowed to be *scheduled* at the
+    /// current time.
+    ///
+    /// If this function returns true, [`max_delayed_packets`] SHOULD return > 0
+    /// and [`max_delayed_duration`] SHOULD NOT return D::is_zero() (i.e., a
+    /// duration longer than 0).
+    fn allow_delay(&self, current_time: T, machine: MachineId) -> bool;
+
+    /// Returns the maximum number of delayed packets allowed to be scheduled.
+    /// Return usize::MAX to let machines decide.
+    ///
+    /// If this function returns > 0, [`allow_delay`] SHOULD return true.
+    fn max_delayed_packets(&self, current_time: T, machine: MachineId) -> usize;
+
+    /// Returns the maximum delay duration allowed to be scheduled. Set to
+    /// usize::MAX to let machines decide.
+    ///
+    /// If this function returns !D::is_zero(), [`allow_delay`] SHOULD return
+    /// true.
+    fn max_delayed_duration(&self, current_time: T, machine: MachineId) -> D;
+
+    /// Called for every DelayBegin event triggered in the framework.
+    fn delay_begin(&mut self, current_time: T);
+
+    /// Called for every DelayEnd event triggered in the framework.
+    fn delay_end(&mut self, current_time: T);
 }
 
 #[cfg(test)]
