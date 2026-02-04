@@ -445,13 +445,43 @@ where
                 // finally, two chained transitions in and out of a state should
                 // count as a changed state, so we need to keep track of it to
                 // not prematurely decrement any limit.
-                let below_limits =
+                let (below_limits, apply_thresholds) =
                     self.below_action_limits(&self.runtime[mi], &self.machines.as_ref()[mi], mi);
                 let (allow_schedule, state_changed) = self.update_counter(mi);
 
                 // schedule an action if allowed by counter update and below all limits
                 if allow_schedule && below_limits {
                     self.schedule_action(mi, next_state);
+
+                    // if the threshold allowed us to schedule the action, apply
+                    // any max values
+                    if apply_thresholds {
+                        match &mut self.actions[mi] {
+                            Some(action) => match action {
+                                TriggerAction::DecoyTraffic {
+                                    timeout: _,
+                                    n,
+                                    bypass: _,
+                                    replace: _,
+                                    machine,
+                                } => {
+                                    // respect the threshold, but never schedule
+                                    // less than 1 decoy (this can happen due to
+                                    // rounding in ThresholdDecoy
+                                    // implementations)
+                                    *n = (*n)
+                                        .min(
+                                            self.decoy_threshold
+                                                .max_decoys(self.current_time, *machine),
+                                        )
+                                        .max(1)
+                                }
+                                //TriggerAction::DelayTraffic { timeout, n, duration, bypass, replace, machine } => todo!(),
+                                _ => {}
+                            },
+                            _ => {}
+                        };
+                    }
                 }
 
                 if curr_state == self.runtime[mi].current_state && !state_changed {
@@ -590,22 +620,27 @@ where
         }
     }
 
-    fn below_action_limits(&self, runtime: &MachineRuntime, machine: &Machine, mi: usize) -> bool {
+    fn below_action_limits(
+        &self,
+        runtime: &MachineRuntime,
+        machine: &Machine,
+        mi: usize,
+    ) -> (bool, bool) {
         let current = &machine.states[runtime.current_state];
 
         let Some(action) = current.action else {
-            return false;
+            return (false, false);
         };
 
         match action {
             Action::DelayTraffic { .. } => self.below_limit_delay(runtime, machine),
             Action::DecoyTraffic { .. } => self.below_limit_decoy(runtime, machine, mi),
-            Action::UpdateTimer { .. } => runtime.state_limit > 0,
-            _ => true,
+            Action::UpdateTimer { .. } => (runtime.state_limit > 0, false),
+            _ => (true, false),
         }
     }
 
-    fn below_limit_delay(&self, runtime: &MachineRuntime, machine: &Machine) -> bool {
+    fn below_limit_delay(&self, runtime: &MachineRuntime, machine: &Machine) -> (bool, bool) {
         let current = &machine.states[runtime.current_state];
 
         // special case: we always allow overwriting existing delay
@@ -617,7 +652,7 @@ where
 
         if replace && self.delay_active {
             // we still check against state limit, because it's machine internal
-            return runtime.state_limit > 0;
+            return (runtime.state_limit > 0, false);
         }
 
         // compute duration we've been delaying
@@ -633,7 +668,7 @@ where
         // types of limits
         if total_delay_duration < T::Duration::from_micros(machine.allowed_delay_microsec) {
             // we still check against state limit, because it's machine internal
-            return runtime.state_limit > 0;
+            return (runtime.state_limit > 0, false);
         }
 
         // does the framework say no?
@@ -643,18 +678,23 @@ where
                     .saturating_duration_since(self.framework_start),
             );
             if f >= self.max_delay_frac {
-                return false;
+                return (false, false);
             }
         }
 
         // only state-limit left to consider
-        runtime.state_limit > 0
+        (runtime.state_limit > 0, true)
     }
 
-    fn below_limit_decoy(&self, runtime: &MachineRuntime, machine: &Machine, mi: usize) -> bool {
+    fn below_limit_decoy(
+        &self,
+        runtime: &MachineRuntime,
+        machine: &Machine,
+        mi: usize,
+    ) -> (bool, bool) {
         // per-machine allowed decoys bypass threshold
         if runtime.decoys_sent < machine.allowed_decoy_packets {
-            return runtime.state_limit > 0;
+            return (runtime.state_limit > 0, false);
         }
 
         // check threshold
@@ -662,10 +702,10 @@ where
             .decoy_threshold
             .allow_decoy(self.current_time, MachineId(mi))
         {
-            return false;
+            return (false, false);
         }
 
-        runtime.state_limit > 0
+        (runtime.state_limit > 0, true)
     }
 }
 
@@ -2381,7 +2421,7 @@ mod tests {
             assert_eq!(f.actions[1], None);
         }
 
-        // the last byte should tip it over
+        // one more event should tip it over
         _ = f.trigger_events(&[TriggerEvent::NormalQueued], current_time);
 
         assert_eq!(
