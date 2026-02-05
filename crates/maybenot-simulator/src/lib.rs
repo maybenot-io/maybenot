@@ -121,8 +121,8 @@ use network::{Network, NetworkBottleneck, WindowCount};
 use queue::SimQueue;
 
 use maybenot::{
-    Framework, Machine, MachineId, ThresholdDecoy, ThresholdDecoyFrac, ThresholdDecoyNone, Timer,
-    TriggerAction, TriggerEvent,
+    Framework, Machine, MachineId, ThresholdDecoy, ThresholdDecoyFrac, ThresholdDecoyNone,
+    ThresholdDelay, ThresholdDelayFrac, ThresholdDelayNone, Timer, TriggerAction, TriggerEvent,
 };
 use rand::{RngCore, rngs::ThreadRng};
 use rand_xoshiro::Xoshiro256StarStar;
@@ -170,6 +170,52 @@ impl ThresholdDecoy<Instant> for DynamicThresholdDecoy {
         match self {
             DynamicThresholdDecoy::None(t) => t.decoy_queued(current_time, machine),
             DynamicThresholdDecoy::Frac(t) => t.decoy_queued(current_time, machine),
+        }
+    }
+}
+
+/// A dynamic threshold that can be either no threshold or a fraction-based
+/// threshold for delays. This allows the simulator to choose the threshold type
+/// at runtime.
+#[derive(Debug, Clone)]
+enum DynamicThresholdDelay {
+    None(ThresholdDelayNone),
+    Frac(ThresholdDelayFrac<Instant>),
+}
+
+impl ThresholdDelay<Instant> for DynamicThresholdDelay {
+    fn allow_delay(&self, current_time: Instant, machine: MachineId) -> bool {
+        match self {
+            DynamicThresholdDelay::None(t) => t.allow_delay(current_time, machine),
+            DynamicThresholdDelay::Frac(t) => t.allow_delay(current_time, machine),
+        }
+    }
+
+    fn max_delayed_packets(&self, current_time: Instant, machine: MachineId) -> usize {
+        match self {
+            DynamicThresholdDelay::None(t) => t.max_delayed_packets(current_time, machine),
+            DynamicThresholdDelay::Frac(t) => t.max_delayed_packets(current_time, machine),
+        }
+    }
+
+    fn max_delayed_duration(&self, current_time: Instant, machine: MachineId) -> Duration {
+        match self {
+            DynamicThresholdDelay::None(t) => t.max_delayed_duration(current_time, machine),
+            DynamicThresholdDelay::Frac(t) => t.max_delayed_duration(current_time, machine),
+        }
+    }
+
+    fn delay_begin(&mut self, current_time: Instant) {
+        match self {
+            DynamicThresholdDelay::None(t) => t.delay_begin(current_time),
+            DynamicThresholdDelay::Frac(t) => t.delay_begin(current_time),
+        }
+    }
+
+    fn delay_end(&mut self, current_time: Instant) {
+        match self {
+            DynamicThresholdDelay::None(t) => t.delay_end(current_time),
+            DynamicThresholdDelay::Frac(t) => t.delay_end(current_time),
         }
     }
 }
@@ -285,7 +331,7 @@ pub struct ScheduledAction {
 #[derive(Debug)]
 pub struct SimState<M, R> {
     /// an instance of the Maybenot framework
-    framework: Framework<M, R, Instant, DynamicThresholdDecoy>,
+    framework: Framework<M, R, Instant, DynamicThresholdDecoy, DynamicThresholdDelay>,
     /// scheduled action timers
     scheduled_action: Vec<Option<ScheduledAction>>,
     /// scheduled internal timers
@@ -326,9 +372,26 @@ where
             DynamicThresholdDecoy::None(ThresholdDecoyNone)
         };
 
+        // Convert max_delay_frac to threshold: if 0, use no threshold (allows all delays)
+        let delay_threshold = if max_delay_frac > 0.0 {
+            DynamicThresholdDelay::Frac(ThresholdDelayFrac::new(
+                max_delay_frac,
+                Duration::from_secs(1),
+                usize::MAX,
+            ))
+        } else {
+            DynamicThresholdDelay::None(ThresholdDelayNone)
+        };
+
         Self {
-            framework: Framework::new(machines, decoy_threshold, max_delay_frac, current_time, rng)
-                .unwrap(),
+            framework: Framework::new(
+                machines,
+                decoy_threshold,
+                delay_threshold,
+                current_time,
+                rng,
+            )
+            .unwrap(),
             scheduled_action: vec![None; num_machines],
             scheduled_internal_timer: vec![None; num_machines],
             delay_until: None,

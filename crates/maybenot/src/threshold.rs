@@ -150,13 +150,13 @@ impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyFrac {
 }
 
 /// A trait for controlling delay actions from an instance of the framework.
-pub trait ThresholdDelay<T: crate::time::Instant, D: crate::time::Duration> {
+pub trait ThresholdDelay<T: crate::time::Instant> {
     /// Returns true if a delay action is allowed to be *scheduled* at the
     /// current time.
     ///
     /// If this function returns true, [`max_delayed_packets`] SHOULD return > 0
-    /// and [`max_delayed_duration`] SHOULD NOT return D::is_zero() (i.e., a
-    /// duration longer than 0).
+    /// and [`max_delayed_duration`] SHOULD NOT return T::Duration::is_zero()
+    /// (i.e., a duration longer than 0).
     fn allow_delay(&self, current_time: T, machine: MachineId) -> bool;
 
     /// Returns the maximum number of delayed packets allowed to be scheduled.
@@ -168,9 +168,9 @@ pub trait ThresholdDelay<T: crate::time::Instant, D: crate::time::Duration> {
     /// Returns the maximum delay duration allowed to be scheduled. Set to
     /// usize::MAX to let machines decide.
     ///
-    /// If this function returns !D::is_zero(), [`allow_delay`] SHOULD return
-    /// true.
-    fn max_delayed_duration(&self, current_time: T, machine: MachineId) -> D;
+    /// If this function returns !T::Duration::is_zero(), [`allow_delay`] SHOULD
+    /// return true.
+    fn max_delayed_duration(&self, current_time: T, machine: MachineId) -> T::Duration;
 
     /// Called for every DelayBegin event triggered in the framework.
     fn delay_begin(&mut self, current_time: T);
@@ -184,18 +184,9 @@ pub trait ThresholdDelay<T: crate::time::Instant, D: crate::time::Duration> {
 /// Use this when you don't want any framework-level delay limiting. Per-machine
 /// limits still apply.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct ThresholdDelayNone<D>(core::marker::PhantomData<D>);
+pub struct ThresholdDelayNone;
 
-impl<D> ThresholdDelayNone<D> {
-    /// Creates a new `ThresholdDelayNone`.
-    pub fn new() -> Self {
-        Self(core::marker::PhantomData)
-    }
-}
-
-impl<T: crate::time::Instant, D: crate::time::Duration> ThresholdDelay<T, D>
-    for ThresholdDelayNone<D>
-{
+impl<T: crate::time::Instant> ThresholdDelay<T> for ThresholdDelayNone {
     fn allow_delay(&self, _current_time: T, _machine: MachineId) -> bool {
         true
     }
@@ -204,8 +195,9 @@ impl<T: crate::time::Instant, D: crate::time::Duration> ThresholdDelay<T, D>
         usize::MAX
     }
 
-    fn max_delayed_duration(&self, _current_time: T, _machine: MachineId) -> D {
-        D::from_micros(u64::MAX)
+    fn max_delayed_duration(&self, _current_time: T, _machine: MachineId) -> T::Duration {
+        use crate::time::Duration;
+        T::Duration::from_micros(u64::MAX)
     }
 
     fn delay_begin(&mut self, _current_time: T) {}
@@ -301,7 +293,7 @@ impl<T: crate::time::Instant> ThresholdDelayFrac<T> {
     }
 }
 
-impl<T: crate::time::Instant> ThresholdDelay<T, T::Duration> for ThresholdDelayFrac<T> {
+impl<T: crate::time::Instant> ThresholdDelay<T> for ThresholdDelayFrac<T> {
     fn allow_delay(&self, current_time: T, _machine: MachineId) -> bool {
         self.compute_delay_fraction(current_time) < self.threshold
     }
@@ -440,7 +432,7 @@ mod tests {
 
     #[test]
     fn delay_none_always_allows() {
-        let t: ThresholdDelayNone<Duration> = ThresholdDelayNone::new();
+        let t = ThresholdDelayNone;
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
         assert!(t.allow_delay(now, mid));

@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use maybenot::{
     Framework, Machine, MachineId, ThresholdDecoy, ThresholdDecoyFrac, ThresholdDecoyNone,
-    TriggerEvent,
+    ThresholdDelay, ThresholdDelayFrac, ThresholdDelayNone, TriggerEvent,
 };
 
 mod error;
@@ -58,13 +58,59 @@ impl ThresholdDecoy<Instant> for DynamicThresholdDecoy {
     }
 }
 
+/// A dynamic threshold that can be either no threshold or a fraction-based
+/// threshold for delays. This allows FFI to choose the threshold type at
+/// runtime.
+#[derive(Debug, Clone)]
+enum DynamicThresholdDelay {
+    None(ThresholdDelayNone),
+    Frac(ThresholdDelayFrac<Instant>),
+}
+
+impl ThresholdDelay<Instant> for DynamicThresholdDelay {
+    fn allow_delay(&self, current_time: Instant, machine: MachineId) -> bool {
+        match self {
+            DynamicThresholdDelay::None(t) => t.allow_delay(current_time, machine),
+            DynamicThresholdDelay::Frac(t) => t.allow_delay(current_time, machine),
+        }
+    }
+
+    fn max_delayed_packets(&self, current_time: Instant, machine: MachineId) -> usize {
+        match self {
+            DynamicThresholdDelay::None(t) => t.max_delayed_packets(current_time, machine),
+            DynamicThresholdDelay::Frac(t) => t.max_delayed_packets(current_time, machine),
+        }
+    }
+
+    fn max_delayed_duration(&self, current_time: Instant, machine: MachineId) -> Duration {
+        match self {
+            DynamicThresholdDelay::None(t) => t.max_delayed_duration(current_time, machine),
+            DynamicThresholdDelay::Frac(t) => t.max_delayed_duration(current_time, machine),
+        }
+    }
+
+    fn delay_begin(&mut self, current_time: Instant) {
+        match self {
+            DynamicThresholdDelay::None(t) => t.delay_begin(current_time),
+            DynamicThresholdDelay::Frac(t) => t.delay_begin(current_time),
+        }
+    }
+
+    fn delay_end(&mut self, current_time: Instant) {
+        match self {
+            DynamicThresholdDelay::None(t) => t.delay_end(current_time),
+            DynamicThresholdDelay::Frac(t) => t.delay_end(current_time),
+        }
+    }
+}
+
 /// A running Maybenot instance.
 ///
 /// - Create it: [maybenot_start].
 /// - Feed it actions: [maybenot_on_events].
 /// - Stop it: [maybenot_stop].
 pub struct MaybenotFramework {
-    framework: Framework<Vec<Machine>, Rng, Instant, DynamicThresholdDecoy>,
+    framework: Framework<Vec<Machine>, Rng, Instant, DynamicThresholdDecoy, DynamicThresholdDelay>,
 
     /// A buffer used internally for converting from [MaybenotEvent]s.
     events_buf: Vec<TriggerEvent>,
@@ -212,10 +258,21 @@ impl MaybenotFramework {
             DynamicThresholdDecoy::None(ThresholdDecoyNone)
         };
 
+        // Convert max_delay_frac to threshold: if 0, use no threshold (allows all delays)
+        let delay_threshold = if max_delay_frac > 0.0 {
+            DynamicThresholdDelay::Frac(ThresholdDelayFrac::new(
+                max_delay_frac,
+                Duration::from_secs(1),
+                usize::MAX,
+            ))
+        } else {
+            DynamicThresholdDelay::None(ThresholdDelayNone)
+        };
+
         let framework = Framework::new(
             machines,
             decoy_threshold,
-            max_delay_frac,
+            delay_threshold,
             Instant::now(),
             rng,
         )

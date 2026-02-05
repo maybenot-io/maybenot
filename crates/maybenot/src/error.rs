@@ -3,12 +3,6 @@ use std::fmt;
 /// Specific error types Maybenot.
 #[derive(Debug, Clone)]
 pub enum Error {
-    /// Invalid decoy limit.
-    DecoyLimit,
-
-    /// Invalid delay limit.
-    DelayLimit,
-
     /// Invalid machine. The string describes why in detail.
     Machine(String),
 }
@@ -16,8 +10,6 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            Error::DecoyLimit => write!(f, "max_decoy_frac has to be between [0.0, 1.0]"),
-            Error::DelayLimit => write!(f, "max_delay_frac has to be between [0.0, 1.0]"),
             Error::Machine(ref msg) => write!(f, "invalid machine: {msg}"),
         }
     }

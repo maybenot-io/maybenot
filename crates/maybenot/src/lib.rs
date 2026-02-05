@@ -20,7 +20,7 @@
 //!
 //! ## Example usage
 //! ```
-//! use maybenot::{Framework, Machine, ThresholdDecoyNone, TriggerAction, TriggerEvent};
+//! use maybenot::{Framework, Machine, ThresholdDecoyNone, ThresholdDelayNone, TriggerAction, TriggerEvent};
 //! use std::{str::FromStr, time::Instant};
 //! // This is a large example usage of the Maybenot framework. Some parts
 //! // are a bit odd due to avoiding everything async but should convey the
@@ -41,12 +41,10 @@
 //! // You create the framework, a lightweight operation, with the following
 //! // parameters:
 //! // - A vector of zero or more machines.
-//! // - Max fractions prevent machines from causing too much overhead: note
-//! // that machines can be defined to be allowed a fixed amount of
-//! // decoy/delay, bypassing these limits until having used up their
-//! // allowed budgets. This means that it is possible to create machines
-//! // that trigger actions to delay outgoing traffic indefinitely and/or
-//! // send a lot of outgoing traffic.
+//! // - Thresholds control framework-level limits on decoy and delay
+//! // traffic. Use ThresholdDecoyNone/ThresholdDelayNone to allow all
+//! // traffic (subject to per-machine limits), or use the Frac variants
+//! // to limit traffic to a fraction.
 //! // - The current time. For normal use, just provide the current time as
 //! // below. This is exposed mainly for testing purposes (can also be used
 //! // to make the creation of some odd types of machines easier).
@@ -54,8 +52,8 @@
 //! // random number generator, like the one provided by the `rand` crate.
 //! //
 //! // The framework validates all machines (like ::From_str() above) and
-//! // verifies that the fractions are fractions, so it can return an error.
-//! let mut f = Framework::new(&m, ThresholdDecoyNone, 0.0, Instant::now(), rand::rng()).unwrap();
+//! // can return an error.
+//! let mut f = Framework::new(&m, ThresholdDecoyNone, ThresholdDelayNone, Instant::now(), rand::rng()).unwrap();
 //!
 //! // Below is the main loop for operating the framework. This should run
 //! // for as long as the underlying connection the framework is attached to
@@ -305,7 +303,9 @@ mod tests {
 
     #[test]
     fn example_usage() {
-        use crate::{Framework, Machine, ThresholdDecoyNone, TriggerAction, TriggerEvent};
+        use crate::{
+            Framework, Machine, ThresholdDecoyNone, ThresholdDelayNone, TriggerAction, TriggerEvent,
+        };
         use std::{str::FromStr, time::Instant};
         // This is a large example usage of the Maybenot framework. Some parts
         // are a bit odd due to avoiding everything async but should convey the
@@ -340,8 +340,14 @@ mod tests {
         //
         // The framework validates all machines (like ::From_str() above) and
         // verifies that the fractions are fractions, so it can return an error.
-        let mut f =
-            Framework::new(&m, ThresholdDecoyNone, 0.0, Instant::now(), rand::rng()).unwrap();
+        let mut f = Framework::new(
+            &m,
+            ThresholdDecoyNone,
+            ThresholdDelayNone,
+            Instant::now(),
+            rand::rng(),
+        )
+        .unwrap();
 
         // Below is the main loop for operating the framework. This should run
         // for as long as the underlying connection the framework is attached to
