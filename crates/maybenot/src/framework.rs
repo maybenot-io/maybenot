@@ -378,7 +378,8 @@ where
                 self.transition(mi, Event::TimerEnd);
             }
             TriggerEvent::Congestion => {
-                // no special accounting needed
+                self.decoy_threshold.congestion(self.current_time);
+                self.delay_threshold.congestion(self.current_time);
                 for mi in 0..self.runtime.len() {
                     self.transition(mi, Event::Congestion);
                 }

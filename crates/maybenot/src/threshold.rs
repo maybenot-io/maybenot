@@ -32,11 +32,19 @@ pub trait ThresholdDecoy<T: crate::time::Instant> {
 
     /// Called for every DecoyQueued event triggered in the framework.
     fn decoy_queued(&mut self, current_time: T, machine: MachineId);
+
+    /// Called for every Congestion event triggered in the framework.
+    fn congestion(&mut self, _current_time: T) {}
 }
 
 /// Blanket impl allowing `Rc<RefCell<T>>` to be used as a decoy threshold.
 /// This enables a single type implementing both [`ThresholdDecoy`] and
 /// [`ThresholdDelay`] to be shared between the two framework threshold fields.
+///
+/// **Warning:** When a single `Rc<RefCell<T>>` is used for both thresholds,
+/// [`congestion()`](ThresholdDecoy::congestion) will be called twice per
+/// `Congestion` event (once via `ThresholdDecoy`, once via `ThresholdDelay`).
+/// Implementations must guard against this (e.g., with a timestamp check).
 impl<T, I> ThresholdDecoy<I> for std::rc::Rc<std::cell::RefCell<T>>
 where
     T: ThresholdDecoy<I>,
@@ -60,6 +68,10 @@ where
 
     fn decoy_queued(&mut self, current_time: I, machine: MachineId) {
         self.borrow_mut().decoy_queued(current_time, machine)
+    }
+
+    fn congestion(&mut self, current_time: I) {
+        self.borrow_mut().congestion(current_time)
     }
 }
 
@@ -206,11 +218,19 @@ pub trait ThresholdDelay<T: crate::time::Instant> {
 
     /// Called for every DelayEnd event triggered in the framework.
     fn delay_end(&mut self, current_time: T);
+
+    /// Called for every Congestion event triggered in the framework.
+    fn congestion(&mut self, _current_time: T) {}
 }
 
 /// Blanket impl allowing `Rc<RefCell<T>>` to be used as a delay threshold.
 /// This enables a single type implementing both [`ThresholdDecoy`] and
 /// [`ThresholdDelay`] to be shared between the two framework threshold fields.
+///
+/// **Warning:** When a single `Rc<RefCell<T>>` is used for both thresholds,
+/// [`congestion()`](ThresholdDelay::congestion) will be called twice per
+/// `Congestion` event (once via `ThresholdDecoy`, once via `ThresholdDelay`).
+/// Implementations must guard against this (e.g., with a timestamp check).
 impl<T, I> ThresholdDelay<I> for std::rc::Rc<std::cell::RefCell<T>>
 where
     T: ThresholdDelay<I>,
@@ -234,6 +254,10 @@ where
 
     fn delay_end(&mut self, current_time: I) {
         self.borrow_mut().delay_end(current_time)
+    }
+
+    fn congestion(&mut self, current_time: I) {
+        self.borrow_mut().congestion(current_time)
     }
 }
 
@@ -672,6 +696,9 @@ mod tests {
             fn decoy_queued(&mut self, _current_time: Instant, _machine: MachineId) {
                 self.operations += 1;
             }
+            fn congestion(&mut self, _current_time: Instant) {
+                self.operations += 1;
+            }
         }
 
         impl ThresholdDelay<Instant> for JointThreshold {
@@ -692,6 +719,9 @@ mod tests {
                 self.operations += 1;
             }
             fn delay_end(&mut self, _current_time: Instant) {
+                self.operations += 1;
+            }
+            fn congestion(&mut self, _current_time: Instant) {
                 self.operations += 1;
             }
         }
@@ -724,5 +754,9 @@ mod tests {
         // DelayEnd triggers delay_threshold.delay_end (shared state!)
         let _ = f.trigger_events(&[crate::TriggerEvent::DelayEnd], now);
         assert_eq!(joint.borrow().operations, 4);
+
+        // Congestion triggers both congestion() methods (shared state, called twice!)
+        let _ = f.trigger_events(&[crate::TriggerEvent::Congestion], now);
+        assert_eq!(joint.borrow().operations, 6);
     }
 }
