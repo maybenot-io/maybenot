@@ -34,6 +34,35 @@ pub trait ThresholdDecoy<T: crate::time::Instant> {
     fn decoy_queued(&mut self, current_time: T, machine: MachineId);
 }
 
+/// Blanket impl allowing `Rc<RefCell<T>>` to be used as a decoy threshold.
+/// This enables a single type implementing both [`ThresholdDecoy`] and
+/// [`ThresholdDelay`] to be shared between the two framework threshold fields.
+impl<T, I> ThresholdDecoy<I> for std::rc::Rc<std::cell::RefCell<T>>
+where
+    T: ThresholdDecoy<I>,
+    I: crate::time::Instant,
+{
+    fn allow_decoy(&self, current_time: I, machine: MachineId) -> bool {
+        self.borrow().allow_decoy(current_time, machine)
+    }
+
+    fn max_decoys(&self, current_time: I, machine: MachineId) -> usize {
+        self.borrow().max_decoys(current_time, machine)
+    }
+
+    fn packet_sent(&mut self, current_time: I) {
+        self.borrow_mut().packet_sent(current_time)
+    }
+
+    fn normal_queued(&mut self, current_time: I) {
+        self.borrow_mut().normal_queued(current_time)
+    }
+
+    fn decoy_queued(&mut self, current_time: I, machine: MachineId) {
+        self.borrow_mut().decoy_queued(current_time, machine)
+    }
+}
+
 /// A no-op threshold that always allows decoys.
 ///
 /// Use this when you don't want any framework-level decoy limiting. Per-machine
@@ -177,6 +206,35 @@ pub trait ThresholdDelay<T: crate::time::Instant> {
 
     /// Called for every DelayEnd event triggered in the framework.
     fn delay_end(&mut self, current_time: T);
+}
+
+/// Blanket impl allowing `Rc<RefCell<T>>` to be used as a delay threshold.
+/// This enables a single type implementing both [`ThresholdDecoy`] and
+/// [`ThresholdDelay`] to be shared between the two framework threshold fields.
+impl<T, I> ThresholdDelay<I> for std::rc::Rc<std::cell::RefCell<T>>
+where
+    T: ThresholdDelay<I>,
+    I: crate::time::Instant,
+{
+    fn allow_delay(&self, current_time: I, machine: MachineId) -> bool {
+        self.borrow().allow_delay(current_time, machine)
+    }
+
+    fn max_delayed_packets(&self, current_time: I, machine: MachineId) -> usize {
+        self.borrow().max_delayed_packets(current_time, machine)
+    }
+
+    fn max_delayed_duration(&self, current_time: I, machine: MachineId) -> I::Duration {
+        self.borrow().max_delayed_duration(current_time, machine)
+    }
+
+    fn delay_begin(&mut self, current_time: I) {
+        self.borrow_mut().delay_begin(current_time)
+    }
+
+    fn delay_end(&mut self, current_time: I) {
+        self.borrow_mut().delay_end(current_time)
+    }
 }
 
 /// A no-op threshold that always allows delays.
@@ -584,5 +642,87 @@ mod tests {
     #[should_panic(expected = "window must be non-zero")]
     fn delay_frac_invalid_window_zero() {
         let _: ThresholdDelayFrac<Instant> = ThresholdDelayFrac::new(0.5, Duration::ZERO, 100);
+    }
+
+    #[test]
+    fn joint_threshold_shared_state() {
+        use crate::Framework;
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        /// A joint threshold that implements both ThresholdDecoy and ThresholdDelay,
+        /// tracking total operations across both.
+        struct JointThreshold {
+            operations: u64,
+        }
+
+        impl ThresholdDecoy<Instant> for JointThreshold {
+            fn allow_decoy(&self, _current_time: Instant, _machine: MachineId) -> bool {
+                true
+            }
+            fn max_decoys(&self, _current_time: Instant, _machine: MachineId) -> usize {
+                usize::MAX
+            }
+            fn packet_sent(&mut self, _current_time: Instant) {
+                self.operations += 1;
+            }
+            fn normal_queued(&mut self, _current_time: Instant) {
+                self.operations += 1;
+            }
+            fn decoy_queued(&mut self, _current_time: Instant, _machine: MachineId) {
+                self.operations += 1;
+            }
+        }
+
+        impl ThresholdDelay<Instant> for JointThreshold {
+            fn allow_delay(&self, _current_time: Instant, _machine: MachineId) -> bool {
+                true
+            }
+            fn max_delayed_packets(&self, _current_time: Instant, _machine: MachineId) -> usize {
+                usize::MAX
+            }
+            fn max_delayed_duration(
+                &self,
+                _current_time: Instant,
+                _machine: MachineId,
+            ) -> Duration {
+                Duration::from_micros(u64::MAX)
+            }
+            fn delay_begin(&mut self, _current_time: Instant) {
+                self.operations += 1;
+            }
+            fn delay_end(&mut self, _current_time: Instant) {
+                self.operations += 1;
+            }
+        }
+
+        let joint = Rc::new(RefCell::new(JointThreshold { operations: 0 }));
+        let machines: Vec<crate::Machine> = vec![];
+        let now = Instant::now();
+        let mut f =
+            Framework::new(&machines, joint.clone(), joint.clone(), now, rand::rng()).unwrap();
+
+        assert_eq!(joint.borrow().operations, 0);
+
+        // NormalQueued triggers decoy_threshold.normal_queued
+        let _ = f.trigger_events(&[crate::TriggerEvent::NormalQueued], now);
+        assert_eq!(joint.borrow().operations, 1);
+
+        // PacketSent triggers decoy_threshold.packet_sent
+        let _ = f.trigger_events(&[crate::TriggerEvent::PacketSent], now);
+        assert_eq!(joint.borrow().operations, 2);
+
+        // DelayBegin triggers delay_threshold.delay_begin (shared state!)
+        let _ = f.trigger_events(
+            &[crate::TriggerEvent::DelayBegin {
+                machine: MachineId::from_raw(0),
+            }],
+            now,
+        );
+        assert_eq!(joint.borrow().operations, 3);
+
+        // DelayEnd triggers delay_threshold.delay_end (shared state!)
+        let _ = f.trigger_events(&[crate::TriggerEvent::DelayEnd], now);
+        assert_eq!(joint.borrow().operations, 4);
     }
 }
