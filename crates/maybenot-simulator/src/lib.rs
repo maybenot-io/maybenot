@@ -172,6 +172,13 @@ impl ThresholdDecoy<Instant> for DynamicThresholdDecoy {
             DynamicThresholdDecoy::Frac(t) => t.decoy_queued(current_time, machine),
         }
     }
+
+    fn congestion(&mut self, current_time: Instant) {
+        match self {
+            DynamicThresholdDecoy::None(t) => t.congestion(current_time),
+            DynamicThresholdDecoy::Frac(t) => t.congestion(current_time),
+        }
+    }
 }
 
 /// A dynamic threshold that can be either no threshold or a fraction-based

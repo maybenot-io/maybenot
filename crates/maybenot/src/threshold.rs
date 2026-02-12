@@ -21,7 +21,7 @@ pub trait ThresholdDecoy<T: crate::time::Instant> {
     /// Returns the maximum number of decoy packets allowed to be scheduled.
     /// Return usize::MAX to let machines decide.
     ///
-    /// If this function returns > 0, [`max_decoys`] SHOULD return true.
+    /// If this function returns > 0, [`allow_decoy`] SHOULD return true.
     fn max_decoys(&self, current_time: T, machine: MachineId) -> usize;
 
     /// Called for every PacketSent event triggered in the framework.
@@ -34,7 +34,7 @@ pub trait ThresholdDecoy<T: crate::time::Instant> {
     fn decoy_queued(&mut self, current_time: T, machine: MachineId);
 
     /// Called for every Congestion event triggered in the framework.
-    fn congestion(&mut self, _current_time: T) {}
+    fn congestion(&mut self, _current_time: T);
 }
 
 /// Blanket impl allowing `Rc<RefCell<T>>` to be used as a decoy threshold.
@@ -98,6 +98,8 @@ impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyNone {
     fn normal_queued(&mut self, _current_time: T) {}
 
     fn decoy_queued(&mut self, _current_time: T, _machine: MachineId) {}
+
+    fn congestion(&mut self, _current_time: T) {}
 }
 
 /// A threshold that limits decoy traffic to a fraction of total queued traffic.
@@ -188,6 +190,8 @@ impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyFrac {
     fn decoy_queued(&mut self, _current_time: T, _machine: MachineId) {
         self.decoy_queued = self.decoy_queued.saturating_add(1);
     }
+
+    fn congestion(&mut self, _current_time: T) {}
 }
 
 /// A trait for controlling delay actions from an instance of the framework.
