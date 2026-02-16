@@ -307,7 +307,7 @@ where
                     && self.runtime[mi].current_state != STATE_END
                 {
                     // decrement only makes sense if we didn't change state
-                    self.decrement_limit(mi);
+                    self.decrement_state_limit(mi);
                 }
             }
             TriggerEvent::PacketSent => {
@@ -335,7 +335,7 @@ where
                     {
                         // decrement only makes sense if we didn't
                         // change state and for the machine in question
-                        self.decrement_limit(mi);
+                        self.decrement_state_limit(mi);
                     }
                 }
             }
@@ -364,7 +364,7 @@ where
                     && self.runtime[mi].current_state != STATE_END
                 {
                     // decrement only makes sense if we didn't change state
-                    self.decrement_limit(machine.into_raw());
+                    self.decrement_state_limit(machine.into_raw());
                 }
             }
             TriggerEvent::TimerEnd { machine } => {
@@ -619,7 +619,7 @@ where
         };
     }
 
-    fn decrement_limit(&mut self, mi: usize) {
+    fn decrement_state_limit(&mut self, mi: usize) {
         if self.runtime[mi].state_limit > 0 {
             self.runtime[mi].state_limit -= 1;
         }
