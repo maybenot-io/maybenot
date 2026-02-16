@@ -46,15 +46,15 @@ runtime or how to keep time for ease of integration.
 ## Example usage
 
 ```rust,no_run
-use crate::{Framework, Machine, TriggerAction, TriggerEvent};
+use maybenot::{Framework, Machine, LimitDecoyNone, LimitDelayNone, TriggerAction, TriggerEvent};
 use std::{str::FromStr, time::Instant};
 
 // deserialize a machine, this is a "no-op" machine that does nothing
-let s = "02eNpjYEAHjOgCAAA0AAI=";
+let s = "02eNpjYGBkQAcAACYAAg==";
 let m = vec![Machine::from_str(s).unwrap()];
 
-// create framework instance (ThresholdDecoyNone allows all decoys)
-let mut f = Framework::new(&m, ThresholdDecoyNone, 0.0, Instant::now(), rand::rng()).unwrap();
+// create framework instance (LimitDecoyNone allows all decoys)
+let mut f = Framework::new(&m, LimitDecoyNone, LimitDelayNone, Instant::now(), rand::rng()).unwrap();
 
 loop {
     // collect one or more events
@@ -72,21 +72,22 @@ loop {
             }
             TriggerAction::DecoyTraffic {
                 timeout: Duration,
+                n: usize,
                 bypass: bool,
                 replace: bool,
-                n: usize,
                 machine: MachineId,
             } => {
                 // schedule N decoy packets to be sent after timeout
             }
             TriggerAction::DelayTraffic {
                 timeout: Duration,
+                n: usize,
                 duration: Duration,
                 bypass: bool,
                 replace: bool,
                 machine: MachineId,
             } => {
-                // delay outgoing traffic for the specified duration after timeout
+                // delay up to N packets for the specified duration after timeout
             }
             TriggerAction::UpdateTimer {
                 duration: Duration,

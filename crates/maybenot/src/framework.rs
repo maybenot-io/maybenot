@@ -3,10 +3,10 @@
 
 use rand_core::RngCore;
 
-use crate::threshold::{ThresholdDecoy, ThresholdDelay};
+use crate::limit::{LimitDecoy, LimitDelay};
 use crate::{
-    Error, Machine, ThresholdDecoyNone, ThresholdDelayNone, TriggerAction, TriggerEvent, action,
-    constants, counter, event,
+    Error, LimitDecoyNone, LimitDelayNone, Machine, TriggerAction, TriggerEvent, action, constants,
+    counter, event,
 };
 
 use self::action::Action;
@@ -76,11 +76,11 @@ enum SignalTarget {
 /// *send decoy traffic* or *delay outgoing traffic*. One or more [`Machine`]
 /// determine what [`TriggerAction`] to take based on [`TriggerEvent`].
 #[derive(Clone, Debug)]
-pub struct Framework<M, R, T = std::time::Instant, C = ThresholdDecoyNone, L = ThresholdDelayNone>
+pub struct Framework<M, R, T = std::time::Instant, C = LimitDecoyNone, L = LimitDelayNone>
 where
     T: crate::time::Instant,
-    C: ThresholdDecoy<T>,
-    L: ThresholdDelay<T>,
+    C: LimitDecoy<T>,
+    L: LimitDelay<T>,
 {
     // updated each time the framework is triggered
     pub(crate) current_time: T,
@@ -93,10 +93,10 @@ where
     // state (size independent of number of states in the machine).
     machines: M,
     runtime: Vec<MachineRuntime>,
-    // decoy threshold
-    decoy_threshold: C,
-    // delay threshold
-    delay_threshold: L,
+    // decoy limit
+    decoy_limit: C,
+    // delay limit
+    delay_limit: L,
     // delay accounting
     delay_duration: T::Duration,
     delay_started: T,
@@ -112,22 +112,20 @@ where
     M: AsRef<[Machine]>,
     R: RngCore,
     T: crate::time::Instant,
-    C: ThresholdDecoy<T>,
-    L: ThresholdDelay<T>,
+    C: LimitDecoy<T>,
+    L: LimitDelay<T>,
 {
     /// Create a new framework instance with zero or more [`Machine`].
     ///
-    /// The `decoy_threshold` parameter controls decoy traffic generation. Use
-    /// [`ThresholdDecoyNone`](crate::ThresholdDecoyNone) to allow all decoys
-    /// (subject to per-machine limits), or
-    /// [`ThresholdDecoyFrac`](crate::ThresholdDecoyFrac) to limit decoys to a
-    /// fraction of total traffic.
+    /// The `decoy_limit` parameter controls decoy traffic generation. Use
+    /// [`LimitDecoyNone`](crate::LimitDecoyNone) to allow all decoys (subject
+    /// to per-machine limits), or [`LimitDecoyFrac`](crate::LimitDecoyFrac) to
+    /// limit decoys to a fraction of total traffic.
     ///
-    /// The `delay_threshold` parameter controls delay traffic generation. Use
-    /// [`ThresholdDelayNone`](crate::ThresholdDelayNone) to allow all delays
-    /// (subject to per-machine limits), or
-    /// [`ThresholdDelayFrac`](crate::ThresholdDelayFrac) to limit delays to a
-    /// fraction of a rolling time window.
+    /// The `delay_limit` parameter controls delay traffic generation. Use
+    /// [`LimitDelayNone`](crate::LimitDelayNone) to allow all delays (subject
+    /// to per-machine limits), or [`LimitDelayFrac`](crate::LimitDelayFrac) to
+    /// limit delays to a fraction of a rolling time window.
     ///
     /// The current time is handed to the framework here (and later in
     /// [`Self::trigger_events()`]) to make some types of use cases of the
@@ -138,8 +136,8 @@ where
     /// Returns an error on any invalid [`Machine`].
     pub fn new(
         machines: M,
-        decoy_threshold: C,
-        delay_threshold: L,
+        decoy_limit: C,
+        delay_limit: L,
         current_time: T,
         rng: R,
     ) -> Result<Self, Error> {
@@ -164,8 +162,8 @@ where
             runtime,
             current_time,
             rng,
-            decoy_threshold,
-            delay_threshold,
+            decoy_limit,
+            delay_limit,
             delay_active: false,
             delay_started: current_time,
             delay_duration: T::Duration::zero(),
@@ -291,15 +289,14 @@ where
                 }
             }
             TriggerEvent::NormalQueued => {
-                self.decoy_threshold.normal_queued(self.current_time);
+                self.decoy_limit.normal_queued(self.current_time);
 
                 for mi in 0..self.runtime.len() {
                     self.transition(mi, Event::NormalQueued);
                 }
             }
             TriggerEvent::DecoyQueued { machine } => {
-                self.decoy_threshold
-                    .decoy_queued(self.current_time, *machine);
+                self.decoy_limit.decoy_queued(self.current_time, *machine);
 
                 let mi = machine.into_raw();
                 if mi >= self.runtime.len() {
@@ -314,14 +311,14 @@ where
                 }
             }
             TriggerEvent::PacketSent => {
-                self.decoy_threshold.packet_sent(self.current_time);
+                self.decoy_limit.packet_sent(self.current_time);
 
                 for mi in 0..self.runtime.len() {
                     self.transition(mi, Event::PacketSent);
                 }
             }
             TriggerEvent::DelayBegin { machine } => {
-                self.delay_threshold.delay_begin(self.current_time);
+                self.delay_limit.delay_begin(self.current_time);
 
                 // keep track of when we start delaying traffic (for accounting
                 // in DelayEnd)
@@ -343,7 +340,7 @@ where
                 }
             }
             TriggerEvent::DelayEnd => {
-                self.delay_threshold.delay_end(self.current_time);
+                self.delay_limit.delay_end(self.current_time);
 
                 if self.delay_active {
                     let delayed = self
@@ -378,8 +375,9 @@ where
                 self.transition(mi, Event::TimerEnd);
             }
             TriggerEvent::Congestion => {
-                self.decoy_threshold.congestion(self.current_time);
-                self.delay_threshold.congestion(self.current_time);
+                self.decoy_limit.congestion(self.current_time);
+                self.delay_limit.congestion(self.current_time);
+
                 for mi in 0..self.runtime.len() {
                     self.transition(mi, Event::Congestion);
                 }
@@ -448,7 +446,7 @@ where
                 // finally, two chained transitions in and out of a state should
                 // count as a changed state, so we need to keep track of it to
                 // not prematurely decrement any limit.
-                let (below_limits, apply_thresholds) =
+                let (below_limits, apply_limits) =
                     self.below_action_limits(&self.runtime[mi], &self.machines.as_ref()[mi], mi);
                 let (allow_schedule, state_changed) = self.update_counter(mi);
 
@@ -456,9 +454,9 @@ where
                 if allow_schedule && below_limits {
                     self.schedule_action(mi, next_state);
 
-                    // if the threshold allowed us to schedule the action, apply
-                    // any max values
-                    if apply_thresholds {
+                    // if the limit allowed us to schedule the action, apply any
+                    // max values
+                    if apply_limits {
                         if let Some(TriggerAction::DecoyTraffic {
                             timeout: _,
                             n,
@@ -467,11 +465,11 @@ where
                             machine,
                         }) = &mut self.actions[mi]
                         {
-                            // respect the threshold, but never schedule less
-                            // than 1 decoy (this can happen due to rounding in
-                            // ThresholdDecoy implementations)
+                            // respect the limit, but never schedule less than 1
+                            // decoy (this can happen due to rounding in
+                            // implementations)
                             *n = (*n)
-                                .min(self.decoy_threshold.max_decoys(self.current_time, *machine))
+                                .min(self.decoy_limit.max_decoys(self.current_time, *machine))
                                 .max(1)
                         }
 
@@ -482,14 +480,17 @@ where
                             ..
                         }) = &mut self.actions[mi]
                         {
+                            // respect the limit, but never schedule less than 1
+                            // decoy (this can happen due to rounding in
+                            // implementations)
                             *n = (*n)
                                 .min(
-                                    self.delay_threshold
+                                    self.delay_limit
                                         .max_delayed_packets(self.current_time, *machine),
                                 )
                                 .max(1);
                             let max_dur = self
-                                .delay_threshold
+                                .delay_limit
                                 .max_delayed_duration(self.current_time, *machine);
                             if *duration > max_dur && !max_dur.is_zero() {
                                 *duration = max_dur;
@@ -683,15 +684,15 @@ where
                 .saturating_duration_since(self.delay_started);
         }
 
-        // machine allowed delay duration first, since it bypasses the threshold
+        // machine allowed delay duration first, since it bypasses the limit
         if total_delay_duration < T::Duration::from_micros(machine.allowed_delay_microsec) {
             // we still check against state limit, because it's machine internal
             return (runtime.state_limit > 0, false);
         }
 
-        // check threshold
+        // check limit
         if !self
-            .delay_threshold
+            .delay_limit
             .allow_delay(self.current_time, MachineId(mi))
         {
             return (false, false);
@@ -707,19 +708,20 @@ where
         machine: &Machine,
         mi: usize,
     ) -> (bool, bool) {
-        // per-machine allowed decoys bypass threshold
+        // per-machine allowed decoys bypass limit
         if runtime.decoys_sent < machine.allowed_decoy_packets {
             return (runtime.state_limit > 0, false);
         }
 
-        // check threshold
+        // check limit
         if !self
-            .decoy_threshold
+            .decoy_limit
             .allow_decoy(self.current_time, MachineId(mi))
         {
             return (false, false);
         }
 
+        // only state-limit left to consider
         (runtime.state_limit > 0, true)
     }
 }
@@ -729,8 +731,8 @@ mod tests {
     use crate::counter::Counter;
     use crate::dist::*;
     use crate::framework::*;
+    use crate::limit::{LimitDecoyFrac, LimitDecoyNone, LimitDelayNone};
     use crate::state::*;
-    use crate::threshold::{ThresholdDecoyFrac, ThresholdDecoyNone, ThresholdDelayNone};
     use enum_map::enum_map;
     use std::ops::Add;
     use std::time::Duration;
@@ -741,8 +743,8 @@ mod tests {
         let machines = vec![];
         let f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             Instant::now(),
             rand::rng(),
         );
@@ -754,16 +756,16 @@ mod tests {
         let machines = vec![];
         let f1 = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             Instant::now(),
             rand::rng(),
         );
         assert!(f1.is_ok());
         let f2 = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             Instant::now(),
             rand::rng(),
         );
@@ -846,8 +848,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -1034,8 +1036,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -1137,8 +1139,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -1247,8 +1249,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -1364,8 +1366,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -1437,8 +1439,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -1533,8 +1535,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -1645,8 +1647,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -1774,8 +1776,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -1872,8 +1874,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -1982,8 +1984,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -2088,8 +2090,8 @@ mod tests {
         let current_time = Instant::now();
         let mut f = Framework::new(
             machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -2160,8 +2162,8 @@ mod tests {
         let machines = vec![m0, m1];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -2226,8 +2228,8 @@ mod tests {
         let machines = vec![m0, m1];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -2305,8 +2307,8 @@ mod tests {
         let machines = vec![m0, m1];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -2370,8 +2372,8 @@ mod tests {
         let machines = vec![m1, m2];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyFrac::new(0.5),
-            ThresholdDelayNone,
+            LimitDecoyFrac::new(0.5),
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -2469,12 +2471,12 @@ mod tests {
 
     #[test]
     fn framework_max_delay_frac() {
-        use crate::threshold::ThresholdDelayFrac;
+        use crate::limit::LimitDelayFrac;
 
         // We create a machine that should be allowed to delay for 10us before
-        // machine limits are applied, then the machine should be limited by
-        // the delay threshold (0.4 fraction of a 100us window = at most 40us
-        // delay). Using a single long delay avoids floating-point accumulation.
+        // machine limits are applied, then the machine should be limited by the
+        // delay limit (0.4 fraction of a 100us window = at most 40us delay).
+        // Using a single long delay avoids floating-point accumulation.
 
         // state 0
         let mut s0 = State::new(enum_map! {
@@ -2522,8 +2524,8 @@ mod tests {
         // 0.4 fraction of a 100us window = at most 40us of delay
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayFrac::new(0.4, Duration::from_micros(100), usize::MAX),
+            LimitDecoyNone,
+            LimitDelayFrac::new(0.4, Duration::from_micros(100), usize::MAX),
             current_time,
             rand::rng(),
         )
@@ -2542,13 +2544,13 @@ mod tests {
         );
 
         // allowed_delay_microsec = 10, so the first 10us of delay bypasses
-        // the threshold; advance 10us and end the delay
+        // the limit; advance 10us and end the delay
         current_time = current_time.add(Duration::from_micros(10));
         _ = f.trigger_events(&[TriggerEvent::DelayEnd], current_time);
         assert_eq!(f.delay_duration, Duration::from_micros(10));
 
-        // 10us of delay in a 100us window = 10%, below 40% threshold.
-        // New delay should be allowed by threshold.
+        // 10us of delay in a 100us window = 10%, below 40% limit.
+        // New delay should be allowed by limit.
         _ = f.trigger_events(&[TriggerEvent::NormalRecv], current_time);
         assert!(f.actions[0].is_some());
 
@@ -2638,8 +2640,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )
@@ -2721,8 +2723,8 @@ mod tests {
         let machines = vec![m];
         let mut f = Framework::new(
             &machines,
-            ThresholdDecoyNone,
-            ThresholdDelayNone,
+            LimitDecoyNone,
+            LimitDelayNone,
             current_time,
             rand::rng(),
         )

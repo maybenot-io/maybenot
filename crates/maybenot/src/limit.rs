@@ -1,17 +1,17 @@
-//! Threshold traits for controlling decoy and delay behavior in the framework.
+//! Limit traits for controlling decoy and delay behavior in the framework.
 //!
-//! [`ThresholdDecoy`]: Controls decoy traffic generation through rate limiting
-//!   and event notifications.
+//! [`LimitDecoy`]: Controls decoy traffic generation through rate limiting and
+//!   event notifications.
 //!
-//! [`ThresholdDecoyNone`]: A no-op implementation that always allows decoys.
+//! [`LimitDecoyNone`]: A no-op implementation that always allows decoys.
 //!
-//! [`ThresholdDecoyFrac`]: An implementation that limits decoy traffic to a
+//! [`LimitDecoyFrac`]: An implementation that limits decoy traffic to a
 //!   fraction of total queued traffic.
 
 use crate::MachineId;
 
 /// A trait for controlling decoy actions from an instance of the framework.
-pub trait ThresholdDecoy<T: crate::time::Instant> {
+pub trait LimitDecoy<T: crate::time::Instant> {
     /// Returns true if a decoy action is allowed to be *scheduled* at the
     /// current time.
     ///
@@ -37,17 +37,17 @@ pub trait ThresholdDecoy<T: crate::time::Instant> {
     fn congestion(&mut self, _current_time: T);
 }
 
-/// Blanket impl allowing `Rc<RefCell<T>>` to be used as a decoy threshold.
-/// This enables a single type implementing both [`ThresholdDecoy`] and
-/// [`ThresholdDelay`] to be shared between the two framework threshold fields.
+/// Blanket impl allowing `Rc<RefCell<T>>` to be used as a decoy limit. This
+/// enables a single type implementing both [`LimitDecoy`] and [`LimitDelay`] to
+/// be shared between the two framework limit fields.
 ///
-/// **Warning:** When a single `Rc<RefCell<T>>` is used for both thresholds,
-/// [`congestion()`](ThresholdDecoy::congestion) will be called twice per
-/// `Congestion` event (once via `ThresholdDecoy`, once via `ThresholdDelay`).
+/// **Warning:** When a single `Rc<RefCell<T>>` is used for both limits,
+/// [`congestion()`](LimitDecoy::congestion) will be called twice per
+/// `Congestion` event (once via `LimitDecoy`, once via `LimitDelay`).
 /// Implementations must guard against this (e.g., with a timestamp check).
-impl<T, I> ThresholdDecoy<I> for std::rc::Rc<std::cell::RefCell<T>>
+impl<T, I> LimitDecoy<I> for std::rc::Rc<std::cell::RefCell<T>>
 where
-    T: ThresholdDecoy<I>,
+    T: LimitDecoy<I>,
     I: crate::time::Instant,
 {
     fn allow_decoy(&self, current_time: I, machine: MachineId) -> bool {
@@ -75,16 +75,16 @@ where
     }
 }
 
-/// A no-op threshold that always allows decoys.
+/// A no-op limit that always allows decoys.
 ///
 /// Use this when you don't want any framework-level decoy limiting. Per-machine
 /// limits
 /// ([`Machine::allowed_decoy_packets`](crate::Machine::allowed_decoy_packets))
 /// still apply.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct ThresholdDecoyNone;
+pub struct LimitDecoyNone;
 
-impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyNone {
+impl<T: crate::time::Instant> LimitDecoy<T> for LimitDecoyNone {
     fn allow_decoy(&self, _current_time: T, _machine: MachineId) -> bool {
         true
     }
@@ -102,56 +102,53 @@ impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyNone {
     fn congestion(&mut self, _current_time: T) {}
 }
 
-/// A threshold that limits decoy traffic to a fraction of total queued traffic.
+/// A limit that restricts decoy traffic to a fraction of total queued traffic.
 ///
-/// The threshold is computed as `decoy_queued / (decoy_queued + normal_queued)`.
-/// Decoys are allowed when this ratio is below the configured threshold.
+/// The ratio is computed as `decoy_queued / (decoy_queued + normal_queued)`.
+/// Decoys are allowed when this ratio is below the configured limit.
 #[derive(Debug, Clone, Copy)]
-pub struct ThresholdDecoyFrac {
-    threshold: f64,
+pub struct LimitDecoyFrac {
+    limit: f64,
     decoy_queued: u64,
     normal_queued: u64,
 }
 
-impl ThresholdDecoyFrac {
-    /// Creates a new `ThresholdDecoyFrac` with the given threshold.
+impl LimitDecoyFrac {
+    /// Creates a new `LimitDecoyFrac` with the given limit.
     ///
     /// # Panics
     ///
-    /// Panics if `threshold` is not in the range `[0.0, 1.0]`.
-    pub fn new(threshold: f64) -> Self {
-        assert!(
-            (0.0..=1.0).contains(&threshold),
-            "threshold must be in [0.0, 1.0]"
-        );
+    /// Panics if `limit` is not in the range `[0.0, 1.0]`.
+    pub fn new(limit: f64) -> Self {
+        assert!((0.0..=1.0).contains(&limit), "limit must be in [0.0, 1.0]");
         Self {
-            threshold,
+            limit,
             decoy_queued: 0,
             normal_queued: 0,
         }
     }
 }
 
-impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyFrac {
+impl<T: crate::time::Instant> LimitDecoy<T> for LimitDecoyFrac {
     fn allow_decoy(&self, _current_time: T, _machine: MachineId) -> bool {
-        if self.threshold == 0.0 {
+        if self.limit == 0.0 {
             return false;
         }
-        if self.threshold == 1.0 {
+        if self.limit == 1.0 {
             return true;
         }
         let total = self.decoy_queued + self.normal_queued;
         if total == 0 {
             return true;
         }
-        (self.decoy_queued as f64 / total as f64) < self.threshold
+        (self.decoy_queued as f64 / total as f64) < self.limit
     }
 
     fn max_decoys(&self, _current_time: T, _machine: MachineId) -> usize {
-        if self.threshold == 0.0 {
+        if self.limit == 0.0 {
             return 0;
         }
-        if self.threshold == 1.0 {
+        if self.limit == 1.0 {
             return usize::MAX;
         }
 
@@ -161,18 +158,18 @@ impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyFrac {
             return usize::MAX;
         }
 
-        // We want max x such that (decoy + x) / (decoy + normal + x) < threshold
-        // Solving: x < threshold * normal / (1 - threshold) - decoy
-        let limit = self.threshold * self.normal_queued as f64 / (1.0 - self.threshold)
-            - self.decoy_queued as f64;
+        // We want max x such that (decoy + x) / (decoy + normal + x) < limit
+        // Solving: x < limit * normal / (1 - limit) - decoy
+        let max_allowed =
+            self.limit * self.normal_queued as f64 / (1.0 - self.limit) - self.decoy_queued as f64;
 
-        if limit <= 0.0 {
+        if max_allowed <= 0.0 {
             return 0;
         }
 
         // Since we need strict <, use a small epsilon to handle floating point
-        // edge cases where limit computes to exactly an integer
-        let max_x = (limit - 1e-9).max(0.0).floor();
+        // edge cases where max_allowed computes to exactly an integer
+        let max_x = (max_allowed - 1e-9).max(0.0).floor();
 
         if max_x >= usize::MAX as f64 {
             usize::MAX
@@ -195,7 +192,7 @@ impl<T: crate::time::Instant> ThresholdDecoy<T> for ThresholdDecoyFrac {
 }
 
 /// A trait for controlling delay actions from an instance of the framework.
-pub trait ThresholdDelay<T: crate::time::Instant> {
+pub trait LimitDelay<T: crate::time::Instant> {
     /// Returns true if a delay action is allowed to be *scheduled* at the
     /// current time.
     ///
@@ -227,17 +224,17 @@ pub trait ThresholdDelay<T: crate::time::Instant> {
     fn congestion(&mut self, _current_time: T) {}
 }
 
-/// Blanket impl allowing `Rc<RefCell<T>>` to be used as a delay threshold.
-/// This enables a single type implementing both [`ThresholdDecoy`] and
-/// [`ThresholdDelay`] to be shared between the two framework threshold fields.
+/// Blanket impl allowing `Rc<RefCell<T>>` to be used as a delay limit. This
+/// enables a single type implementing both [`LimitDecoy`] and [`LimitDelay`] to
+/// be shared between the two framework limit fields.
 ///
-/// **Warning:** When a single `Rc<RefCell<T>>` is used for both thresholds,
-/// [`congestion()`](ThresholdDelay::congestion) will be called twice per
-/// `Congestion` event (once via `ThresholdDecoy`, once via `ThresholdDelay`).
+/// **Warning:** When a single `Rc<RefCell<T>>` is used for both limits,
+/// [`congestion()`](LimitDelay::congestion) will be called twice per
+/// `Congestion` event (once via `LimitDecoy`, once via `LimitDelay`).
 /// Implementations must guard against this (e.g., with a timestamp check).
-impl<T, I> ThresholdDelay<I> for std::rc::Rc<std::cell::RefCell<T>>
+impl<T, I> LimitDelay<I> for std::rc::Rc<std::cell::RefCell<T>>
 where
-    T: ThresholdDelay<I>,
+    T: LimitDelay<I>,
     I: crate::time::Instant,
 {
     fn allow_delay(&self, current_time: I, machine: MachineId) -> bool {
@@ -265,14 +262,14 @@ where
     }
 }
 
-/// A no-op threshold that always allows delays.
+/// A no-op limit that always allows delays.
 ///
 /// Use this when you don't want any framework-level delay limiting. Per-machine
 /// limits still apply.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct ThresholdDelayNone;
+pub struct LimitDelayNone;
 
-impl<T: crate::time::Instant> ThresholdDelay<T> for ThresholdDelayNone {
+impl<T: crate::time::Instant> LimitDelay<T> for LimitDelayNone {
     fn allow_delay(&self, _current_time: T, _machine: MachineId) -> bool {
         true
     }
@@ -291,39 +288,36 @@ impl<T: crate::time::Instant> ThresholdDelay<T> for ThresholdDelayNone {
     fn delay_end(&mut self, _current_time: T) {}
 }
 
-/// A threshold that limits delay time to a fraction of a rolling time window.
+/// A limit that restricts delay time to a fraction of a rolling time window.
 ///
 /// Tracks how much time has been spent in delay within a configurable window,
-/// and allows new delays only when the fraction is below the threshold.
+/// and allows new delays only when the fraction is below the configured limit.
 ///
 /// Note: Only one delay can be active at a time (shared connection). Multiple
 /// `delay_begin` calls don't stack; `delay_end` always ends the current delay.
 #[derive(Debug, Clone)]
-pub struct ThresholdDelayFrac<T: crate::time::Instant> {
-    threshold: f64,
+pub struct LimitDelayFrac<T: crate::time::Instant> {
+    limit: f64,
     window: T::Duration,
     max_packets: usize,
     completed_delays: std::collections::VecDeque<(T, T)>,
     ongoing_delay: Option<T>,
 }
 
-impl<T: crate::time::Instant> ThresholdDelayFrac<T> {
-    /// Creates a new `ThresholdDelayFrac` with the given threshold, window, and
-    /// max packets.
+impl<T: crate::time::Instant> LimitDelayFrac<T> {
+    /// Creates a new `LimitDelayFrac` with the given limit, window, and max
+    /// packets.
     ///
     /// # Panics
     ///
-    /// Panics if `threshold` is not in the range `[0.0, 1.0]` or if `window` is
+    /// Panics if `limit` is not in the range `[0.0, 1.0]` or if `window` is
     /// zero.
-    pub fn new(threshold: f64, window: T::Duration, max_packets: usize) -> Self {
+    pub fn new(limit: f64, window: T::Duration, max_packets: usize) -> Self {
         use crate::time::Duration;
-        assert!(
-            (0.0..=1.0).contains(&threshold),
-            "threshold must be in [0.0, 1.0]"
-        );
+        assert!((0.0..=1.0).contains(&limit), "limit must be in [0.0, 1.0]");
         assert!(!window.is_zero(), "window must be non-zero");
         Self {
-            threshold,
+            limit,
             window,
             max_packets,
             completed_delays: std::collections::VecDeque::new(),
@@ -342,9 +336,9 @@ impl<T: crate::time::Instant> ThresholdDelayFrac<T> {
             let ago_begin = current_time.saturating_duration_since(begin);
             let ago_end = current_time.saturating_duration_since(end);
 
-            // begin_frac: how far back (as fraction of window) the delay started
-            // clamped to 1.0 since delays starting before the window only count
-            // from the window edge
+            // begin_frac: how far back (as fraction of window) the delay
+            // started clamped to 1.0 since delays starting before the window
+            // only count from the window edge
             let begin_frac = ago_begin.div_duration_f64(self.window).min(1.0);
             // end_frac: how far back (as fraction of window) the delay ended
             let end_frac = ago_end.div_duration_f64(self.window);
@@ -379,9 +373,9 @@ impl<T: crate::time::Instant> ThresholdDelayFrac<T> {
     }
 }
 
-impl<T: crate::time::Instant> ThresholdDelay<T> for ThresholdDelayFrac<T> {
+impl<T: crate::time::Instant> LimitDelay<T> for LimitDelayFrac<T> {
     fn allow_delay(&self, current_time: T, _machine: MachineId) -> bool {
-        self.compute_delay_fraction(current_time) < self.threshold
+        self.compute_delay_fraction(current_time) < self.limit
     }
 
     fn max_delayed_packets(&self, current_time: T, machine: MachineId) -> usize {
@@ -422,7 +416,7 @@ mod tests {
 
     #[test]
     fn decoy_none_always_allows() {
-        let t = ThresholdDecoyNone;
+        let t = LimitDecoyNone;
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
         assert!(t.allow_decoy(now, mid));
@@ -431,19 +425,19 @@ mod tests {
 
     #[test]
     fn decoy_frac_zero() {
-        let t = ThresholdDecoyFrac::new(0.0);
+        let t = LimitDecoyFrac::new(0.0);
         assert!(!t.allow_decoy(Instant::now(), MachineId::from_raw(0)));
     }
 
     #[test]
     fn decoy_frac_one() {
-        let t = ThresholdDecoyFrac::new(1.0);
+        let t = LimitDecoyFrac::new(1.0);
         assert!(t.allow_decoy(Instant::now(), MachineId::from_raw(0)));
     }
 
     #[test]
     fn decoy_frac_half() {
-        let mut t = ThresholdDecoyFrac::new(0.5);
+        let mut t = LimitDecoyFrac::new(0.5);
         let now = Instant::now();
         // No traffic yet - allow
         assert!(t.allow_decoy(now, MachineId::from_raw(0)));
@@ -457,18 +451,18 @@ mod tests {
 
     #[test]
     fn decoy_frac_max_decoys() {
-        let mut t = ThresholdDecoyFrac::new(0.5);
+        let mut t = LimitDecoyFrac::new(0.5);
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
 
         // No traffic yet - unlimited
         assert_eq!(t.max_decoys(now, mid), usize::MAX);
 
-        // 1 normal, 0 decoy: can add 0 decoys (1/2 = 0.5 would hit threshold)
+        // 1 normal, 0 decoy: can add 0 decoys (1/2 = 0.5 would hit limit)
         t.normal_queued(now);
         assert_eq!(t.max_decoys(now, mid), 0);
 
-        // 2 normal, 0 decoy: can add 1 decoy (1/3 < 0.5, but 2/4 = 0.5 hits threshold)
+        // 2 normal, 0 decoy: can add 1 decoy (1/3 < 0.5, but 2/4 = 0.5 hits limit)
         t.normal_queued(now);
         assert_eq!(t.max_decoys(now, mid), 1);
 
@@ -484,20 +478,20 @@ mod tests {
         t.decoy_queued(now, mid);
         assert_eq!(t.max_decoys(now, mid), 0);
 
-        // 3 normal, 3 decoy: over threshold, 0 allowed
+        // 3 normal, 3 decoy: over limit, 0 allowed
         t.decoy_queued(now, mid);
         assert_eq!(t.max_decoys(now, mid), 0);
     }
 
     #[test]
-    fn decoy_frac_max_decoys_threshold_zero() {
-        let t = ThresholdDecoyFrac::new(0.0);
+    fn decoy_frac_max_decoys_limit_zero() {
+        let t = LimitDecoyFrac::new(0.0);
         assert_eq!(t.max_decoys(Instant::now(), MachineId::from_raw(0)), 0);
     }
 
     #[test]
-    fn decoy_frac_max_decoys_threshold_one() {
-        let t = ThresholdDecoyFrac::new(1.0);
+    fn decoy_frac_max_decoys_limit_one() {
+        let t = LimitDecoyFrac::new(1.0);
         assert_eq!(
             t.max_decoys(Instant::now(), MachineId::from_raw(0)),
             usize::MAX
@@ -505,20 +499,20 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "threshold must be in [0.0, 1.0]")]
-    fn decoy_frac_invalid_threshold_negative() {
-        ThresholdDecoyFrac::new(-0.1);
+    #[should_panic(expected = "limit must be in [0.0, 1.0]")]
+    fn decoy_frac_invalid_limit_negative() {
+        LimitDecoyFrac::new(-0.1);
     }
 
     #[test]
-    #[should_panic(expected = "threshold must be in [0.0, 1.0]")]
-    fn decoy_frac_invalid_threshold_over_one() {
-        ThresholdDecoyFrac::new(1.1);
+    #[should_panic(expected = "limit must be in [0.0, 1.0]")]
+    fn decoy_frac_invalid_limit_over_one() {
+        LimitDecoyFrac::new(1.1);
     }
 
     #[test]
     fn delay_none_always_allows() {
-        let t = ThresholdDelayNone;
+        let t = LimitDelayNone;
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
         assert!(t.allow_delay(now, mid));
@@ -530,21 +524,19 @@ mod tests {
     }
 
     #[test]
-    fn delay_frac_threshold_zero_never_allows() {
-        let t: ThresholdDelayFrac<Instant> =
-            ThresholdDelayFrac::new(0.0, Duration::from_secs(10), 100);
+    fn delay_frac_limit_zero_never_allows() {
+        let t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.0, Duration::from_secs(10), 100);
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
-        // Threshold 0.0 means 0% < 0.0 is never true
+        // Limit 0.0 means 0% < 0.0 is never true
         assert!(!t.allow_delay(now, mid));
         assert_eq!(t.max_delayed_packets(now, mid), 0);
         assert_eq!(t.max_delayed_duration(now, mid), Duration::ZERO);
     }
 
     #[test]
-    fn delay_frac_threshold_one_always_allows() {
-        let t: ThresholdDelayFrac<Instant> =
-            ThresholdDelayFrac::new(1.0, Duration::from_secs(10), 100);
+    fn delay_frac_limit_one_always_allows() {
+        let t: LimitDelayFrac<Instant> = LimitDelayFrac::new(1.0, Duration::from_secs(10), 100);
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
         // Initially no delay, 0% < 100% -> allow
@@ -555,7 +547,7 @@ mod tests {
     #[test]
     fn delay_frac_tracks_fraction() {
         let window = Duration::from_secs(10);
-        let mut t: ThresholdDelayFrac<Instant> = ThresholdDelayFrac::new(0.5, window, 100);
+        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100);
         let mid = MachineId::from_raw(0);
 
         let start = Instant::now();
@@ -595,7 +587,7 @@ mod tests {
     #[test]
     fn delay_frac_window_expiration_cleanup() {
         let window = Duration::from_secs(10);
-        let mut t: ThresholdDelayFrac<Instant> = ThresholdDelayFrac::new(0.5, window, 100);
+        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100);
 
         let start = Instant::now();
 
@@ -620,7 +612,7 @@ mod tests {
     #[test]
     fn delay_frac_multiple_delay_begin_ignored() {
         let window = Duration::from_secs(10);
-        let mut t: ThresholdDelayFrac<Instant> = ThresholdDelayFrac::new(0.5, window, 100);
+        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100);
 
         let start = Instant::now();
         t.delay_begin(start);
@@ -643,7 +635,7 @@ mod tests {
     #[test]
     fn delay_frac_delay_end_without_begin_ignored() {
         let window = Duration::from_secs(10);
-        let mut t: ThresholdDelayFrac<Instant> = ThresholdDelayFrac::new(0.5, window, 100);
+        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100);
 
         let now = Instant::now();
         t.delay_end(now);
@@ -653,38 +645,36 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "threshold must be in [0.0, 1.0]")]
-    fn delay_frac_invalid_threshold_negative() {
-        let _: ThresholdDelayFrac<Instant> =
-            ThresholdDelayFrac::new(-0.1, Duration::from_secs(10), 100);
+    #[should_panic(expected = "limit must be in [0.0, 1.0]")]
+    fn delay_frac_invalid_limit_negative() {
+        let _: LimitDelayFrac<Instant> = LimitDelayFrac::new(-0.1, Duration::from_secs(10), 100);
     }
 
     #[test]
-    #[should_panic(expected = "threshold must be in [0.0, 1.0]")]
-    fn delay_frac_invalid_threshold_over_one() {
-        let _: ThresholdDelayFrac<Instant> =
-            ThresholdDelayFrac::new(1.1, Duration::from_secs(10), 100);
+    #[should_panic(expected = "limit must be in [0.0, 1.0]")]
+    fn delay_frac_invalid_limit_over_one() {
+        let _: LimitDelayFrac<Instant> = LimitDelayFrac::new(1.1, Duration::from_secs(10), 100);
     }
 
     #[test]
     #[should_panic(expected = "window must be non-zero")]
     fn delay_frac_invalid_window_zero() {
-        let _: ThresholdDelayFrac<Instant> = ThresholdDelayFrac::new(0.5, Duration::ZERO, 100);
+        let _: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, Duration::ZERO, 100);
     }
 
     #[test]
-    fn joint_threshold_shared_state() {
+    fn joint_limit_shared_state() {
         use crate::Framework;
         use std::cell::RefCell;
         use std::rc::Rc;
 
-        /// A joint threshold that implements both ThresholdDecoy and ThresholdDelay,
+        /// A joint limit that implements both LimitDecoy and LimitDelay,
         /// tracking total operations across both.
-        struct JointThreshold {
+        struct JointLimit {
             operations: u64,
         }
 
-        impl ThresholdDecoy<Instant> for JointThreshold {
+        impl LimitDecoy<Instant> for JointLimit {
             fn allow_decoy(&self, _current_time: Instant, _machine: MachineId) -> bool {
                 true
             }
@@ -705,7 +695,7 @@ mod tests {
             }
         }
 
-        impl ThresholdDelay<Instant> for JointThreshold {
+        impl LimitDelay<Instant> for JointLimit {
             fn allow_delay(&self, _current_time: Instant, _machine: MachineId) -> bool {
                 true
             }
@@ -730,7 +720,7 @@ mod tests {
             }
         }
 
-        let joint = Rc::new(RefCell::new(JointThreshold { operations: 0 }));
+        let joint = Rc::new(RefCell::new(JointLimit { operations: 0 }));
         let machines: Vec<crate::Machine> = vec![];
         let now = Instant::now();
         let mut f =
@@ -738,15 +728,15 @@ mod tests {
 
         assert_eq!(joint.borrow().operations, 0);
 
-        // NormalQueued triggers decoy_threshold.normal_queued
+        // NormalQueued triggers decoy_limit.normal_queued
         let _ = f.trigger_events(&[crate::TriggerEvent::NormalQueued], now);
         assert_eq!(joint.borrow().operations, 1);
 
-        // PacketSent triggers decoy_threshold.packet_sent
+        // PacketSent triggers decoy_limit.packet_sent
         let _ = f.trigger_events(&[crate::TriggerEvent::PacketSent], now);
         assert_eq!(joint.borrow().operations, 2);
 
-        // DelayBegin triggers delay_threshold.delay_begin (shared state!)
+        // DelayBegin triggers delay_limit.delay_begin (shared state!)
         let _ = f.trigger_events(
             &[crate::TriggerEvent::DelayBegin {
                 machine: MachineId::from_raw(0),
@@ -755,7 +745,7 @@ mod tests {
         );
         assert_eq!(joint.borrow().operations, 3);
 
-        // DelayEnd triggers delay_threshold.delay_end (shared state!)
+        // DelayEnd triggers delay_limit.delay_end (shared state!)
         let _ = f.trigger_events(&[crate::TriggerEvent::DelayEnd], now);
         assert_eq!(joint.borrow().operations, 4);
 

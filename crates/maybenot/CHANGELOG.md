@@ -25,8 +25,8 @@ Manually generated changelog, for now. We follow semantic versioning.
   the maximum number of packets to delay. The delay now ends on either the
   maximum number of packets delayed OR the delay duration expiring, whichever
   happens first. This increases the expressiveness of the delay action.
-- Removed the rate limiting wrapper for the framework. The new threshold traits
-  can be used to implement similar functionality.
+- Removed the rate limiting wrapper for the framework. The new limit traits can
+  be used to implement similar functionality.
 
 ## 2.2.2 - 2025-09-12
 
