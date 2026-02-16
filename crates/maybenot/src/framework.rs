@@ -661,20 +661,6 @@ where
         machine: &Machine,
         mi: usize,
     ) -> (bool, bool) {
-        let current = &machine.states[runtime.current_state];
-
-        // special case: we always allow overwriting existing delay
-        let replace = if let Some(Action::DelayTraffic { replace, .. }) = current.action {
-            replace
-        } else {
-            false
-        };
-
-        if replace && self.delay_active {
-            // we still check against state limit, because it's machine internal
-            return (runtime.state_limit > 0, false);
-        }
-
         // compute duration we've been delaying
         let mut total_delay_duration = self.delay_duration;
         if self.delay_active {
