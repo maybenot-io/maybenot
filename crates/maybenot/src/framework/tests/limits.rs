@@ -45,7 +45,7 @@ fn framework_max_decoy_frac() {
     let machines = vec![m1, m2];
     let mut f = Framework::new(
         &machines,
-        LimitDecoyFrac::new(0.5),
+        LimitDecoyFrac::new(0.5).unwrap(),
         LimitDelayNone,
         current_time,
         rand::rng(),
@@ -196,7 +196,7 @@ fn framework_max_delay_frac() {
     let mut f = Framework::new(
         &machines,
         LimitDecoyNone,
-        LimitDelayFrac::new(0.4, Duration::from_micros(100), usize::MAX),
+        LimitDelayFrac::new(0.4, Duration::from_micros(100), usize::MAX).unwrap(),
         current_time,
         rand::rng(),
     )

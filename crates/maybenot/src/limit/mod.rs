@@ -14,6 +14,26 @@ pub mod delay;
 pub use decoy::{LimitDecoyFrac, LimitDecoyFracWindowed, LimitDecoyNone};
 pub use delay::{LimitDelayFrac, LimitDelayNone};
 
+/// Error returned by limit constructors when given invalid configuration.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LimitError {
+    /// The `limit` parameter must be in the range `[0.0, 1.0]`.
+    InvalidLimit,
+    /// The `window` parameter must not be zero.
+    InvalidWindow,
+}
+
+impl std::fmt::Display for LimitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LimitError::InvalidLimit => write!(f, "limit must be in [0.0, 1.0]"),
+            LimitError::InvalidWindow => write!(f, "window must not be zero"),
+        }
+    }
+}
+
+impl std::error::Error for LimitError {}
+
 use crate::MachineId;
 
 /// A trait for controlling decoy actions from an instance of the framework.

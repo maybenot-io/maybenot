@@ -1,5 +1,5 @@
 use super::LimitDelay;
-use crate::MachineId;
+use crate::{LimitError, MachineId};
 
 /// A no-op limit that always allows delays.
 ///
@@ -47,21 +47,25 @@ impl<T: crate::time::Instant> LimitDelayFrac<T> {
     /// Creates a new `LimitDelayFrac` with the given limit, window, and max
     /// packets.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `limit` is not in the range `[0.0, 1.0]` or if `window` is
-    /// zero.
-    pub fn new(limit: f64, window: T::Duration, max_packets: usize) -> Self {
+    /// Returns [`LimitError::InvalidLimit`] if `limit` is not in `[0.0, 1.0]`,
+    /// or [`LimitError::InvalidWindow`] if `window` is zero.
+    pub fn new(limit: f64, window: T::Duration, max_packets: usize) -> Result<Self, LimitError> {
         use crate::time::Duration;
-        assert!((0.0..=1.0).contains(&limit), "limit must be in [0.0, 1.0]");
-        assert!(!window.is_zero(), "window must be non-zero");
-        Self {
+        if !(0.0..=1.0).contains(&limit) {
+            return Err(LimitError::InvalidLimit);
+        }
+        if window.is_zero() {
+            return Err(LimitError::InvalidWindow);
+        }
+        Ok(Self {
             limit,
             window,
             max_packets,
             completed_delays: std::collections::VecDeque::new(),
             ongoing_delay: None,
-        }
+        })
     }
 
     /// Computes the fraction of the window that has been spent in delay.
@@ -168,7 +172,8 @@ mod tests {
 
     #[test]
     fn delay_frac_limit_zero_never_allows() {
-        let t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.0, Duration::from_secs(10), 100);
+        let t: LimitDelayFrac<Instant> =
+            LimitDelayFrac::new(0.0, Duration::from_secs(10), 100).unwrap();
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
         // Limit 0.0 means 0% < 0.0 is never true
@@ -179,7 +184,8 @@ mod tests {
 
     #[test]
     fn delay_frac_limit_one_always_allows() {
-        let t: LimitDelayFrac<Instant> = LimitDelayFrac::new(1.0, Duration::from_secs(10), 100);
+        let t: LimitDelayFrac<Instant> =
+            LimitDelayFrac::new(1.0, Duration::from_secs(10), 100).unwrap();
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
         // Initially no delay, 0% < 100% -> allow
@@ -190,7 +196,7 @@ mod tests {
     #[test]
     fn delay_frac_tracks_fraction() {
         let window = Duration::from_secs(10);
-        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100);
+        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100).unwrap();
         let mid = MachineId::from_raw(0);
 
         let start = Instant::now();
@@ -230,7 +236,7 @@ mod tests {
     #[test]
     fn delay_frac_window_expiration_cleanup() {
         let window = Duration::from_secs(10);
-        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100);
+        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100).unwrap();
 
         let start = Instant::now();
 
@@ -255,7 +261,7 @@ mod tests {
     #[test]
     fn delay_frac_multiple_delay_begin_ignored() {
         let window = Duration::from_secs(10);
-        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100);
+        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100).unwrap();
 
         let start = Instant::now();
         t.delay_begin(start);
@@ -278,7 +284,7 @@ mod tests {
     #[test]
     fn delay_frac_delay_end_without_begin_ignored() {
         let window = Duration::from_secs(10);
-        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100);
+        let mut t: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, window, 100).unwrap();
 
         let now = Instant::now();
         t.delay_end(now);
@@ -288,20 +294,26 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "limit must be in [0.0, 1.0]")]
     fn delay_frac_invalid_limit_negative() {
-        let _: LimitDelayFrac<Instant> = LimitDelayFrac::new(-0.1, Duration::from_secs(10), 100);
+        assert_eq!(
+            LimitDelayFrac::<Instant>::new(-0.1, Duration::from_secs(10), 100).unwrap_err(),
+            crate::limit::LimitError::InvalidLimit
+        );
     }
 
     #[test]
-    #[should_panic(expected = "limit must be in [0.0, 1.0]")]
     fn delay_frac_invalid_limit_over_one() {
-        let _: LimitDelayFrac<Instant> = LimitDelayFrac::new(1.1, Duration::from_secs(10), 100);
+        assert_eq!(
+            LimitDelayFrac::<Instant>::new(1.1, Duration::from_secs(10), 100).unwrap_err(),
+            crate::limit::LimitError::InvalidLimit
+        );
     }
 
     #[test]
-    #[should_panic(expected = "window must be non-zero")]
     fn delay_frac_invalid_window_zero() {
-        let _: LimitDelayFrac<Instant> = LimitDelayFrac::new(0.5, Duration::ZERO, 100);
+        assert_eq!(
+            LimitDelayFrac::<Instant>::new(0.5, Duration::ZERO, 100).unwrap_err(),
+            crate::limit::LimitError::InvalidWindow
+        );
     }
 }

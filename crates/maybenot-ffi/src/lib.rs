@@ -260,18 +260,19 @@ impl MaybenotFramework {
 
         // Convert max_decoy_frac to limit: if 0, use no limit (allows all decoys)
         let decoy_limit = if max_decoy_frac > 0.0 {
-            DynamicLimitDecoy::Frac(LimitDecoyFrac::new(max_decoy_frac))
+            DynamicLimitDecoy::Frac(
+                LimitDecoyFrac::new(max_decoy_frac).map_err(|_| MaybenotResult::StartFramework)?,
+            )
         } else {
             DynamicLimitDecoy::None(LimitDecoyNone)
         };
 
         // Convert max_delay_frac to limit: if 0, use no limit (allows all delays)
         let delay_limit = if max_delay_frac > 0.0 {
-            DynamicLimitDelay::Frac(LimitDelayFrac::new(
-                max_delay_frac,
-                Duration::from_secs(1),
-                usize::MAX,
-            ))
+            DynamicLimitDelay::Frac(
+                LimitDelayFrac::new(max_delay_frac, Duration::from_secs(1), usize::MAX)
+                    .map_err(|_| MaybenotResult::StartFramework)?,
+            )
         } else {
             DynamicLimitDelay::None(LimitDelayNone)
         };

@@ -1,6 +1,6 @@
 use super::LimitDecoy;
-use crate::MachineId;
 use crate::time::Duration as _;
+use crate::{LimitError, MachineId};
 
 /// A no-op limit that always allows decoys.
 ///
@@ -43,16 +43,18 @@ pub struct LimitDecoyFrac {
 impl LimitDecoyFrac {
     /// Creates a new `LimitDecoyFrac` with the given limit.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `limit` is not in the range `[0.0, 1.0]`.
-    pub fn new(limit: f64) -> Self {
-        assert!((0.0..=1.0).contains(&limit), "limit must be in [0.0, 1.0]");
-        Self {
+    /// Returns [`LimitError::InvalidLimit`] if `limit` is not in `[0.0, 1.0]`.
+    pub fn new(limit: f64) -> Result<Self, LimitError> {
+        if !(0.0..=1.0).contains(&limit) {
+            return Err(LimitError::InvalidLimit);
+        }
+        Ok(Self {
             limit,
             decoy_queued: 0,
             normal_queued: 0,
-        }
+        })
     }
 }
 
@@ -149,20 +151,29 @@ impl<T: crate::time::Instant> LimitDecoyFracWindowed<T> {
     /// - `min_normal_per_window`: allow decoys unconditionally when the smoothed
     ///   normal count is below this value
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if `limit` is not in `[0.0, 1.0]` or `window` is zero.
-    pub fn new(limit: f64, window: T::Duration, min_normal_per_window: u64) -> Self {
-        assert!((0.0..=1.0).contains(&limit), "limit must be in [0.0, 1.0]");
-        assert!(!window.is_zero(), "window must not be zero");
-        Self {
+    /// Returns [`LimitError::InvalidLimit`] if `limit` is not in `[0.0, 1.0]`,
+    /// or [`LimitError::InvalidWindow`] if `window` is zero.
+    pub fn new(
+        limit: f64,
+        window: T::Duration,
+        min_normal_per_window: u64,
+    ) -> Result<Self, LimitError> {
+        if !(0.0..=1.0).contains(&limit) {
+            return Err(LimitError::InvalidLimit);
+        }
+        if window.is_zero() {
+            return Err(LimitError::InvalidWindow);
+        }
+        Ok(Self {
             limit,
             tau: window,
             min_normal: min_normal_per_window,
             normal_rate: 0.0,
             decoy_rate: 0.0,
             last_update: None,
-        }
+        })
     }
 
     /// Returns `(normal_rate, decoy_rate)` decayed to the given time, without
@@ -275,19 +286,19 @@ mod tests {
 
     #[test]
     fn decoy_frac_zero() {
-        let t = LimitDecoyFrac::new(0.0);
+        let t = LimitDecoyFrac::new(0.0).unwrap();
         assert!(!t.allow_decoy(Instant::now(), MachineId::from_raw(0)));
     }
 
     #[test]
     fn decoy_frac_one() {
-        let t = LimitDecoyFrac::new(1.0);
+        let t = LimitDecoyFrac::new(1.0).unwrap();
         assert!(t.allow_decoy(Instant::now(), MachineId::from_raw(0)));
     }
 
     #[test]
     fn decoy_frac_half() {
-        let mut t = LimitDecoyFrac::new(0.5);
+        let mut t = LimitDecoyFrac::new(0.5).unwrap();
         let now = Instant::now();
         // No traffic yet - allow
         assert!(t.allow_decoy(now, MachineId::from_raw(0)));
@@ -301,7 +312,7 @@ mod tests {
 
     #[test]
     fn decoy_frac_max_decoys() {
-        let mut t = LimitDecoyFrac::new(0.5);
+        let mut t = LimitDecoyFrac::new(0.5).unwrap();
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
 
@@ -335,13 +346,13 @@ mod tests {
 
     #[test]
     fn decoy_frac_max_decoys_limit_zero() {
-        let t = LimitDecoyFrac::new(0.0);
+        let t = LimitDecoyFrac::new(0.0).unwrap();
         assert_eq!(t.max_decoys(Instant::now(), MachineId::from_raw(0)), 0);
     }
 
     #[test]
     fn decoy_frac_max_decoys_limit_one() {
-        let t = LimitDecoyFrac::new(1.0);
+        let t = LimitDecoyFrac::new(1.0).unwrap();
         assert_eq!(
             t.max_decoys(Instant::now(), MachineId::from_raw(0)),
             usize::MAX
@@ -349,15 +360,19 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "limit must be in [0.0, 1.0]")]
     fn decoy_frac_invalid_limit_negative() {
-        LimitDecoyFrac::new(-0.1);
+        assert_eq!(
+            LimitDecoyFrac::new(-0.1).unwrap_err(),
+            crate::limit::LimitError::InvalidLimit
+        );
     }
 
     #[test]
-    #[should_panic(expected = "limit must be in [0.0, 1.0]")]
     fn decoy_frac_invalid_limit_over_one() {
-        LimitDecoyFrac::new(1.1);
+        assert_eq!(
+            LimitDecoyFrac::new(1.1).unwrap_err(),
+            crate::limit::LimitError::InvalidLimit
+        );
     }
 
     // --- LimitDecoyFracWindowed tests ---
@@ -365,7 +380,7 @@ mod tests {
     #[test]
     fn windowed_zero_limit() {
         let t: LimitDecoyFracWindowed<Instant> =
-            LimitDecoyFracWindowed::new(0.0, Duration::from_secs(1), 0);
+            LimitDecoyFracWindowed::new(0.0, Duration::from_secs(1), 0).unwrap();
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
         assert!(!t.allow_decoy(now, mid));
@@ -375,7 +390,7 @@ mod tests {
     #[test]
     fn windowed_one_limit() {
         let t: LimitDecoyFracWindowed<Instant> =
-            LimitDecoyFracWindowed::new(1.0, Duration::from_secs(1), 0);
+            LimitDecoyFracWindowed::new(1.0, Duration::from_secs(1), 0).unwrap();
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
         assert!(t.allow_decoy(now, mid));
@@ -385,7 +400,7 @@ mod tests {
     #[test]
     fn windowed_half_basic() {
         let mut t: LimitDecoyFracWindowed<Instant> =
-            LimitDecoyFracWindowed::new(0.5, Duration::from_secs(10), 0);
+            LimitDecoyFracWindowed::new(0.5, Duration::from_secs(10), 0).unwrap();
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
 
@@ -404,7 +419,7 @@ mod tests {
     #[test]
     fn windowed_max_decoys() {
         let mut t: LimitDecoyFracWindowed<Instant> =
-            LimitDecoyFracWindowed::new(0.5, Duration::from_secs(10), 0);
+            LimitDecoyFracWindowed::new(0.5, Duration::from_secs(10), 0).unwrap();
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
 
@@ -439,7 +454,7 @@ mod tests {
     #[test]
     fn windowed_min_normal_guard() {
         let mut t: LimitDecoyFracWindowed<Instant> =
-            LimitDecoyFracWindowed::new(0.5, Duration::from_secs(10), 3);
+            LimitDecoyFracWindowed::new(0.5, Duration::from_secs(10), 3).unwrap();
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
 
@@ -460,7 +475,7 @@ mod tests {
     #[test]
     fn windowed_time_decay() {
         let mut t: LimitDecoyFracWindowed<Instant> =
-            LimitDecoyFracWindowed::new(0.5, Duration::from_secs(1), 0);
+            LimitDecoyFracWindowed::new(0.5, Duration::from_secs(1), 0).unwrap();
         let now = Instant::now();
         let mid = MachineId::from_raw(0);
 
@@ -480,14 +495,18 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "limit must be in [0.0, 1.0]")]
-    fn windowed_constructor_panics_invalid_limit() {
-        LimitDecoyFracWindowed::<Instant>::new(1.5, Duration::from_secs(1), 0);
+    fn windowed_constructor_invalid_limit() {
+        assert_eq!(
+            LimitDecoyFracWindowed::<Instant>::new(1.5, Duration::from_secs(1), 0).unwrap_err(),
+            crate::limit::LimitError::InvalidLimit
+        );
     }
 
     #[test]
-    #[should_panic(expected = "window must not be zero")]
-    fn windowed_constructor_panics_zero_window() {
-        LimitDecoyFracWindowed::<Instant>::new(0.5, Duration::ZERO, 0);
+    fn windowed_constructor_zero_window() {
+        assert_eq!(
+            LimitDecoyFracWindowed::<Instant>::new(0.5, Duration::ZERO, 0).unwrap_err(),
+            crate::limit::LimitError::InvalidWindow
+        );
     }
 }
