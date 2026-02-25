@@ -11,7 +11,7 @@
 pub mod decoy;
 pub mod delay;
 
-pub use decoy::{LimitDecoyFrac, LimitDecoyNone};
+pub use decoy::{LimitDecoyFrac, LimitDecoyFracWindowed, LimitDecoyNone};
 pub use delay::{LimitDelayFrac, LimitDelayNone};
 
 use crate::MachineId;

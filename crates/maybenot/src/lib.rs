@@ -287,7 +287,8 @@ pub use crate::action::{Timer, TriggerAction};
 pub use crate::error::Error;
 pub use crate::event::TriggerEvent;
 pub use crate::limit::{
-    LimitDecoy, LimitDecoyFrac, LimitDecoyNone, LimitDelay, LimitDelayFrac, LimitDelayNone,
+    LimitDecoy, LimitDecoyFrac, LimitDecoyFracWindowed, LimitDecoyNone, LimitDelay, LimitDelayFrac,
+    LimitDelayNone,
 };
 pub use framework::{Framework, MachineId};
 pub use machine::Machine;
