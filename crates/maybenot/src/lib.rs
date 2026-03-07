@@ -34,7 +34,7 @@
 //! // of the framework for the same machines, then share the same vector
 //! // across framework instances. All runtime information is allocated
 //! // internally in the framework without modifying the machines.
-//! let s = "02eNpjYGBkQAcAACYAAg==";
+//! let s = "03eNpjYGBkQAcAACYAAg==";
 //! // machines will error if invalid
 //! let m = vec![Machine::from_str(s).unwrap()];
 //!
@@ -298,7 +298,7 @@ mod tests {
 
     #[test]
     fn constants_set() {
-        assert_eq!(crate::constants::VERSION, 2);
+        assert_eq!(crate::constants::VERSION, 3);
     }
 
     #[test]
@@ -319,7 +319,7 @@ mod tests {
         // of the framework for the same machines, then share the same vector
         // across framework instances. All runtime information is allocated
         // internally in the framework without modifying the machines.
-        let s = "02eNpjYGBkQAcAACYAAg==";
+        let s = "03eNpjYGBkQAcAACYAAg==";
         // machines will error if invalid
         let m = vec![Machine::from_str(s).unwrap()];
 

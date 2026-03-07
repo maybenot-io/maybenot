@@ -40,5 +40,5 @@ fn noop_machine() {
     _ => vec![],
     });
     let m = Machine::new(0, 0, vec![s0]).unwrap();
-    assert_eq!(m.serialize(), "02eNpjYGBkQAcAACYAAg==");
+    assert_eq!(m.serialize(), "03eNpjYGBkQAcAACYAAg==");
 }

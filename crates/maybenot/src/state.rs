@@ -239,8 +239,8 @@ mod tests {
              _ => vec![],
         });
 
-        let s0 = bincode::serialize(&s0).unwrap();
-        let s0: State = bincode::deserialize(&s0).unwrap();
+        let s0 = postcard::to_allocvec(&s0).unwrap();
+        let s0: State = postcard::from_bytes(&s0).unwrap();
 
         assert_eq!(
             s0.sample_state(Event::DecoyQueued, &mut rand::rng()),

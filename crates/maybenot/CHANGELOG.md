@@ -27,6 +27,8 @@ Manually generated changelog, for now. We follow semantic versioning.
   happens first. This increases the expressiveness of the delay action.
 - Removed the rate limiting wrapper for the framework. The new limit traits can
   be used to implement similar functionality.
+- Replaced unmaintained bincode with postcard in the v3 machine serialization
+  format, bumping version prefix to 03.
 
 ## 2.2.2 - 2025-09-12
 

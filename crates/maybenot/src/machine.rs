@@ -4,6 +4,7 @@
 use crate::constants::{MAX_DECOMPRESSED_SIZE, STATE_MAX, VERSION};
 use crate::{Error, state};
 use base64::prelude::*;
+#[cfg(feature = "legacy-v02")]
 use bincode::Options;
 use flate2::Compression;
 use flate2::read::ZlibDecoder;
@@ -57,12 +58,11 @@ impl Machine {
     }
 
     pub fn serialize(&self) -> String {
-        let bincoder = bincode::DefaultOptions::new().with_limit(MAX_DECOMPRESSED_SIZE as u64);
-        let encoded = bincoder.serialize(&self).unwrap();
+        let encoded = postcard::to_allocvec(&self).unwrap();
         let mut e = ZlibEncoder::new(Vec::new(), Compression::best());
         e.write_all(encoded.as_slice()).unwrap();
         let s = BASE64_STANDARD.encode(e.finish().unwrap());
-        // version as first 2 characters, then base64 compressed bincoded
+        // version as first 2 characters, then base64 compressed postcard
         format!("{VERSION:02}{s}")
     }
 
@@ -107,19 +107,12 @@ impl FromStr for Machine {
             Err(Error::Machine("string is not ascii".to_string()))?;
         }
         let version = &s[0..2];
-        if version != format!("{VERSION:02}") {
-            Err(Error::Machine(format!(
-                "version mismatch, expected {VERSION}, got {version}"
-            )))?;
-        }
-        let s = &s[2..];
+        let body = &s[2..];
 
         // base64 decoding has a fixed ratio of ~4:3
-        let compressed = BASE64_STANDARD.decode(s.as_bytes());
-        if compressed.is_err() {
-            Err(Error::Machine("base64 decoding failed".to_string()))?;
-        }
-        let compressed = compressed.unwrap();
+        let compressed = BASE64_STANDARD
+            .decode(body.as_bytes())
+            .map_err(|_| Error::Machine("base64 decoding failed".to_string()))?;
         // decompress, but scared of exceeding memory limits / zlib bombs
         let mut decoder = ZlibDecoder::new(compressed.as_slice());
         let mut buf = vec![0; MAX_DECOMPRESSED_SIZE];
@@ -127,14 +120,23 @@ impl FromStr for Machine {
             .read(&mut buf)
             .map_err(|e| Error::Machine(e.to_string()))?;
 
-        // With binencode, note that "The size of the encoded object will be the
-        // same or smaller than the size that the object takes up in memory in a
-        // running Rust program".
-        let bincoder = bincode::DefaultOptions::new().with_limit(MAX_DECOMPRESSED_SIZE as u64);
-        let r = bincoder.deserialize(&buf[..bytes_read]);
+        let m: Machine = match version {
+            "03" => postcard::from_bytes(&buf[..bytes_read])
+                .map_err(|e| Error::Machine(e.to_string()))?,
+            #[cfg(feature = "legacy-v02")]
+            "02" => {
+                let bincoder =
+                    bincode::DefaultOptions::new().with_limit(MAX_DECOMPRESSED_SIZE as u64);
+                bincoder
+                    .deserialize(&buf[..bytes_read])
+                    .map_err(|e| Error::Machine(e.to_string()))?
+            }
+            _ => Err(Error::Machine(format!(
+                "version mismatch, expected {VERSION:02}, got {version}"
+            )))?,
+        };
 
         // ensure that the machine is valid
-        let m: Machine = r.map_err(|e| Error::Machine(e.to_string()))?;
         m.validate()?;
         Ok(m)
     }
@@ -210,5 +212,28 @@ mod tests {
         });
         let r = Machine::new(1000, 0, vec![s0]);
         assert!(r.is_ok());
+    }
+
+    #[test]
+    fn roundtrip_serialization() {
+        let s0 = State::new(enum_map! {
+            Event::DecoyQueued => vec![Trans(0, 1.0)],
+            _ => vec![],
+        });
+        let m = Machine::new(1000, 0, vec![s0]).unwrap();
+        let serialized = m.serialize();
+        let m2 = Machine::from_str(&serialized).unwrap();
+        assert_eq!(m2.serialize(), serialized);
+    }
+
+    #[cfg(feature = "legacy-v02")]
+    #[test]
+    fn legacy_v02_deserialization() {
+        // a v02 (bincode) encoded noop machine
+        let v02 = "02eNpjYGBkQAcAACYAAg==";
+        let m = Machine::from_str(v02).unwrap();
+        m.validate().unwrap();
+        // re-serializes as v03
+        assert!(m.serialize().starts_with("03"));
     }
 }

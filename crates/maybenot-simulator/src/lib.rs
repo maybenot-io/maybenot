@@ -44,7 +44,7 @@
 //!
 //! // A simple machine that sends one decoy packet 20 milliseconds after the
 //! // first normal packet is sent.
-//! let m = "02eNp9ybERACAIxdB8F8PRLN3PRRzBk4IKeF0uMHCSYBnhd26fSe9auR7NIQOR";
+//! let m = "03eNp9ybERACAIxdB8F8PRLN3PRRzBk4IKeF0uMHCSYBnhd26fSe9auR7NIQOR";
 //! let m = Machine::from_str(m).unwrap();
 //!
 //! // Run the simulator with the machine at the client. Run the simulation up

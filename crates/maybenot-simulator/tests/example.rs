@@ -42,7 +42,7 @@ fn simple_machine_for_example() {
     let m = Machine::new(0, 0, vec![s0, s1]).unwrap();
     assert_eq!(
         m.serialize(),
-        "02eNp9ybERACAIxdB8F8PRLN3PRRzBk4IKeF0uMHCSYBnhd26fSe9auR7NIQOR"
+        "03eNp9ybERACAIxdB8F8PRLN3PRRzBk4IKeF0uMHCSYBnhd26fSe9auR7NIQOR"
     );
 }
 
@@ -75,7 +75,7 @@ fn simulator_example_use() {
 
     // A simple machine that sends one decoy packet 20 milliseconds after the
     // first normal packet is sent.
-    let m = "02eNp9ybERACAIxdB8F8PRLN3PRRzBk4IKeF0uMHCSYBnhd26fSe9auR7NIQOR";
+    let m = "03eNp9ybERACAIxdB8F8PRLN3PRRzBk4IKeF0uMHCSYBnhd26fSe9auR7NIQOR";
     let m = Machine::from_str(m).unwrap();
 
     // Run the simulator with the machine at the client. Run the simulation up
