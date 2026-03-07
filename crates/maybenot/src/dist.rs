@@ -159,6 +159,13 @@ impl Dist {
 
     /// Validate that the parameters are valid for the set [`DistType`].
     pub fn validate(&self) -> Result<(), Error> {
+        if !self.start.is_finite() {
+            return Err(Error::Machine("dist start must be finite".to_string()));
+        }
+        if self.max.is_nan() {
+            return Err(Error::Machine("dist max must not be NaN".to_string()));
+        }
+
         match self.dist {
             DistType::Uniform { low, high } => {
                 if low.is_nan() || high.is_nan() {
