@@ -4,8 +4,6 @@
 use crate::constants::{MAX_DECOMPRESSED_SIZE, STATE_MAX, VERSION};
 use crate::{Error, state};
 use base64::prelude::*;
-#[cfg(feature = "legacy-v02")]
-use bincode::Options;
 use flate2::Compression;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
@@ -123,14 +121,6 @@ impl FromStr for Machine {
         let m: Machine = match version {
             "03" => postcard::from_bytes(&buf[..bytes_read])
                 .map_err(|e| Error::Machine(e.to_string()))?,
-            #[cfg(feature = "legacy-v02")]
-            "02" => {
-                let bincoder =
-                    bincode::DefaultOptions::new().with_limit(MAX_DECOMPRESSED_SIZE as u64);
-                bincoder
-                    .deserialize(&buf[..bytes_read])
-                    .map_err(|e| Error::Machine(e.to_string()))?
-            }
             _ => Err(Error::Machine(format!(
                 "version mismatch, expected {VERSION:02}, got {version}"
             )))?,
@@ -224,16 +214,5 @@ mod tests {
         let serialized = m.serialize();
         let m2 = Machine::from_str(&serialized).unwrap();
         assert_eq!(m2.serialize(), serialized);
-    }
-
-    #[cfg(feature = "legacy-v02")]
-    #[test]
-    fn legacy_v02_deserialization() {
-        // a v02 (bincode) encoded noop machine
-        let v02 = "02eNpjYGBkQAcAACYAAg==";
-        let m = Machine::from_str(v02).unwrap();
-        m.validate().unwrap();
-        // re-serializes as v03
-        assert!(m.serialize().starts_with("03"));
     }
 }

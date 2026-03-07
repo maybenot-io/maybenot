@@ -4,10 +4,6 @@
 /// this framework.
 pub const VERSION: u8 = 3;
 
-/// Legacy version 2 (bincode-based serialization).
-#[cfg(feature = "legacy-v02")]
-pub const VERSION_LEGACY: u8 = 2;
-
 /// The maximum size of a decompressed encoded [`Machine`](crate::Machine) in
 /// bytes. Set to 1MB. This is a soft limit and can be increased if necessary.
 pub const MAX_DECOMPRESSED_SIZE: usize = 1 << 20;
