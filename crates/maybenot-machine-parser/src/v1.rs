@@ -91,13 +91,21 @@ fn parse_v1_payload(buf: &[u8]) -> Result<Machine, Error> {
     // The binary format stores (V1_EVENTS.len() + 1) rows in the transition
     // matrix per state, even though only V1_EVENTS.len() rows are parsed.
     // The extra row is a legacy artifact of the original v1 format.
-    let expected_state_len =
-        3 * SERIALIZED_DIST_SIZE + 4 + (num_states + 2) * 8 * (V1_EVENTS.len() + 1);
+    let trans_size = (num_states + 2)
+        .checked_mul(8)
+        .and_then(|v| v.checked_mul(V1_EVENTS.len() + 1))
+        .ok_or_else(|| Error::Machine("v1: state size overflow".into()))?;
+    let expected_state_len = (3 * SERIALIZED_DIST_SIZE + 4)
+        .checked_add(trans_size)
+        .ok_or_else(|| Error::Machine("v1: state size overflow".into()))?;
+    let total = expected_state_len
+        .checked_mul(num_states)
+        .ok_or_else(|| Error::Machine("v1: total size overflow".into()))?;
 
-    if buf[r..].len() != expected_state_len * num_states {
+    if buf[r..].len() != total {
         return Err(Error::Machine(format!(
             "v1: expected {} bytes for {} states, got {}",
-            expected_state_len * num_states,
+            total,
             num_states,
             buf[r..].len()
         )));
