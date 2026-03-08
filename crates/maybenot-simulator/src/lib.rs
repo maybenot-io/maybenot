@@ -121,12 +121,42 @@ use network::{Network, NetworkBottleneck, WindowCount};
 use queue::SimQueue;
 
 use maybenot::{
-    Framework, LimitDecoy, LimitDecoyFrac, LimitDecoyNone, LimitDelay, LimitDelayFrac,
-    LimitDelayNone, Machine, MachineId, Timer, TriggerAction, TriggerEvent,
+    Framework, LimitDecoy, LimitDecoyFrac, LimitDecoyFracWindowed, LimitDecoyNone, LimitDelay,
+    LimitDelayFrac, LimitDelayNone, Machine, MachineId, Timer, TriggerAction, TriggerEvent,
 };
 use rand::{RngCore, rngs::ThreadRng};
 use rand_xoshiro::Xoshiro256StarStar;
 use rand_xoshiro::rand_core::SeedableRng;
+use serde::{Deserialize, Serialize};
+
+/// Configuration for the decoy limit used in the simulator.
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DecoyLimitConfig {
+    #[default]
+    None,
+    Frac {
+        frac: f64,
+    },
+    FracWindowed {
+        frac: f64,
+        window_ms: u64,
+        min_normal: u64,
+    },
+}
+
+/// Configuration for the delay limit used in the simulator.
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DelayLimitConfig {
+    #[default]
+    None,
+    Frac {
+        frac: f64,
+        window_ms: u64,
+        max_packets: usize,
+    },
+}
 
 /// A dynamic limit that can be either no limit or a fraction-based
 /// limit. This allows the simulator to choose the limit type at
@@ -135,6 +165,7 @@ use rand_xoshiro::rand_core::SeedableRng;
 enum DynamicLimitDecoy {
     None(LimitDecoyNone),
     Frac(LimitDecoyFrac),
+    FracWindowed(LimitDecoyFracWindowed<Instant>),
 }
 
 impl LimitDecoy<Instant> for DynamicLimitDecoy {
@@ -142,6 +173,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.allow_decoy(current_time, machine),
             DynamicLimitDecoy::Frac(t) => t.allow_decoy(current_time, machine),
+            DynamicLimitDecoy::FracWindowed(t) => t.allow_decoy(current_time, machine),
         }
     }
 
@@ -149,6 +181,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.max_decoys(current_time, machine),
             DynamicLimitDecoy::Frac(t) => t.max_decoys(current_time, machine),
+            DynamicLimitDecoy::FracWindowed(t) => t.max_decoys(current_time, machine),
         }
     }
 
@@ -156,6 +189,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.packet_sent(current_time),
             DynamicLimitDecoy::Frac(t) => t.packet_sent(current_time),
+            DynamicLimitDecoy::FracWindowed(t) => t.packet_sent(current_time),
         }
     }
 
@@ -163,6 +197,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.normal_queued(current_time),
             DynamicLimitDecoy::Frac(t) => t.normal_queued(current_time),
+            DynamicLimitDecoy::FracWindowed(t) => t.normal_queued(current_time),
         }
     }
 
@@ -170,6 +205,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.decoy_queued(current_time, machine),
             DynamicLimitDecoy::Frac(t) => t.decoy_queued(current_time, machine),
+            DynamicLimitDecoy::FracWindowed(t) => t.decoy_queued(current_time, machine),
         }
     }
 
@@ -177,6 +213,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.congestion(current_time),
             DynamicLimitDecoy::Frac(t) => t.congestion(current_time),
+            DynamicLimitDecoy::FracWindowed(t) => t.congestion(current_time),
         }
     }
 }
@@ -358,8 +395,8 @@ where
     pub fn new(
         machines: M,
         current_time: Instant,
-        max_decoy_frac: f64,
-        max_delay_frac: f64,
+        decoy_limit: &DecoyLimitConfig,
+        delay_limit: &DelayLimitConfig,
         integration: Option<Integration>,
         insecure_rng_seed: Option<u64>,
     ) -> Self {
@@ -372,23 +409,31 @@ where
 
         let num_machines = machines.as_ref().len();
 
-        // Convert max_decoy_frac to limit: if 0, use no limit (allows all decoys)
-        let decoy_limit = if max_decoy_frac > 0.0 {
-            DynamicLimitDecoy::Frac(
-                LimitDecoyFrac::new(max_decoy_frac).expect("max_decoy_frac must be in [0.0, 1.0]"),
-            )
-        } else {
-            DynamicLimitDecoy::None(LimitDecoyNone)
+        let decoy_limit = match decoy_limit {
+            DecoyLimitConfig::None => DynamicLimitDecoy::None(LimitDecoyNone),
+            DecoyLimitConfig::Frac { frac } => DynamicLimitDecoy::Frac(
+                LimitDecoyFrac::new(*frac).expect("decoy frac must be in [0.0, 1.0]"),
+            ),
+            DecoyLimitConfig::FracWindowed {
+                frac,
+                window_ms,
+                min_normal,
+            } => DynamicLimitDecoy::FracWindowed(
+                LimitDecoyFracWindowed::new(*frac, Duration::from_millis(*window_ms), *min_normal)
+                    .expect("decoy frac windowed parameters invalid"),
+            ),
         };
 
-        // Convert max_delay_frac to limit: if 0, use no limit (allows all delays)
-        let delay_limit = if max_delay_frac > 0.0 {
-            DynamicLimitDelay::Frac(
-                LimitDelayFrac::new(max_delay_frac, Duration::from_secs(1), usize::MAX)
-                    .expect("max_delay_frac must be in [0.0, 1.0]"),
-            )
-        } else {
-            DynamicLimitDelay::None(LimitDelayNone)
+        let delay_limit = match delay_limit {
+            DelayLimitConfig::None => DynamicLimitDelay::None(LimitDelayNone),
+            DelayLimitConfig::Frac {
+                frac,
+                window_ms,
+                max_packets,
+            } => DynamicLimitDelay::Frac(
+                LimitDelayFrac::new(*frac, Duration::from_millis(*window_ms), *max_packets)
+                    .expect("delay frac must be in [0.0, 1.0]"),
+            ),
         };
 
         Self {
@@ -477,18 +522,14 @@ pub struct SimulatorArgs {
     /// If true, only events that represent network packets are returned in the
     /// output trace.
     pub only_network_activity: bool,
-    /// The maximum fraction of decoy packets for the client's instance of the
-    /// Maybenot framework.
-    pub max_decoy_frac_client: f64,
-    /// The maximum fraction of delay for the client's instance of the
-    /// Maybenot framework.
-    pub max_delay_frac_client: f64,
-    /// The maximum fraction of decoy packets for the server's instance of the
-    /// Maybenot framework.
-    pub max_decoy_frac_server: f64,
-    /// The maximum fraction of delay for the server's instance of the
-    /// Maybenot framework.
-    pub max_delay_frac_server: f64,
+    /// The decoy limit for the client's instance of the Maybenot framework.
+    pub decoy_limit_client: DecoyLimitConfig,
+    /// The delay limit for the client's instance of the Maybenot framework.
+    pub delay_limit_client: DelayLimitConfig,
+    /// The decoy limit for the server's instance of the Maybenot framework.
+    pub decoy_limit_server: DecoyLimitConfig,
+    /// The delay limit for the server's instance of the Maybenot framework.
+    pub delay_limit_server: DelayLimitConfig,
     /// The seed for the deterministic (insecure) Xoshiro256StarStar RNG. If
     /// None, the simulator will use the cryptographically secure thread_rng().
     pub insecure_rng_seed: Option<u64>,
@@ -507,10 +548,10 @@ impl SimulatorArgs {
             continue_after_all_normal_packets_processed: false,
             only_client_events: false,
             only_network_activity,
-            max_decoy_frac_client: 0.0,
-            max_delay_frac_client: 0.0,
-            max_decoy_frac_server: 0.0,
-            max_delay_frac_server: 0.0,
+            decoy_limit_client: DecoyLimitConfig::None,
+            delay_limit_client: DelayLimitConfig::None,
+            decoy_limit_server: DecoyLimitConfig::None,
+            delay_limit_server: DelayLimitConfig::None,
             insecure_rng_seed: None,
             client_integration: None,
             server_integration: None,
@@ -542,16 +583,16 @@ pub fn sim_advanced(
     let mut client = SimState::new(
         machines_client,
         current_time,
-        args.max_decoy_frac_client,
-        args.max_delay_frac_client,
+        &args.decoy_limit_client,
+        &args.delay_limit_client,
         args.clone().client_integration,
         args.insecure_rng_seed,
     );
     let mut server = SimState::new(
         machines_server,
         current_time,
-        args.max_decoy_frac_server,
-        args.max_delay_frac_server,
+        &args.decoy_limit_server,
+        &args.delay_limit_server,
         args.clone().server_integration,
         // if we have an insecure seed, we use the next number in the sequence
         // to avoid the same seed for both client and server

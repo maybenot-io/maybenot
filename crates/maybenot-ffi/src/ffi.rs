@@ -64,6 +64,60 @@ pub unsafe extern "C" fn maybenot_start(
     MaybenotResult::Ok
 }
 
+/// Start a new [`MaybenotFramework`] instance with configurable limit types.
+///
+/// `decoy_limit_type`: 0 = None, 1 = Frac, 2 = FracWindowed
+/// `delay_limit_type`: 0 = None, 1 = Frac
+///
+/// # Safety
+/// - `machines_str` must be a null-terminated UTF-8 string, containing LF-separated machines.
+/// - `out` must be a valid pointer to some valid and aligned pointer-sized memory.
+/// - The pointer written to `out` is NOT safe to be used concurrently.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn maybenot_start_with_limits(
+    machines_str: *const core::ffi::c_char,
+    decoy_limit_type: u32,
+    decoy_frac: f64,
+    decoy_window_ms: u64,
+    decoy_min_normal: u64,
+    delay_limit_type: u32,
+    delay_frac: f64,
+    delay_window_ms: u64,
+    delay_max_packets: usize,
+    out: *mut core::mem::MaybeUninit<*mut MaybenotFramework>,
+) -> MaybenotResult {
+    // SAFETY: see function docs
+    let Some(out) = (unsafe { out.as_mut() }) else {
+        return MaybenotResult::NullPointer;
+    };
+
+    // SAFETY: see function docs
+    let machines_str = unsafe { core::ffi::CStr::from_ptr(machines_str) };
+    let Ok(machines_str) = machines_str.to_str() else {
+        return MaybenotResult::MachineStringNotUtf8;
+    };
+
+    let framework = match MaybenotFramework::start_with_limits(
+        machines_str,
+        decoy_limit_type,
+        decoy_frac,
+        decoy_window_ms,
+        decoy_min_normal,
+        delay_limit_type,
+        delay_frac,
+        delay_window_ms,
+        delay_max_packets,
+    ) {
+        Ok(framework) => framework,
+        Err(e) => return e,
+    };
+
+    let box_pointer = Box::into_raw(Box::new(framework));
+    out.write(box_pointer);
+
+    MaybenotResult::Ok
+}
+
 /// Get the number of machines running in the [`MaybenotFramework`] instance.
 ///
 /// # Safety

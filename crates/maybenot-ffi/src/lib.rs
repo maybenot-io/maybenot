@@ -2,8 +2,8 @@ use core::{mem::MaybeUninit, str::FromStr, time::Duration};
 use std::time::Instant;
 
 use maybenot::{
-    Framework, LimitDecoy, LimitDecoyFrac, LimitDecoyNone, LimitDelay, LimitDelayFrac,
-    LimitDelayNone, Machine, MachineId, TriggerEvent,
+    Framework, LimitDecoy, LimitDecoyFrac, LimitDecoyFracWindowed, LimitDecoyNone, LimitDelay,
+    LimitDelayFrac, LimitDelayNone, Machine, MachineId, TriggerEvent,
 };
 
 mod error;
@@ -19,6 +19,7 @@ use rand::rngs::{OsRng, ReseedingRng};
 enum DynamicLimitDecoy {
     None(LimitDecoyNone),
     Frac(LimitDecoyFrac),
+    FracWindowed(LimitDecoyFracWindowed<Instant>),
 }
 
 impl LimitDecoy<Instant> for DynamicLimitDecoy {
@@ -26,6 +27,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.allow_decoy(current_time, machine),
             DynamicLimitDecoy::Frac(t) => t.allow_decoy(current_time, machine),
+            DynamicLimitDecoy::FracWindowed(t) => t.allow_decoy(current_time, machine),
         }
     }
 
@@ -33,6 +35,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.max_decoys(current_time, machine),
             DynamicLimitDecoy::Frac(t) => t.max_decoys(current_time, machine),
+            DynamicLimitDecoy::FracWindowed(t) => t.max_decoys(current_time, machine),
         }
     }
 
@@ -40,6 +43,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.packet_sent(current_time),
             DynamicLimitDecoy::Frac(t) => t.packet_sent(current_time),
+            DynamicLimitDecoy::FracWindowed(t) => t.packet_sent(current_time),
         }
     }
 
@@ -47,6 +51,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.normal_queued(current_time),
             DynamicLimitDecoy::Frac(t) => t.normal_queued(current_time),
+            DynamicLimitDecoy::FracWindowed(t) => t.normal_queued(current_time),
         }
     }
 
@@ -54,6 +59,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.decoy_queued(current_time, machine),
             DynamicLimitDecoy::Frac(t) => t.decoy_queued(current_time, machine),
+            DynamicLimitDecoy::FracWindowed(t) => t.decoy_queued(current_time, machine),
         }
     }
 
@@ -61,6 +67,7 @@ impl LimitDecoy<Instant> for DynamicLimitDecoy {
         match self {
             DynamicLimitDecoy::None(t) => t.congestion(current_time),
             DynamicLimitDecoy::Frac(t) => t.congestion(current_time),
+            DynamicLimitDecoy::FracWindowed(t) => t.congestion(current_time),
         }
     }
 }
@@ -275,6 +282,66 @@ impl MaybenotFramework {
             )
         } else {
             DynamicLimitDelay::None(LimitDelayNone)
+        };
+
+        let framework = Framework::new(machines, decoy_limit, delay_limit, Instant::now(), rng)
+            .map_err(|_e| MaybenotResult::StartFramework)?;
+
+        Ok(MaybenotFramework {
+            framework,
+            events_buf: Vec::with_capacity(machines_count),
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn start_with_limits(
+        machines_str: &str,
+        decoy_limit_type: u32,
+        decoy_frac: f64,
+        decoy_window_ms: u64,
+        decoy_min_normal: u64,
+        delay_limit_type: u32,
+        delay_frac: f64,
+        delay_window_ms: u64,
+        delay_max_packets: usize,
+    ) -> Result<Self, MaybenotResult> {
+        let machines: Vec<_> = machines_str
+            .lines()
+            .map(Machine::from_str)
+            .collect::<Result<_, _>>()
+            .map_err(|_e| MaybenotResult::InvalidMachineString)?;
+
+        let machines_count = machines.len();
+
+        let rng = Rng::new(RNG_RESEED_THRESHOLD, OsRng).unwrap();
+
+        let decoy_limit = match decoy_limit_type {
+            0 => DynamicLimitDecoy::None(LimitDecoyNone),
+            1 => DynamicLimitDecoy::Frac(
+                LimitDecoyFrac::new(decoy_frac).map_err(|_| MaybenotResult::StartFramework)?,
+            ),
+            2 => DynamicLimitDecoy::FracWindowed(
+                LimitDecoyFracWindowed::new(
+                    decoy_frac,
+                    Duration::from_millis(decoy_window_ms),
+                    decoy_min_normal,
+                )
+                .map_err(|_| MaybenotResult::StartFramework)?,
+            ),
+            _ => return Err(MaybenotResult::StartFramework),
+        };
+
+        let delay_limit = match delay_limit_type {
+            0 => DynamicLimitDelay::None(LimitDelayNone),
+            1 => DynamicLimitDelay::Frac(
+                LimitDelayFrac::new(
+                    delay_frac,
+                    Duration::from_millis(delay_window_ms),
+                    delay_max_packets,
+                )
+                .map_err(|_| MaybenotResult::StartFramework)?,
+            ),
+            _ => return Err(MaybenotResult::StartFramework),
         };
 
         let framework = Framework::new(machines, decoy_limit, delay_limit, Instant::now(), rng)

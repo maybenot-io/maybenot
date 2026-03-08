@@ -2,6 +2,7 @@ use std::ops::RangeInclusive;
 
 use anyhow::{Result, bail};
 use maybenot::Machine;
+use maybenot_simulator::{DecoyLimitConfig, DelayLimitConfig};
 use rand::{
     Rng, RngCore,
     seq::{IndexedMutRandom, SliceRandom},
@@ -19,8 +20,8 @@ pub struct Setup {
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Params {
     pub machines: Vec<Machine>,
-    pub max_decoy_frac: f64,
-    pub max_delay_frac: f64,
+    pub decoy_limit: DecoyLimitConfig,
+    pub delay_limit: DelayLimitConfig,
 }
 
 /// A "dealer" "draws" a "setup" for the client and the server. Each party gets
@@ -39,6 +40,66 @@ pub trait Dealer {
     fn is_empty(&self) -> bool;
 }
 
+/// Configurable decoy limit range for sampling in a dealer.
+#[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DecoyLimitRange {
+    Frac {
+        frac: RangeInclusive<f64>,
+    },
+    FracWindowed {
+        frac: RangeInclusive<f64>,
+        window_ms: RangeInclusive<u64>,
+        min_normal: RangeInclusive<u64>,
+    },
+}
+
+impl DecoyLimitRange {
+    pub fn sample<R: RngCore>(&self, scale: f64, rng: &mut R) -> DecoyLimitConfig {
+        match self {
+            DecoyLimitRange::Frac { frac } => DecoyLimitConfig::Frac {
+                frac: (rng_range!(rng, frac) * scale).clamp(0.0, 1.0),
+            },
+            DecoyLimitRange::FracWindowed {
+                frac,
+                window_ms,
+                min_normal,
+            } => DecoyLimitConfig::FracWindowed {
+                frac: (rng_range!(rng, frac) * scale).clamp(0.0, 1.0),
+                window_ms: rng_range!(rng, window_ms),
+                min_normal: rng_range!(rng, min_normal),
+            },
+        }
+    }
+}
+
+/// Configurable delay limit range for sampling in a dealer.
+#[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DelayLimitRange {
+    Frac {
+        frac: RangeInclusive<f64>,
+        window_ms: RangeInclusive<u64>,
+        max_packets: RangeInclusive<usize>,
+    },
+}
+
+impl DelayLimitRange {
+    pub fn sample<R: RngCore>(&self, scale: f64, rng: &mut R) -> DelayLimitConfig {
+        match self {
+            DelayLimitRange::Frac {
+                frac,
+                window_ms,
+                max_packets,
+            } => DelayLimitConfig::Frac {
+                frac: (rng_range!(rng, frac) * scale).clamp(0.0, 1.0),
+                window_ms: rng_range!(rng, window_ms),
+                max_packets: rng_range!(rng, max_packets),
+            },
+        }
+    }
+}
+
 /// Limits for the client and server setups. Each is used only if set. The
 /// ranges are sampled from.
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -49,10 +110,10 @@ pub struct Limits {
     /// absolute time in microseconds of delay before other limits apply,
     /// split over all machines in the defense
     pub delay_budget: Option<RangeInclusive<f64>>,
-    /// fraction of allowed decoy packets, framework-wide
-    pub decoy_frac: Option<RangeInclusive<f64>>,
-    /// fraction of allowed delay duration, framework-wide
-    pub delay_frac: Option<RangeInclusive<f64>>,
+    /// framework-wide decoy limit configuration range
+    pub decoy_limit: Option<DecoyLimitRange>,
+    /// framework-wide delay limit configuration range
+    pub delay_limit: Option<DelayLimitRange>,
 }
 /// A dealer based on a fixed list of defenses. The defenses are either drawn
 /// with replacement (reused) or not. Setup fractions are sampled from the
@@ -111,27 +172,34 @@ impl Dealer for DealerFixed {
             set_machine_limits(&mut def.server, limits, scale, rng);
         }
 
-        // return the setup, sampling decoy and delay fractions for the
-        // client and server framework instances if limits are set (0.0 means no
-        // limit in the framework)
+        // return the setup, sampling decoy and delay limit configs for the
+        // client and server framework instances if limits are set
         Ok(Setup {
             client: Params {
                 machines: def.client,
-                max_decoy_frac: self.client_limits.as_ref().map_or(0.0, |limits| {
-                    sample_range_option_scaled(&limits.decoy_frac, scale, rng)
-                }),
-                max_delay_frac: self.client_limits.as_ref().map_or(0.0, |limits| {
-                    sample_range_option_scaled(&limits.delay_frac, scale, rng)
-                }),
+                decoy_limit: self
+                    .client_limits
+                    .as_ref()
+                    .and_then(|l| l.decoy_limit.as_ref())
+                    .map_or(DecoyLimitConfig::None, |r| r.sample(scale, rng)),
+                delay_limit: self
+                    .client_limits
+                    .as_ref()
+                    .and_then(|l| l.delay_limit.as_ref())
+                    .map_or(DelayLimitConfig::None, |r| r.sample(scale, rng)),
             },
             server: Params {
                 machines: def.server,
-                max_decoy_frac: self.server_limits.as_ref().map_or(0.0, |limits| {
-                    sample_range_option_scaled(&limits.decoy_frac, scale, rng)
-                }),
-                max_delay_frac: self.server_limits.as_ref().map_or(0.0, |limits| {
-                    sample_range_option_scaled(&limits.delay_frac, scale, rng)
-                }),
+                decoy_limit: self
+                    .server_limits
+                    .as_ref()
+                    .and_then(|l| l.decoy_limit.as_ref())
+                    .map_or(DecoyLimitConfig::None, |r| r.sample(scale, rng)),
+                delay_limit: self
+                    .server_limits
+                    .as_ref()
+                    .and_then(|l| l.delay_limit.as_ref())
+                    .map_or(DelayLimitConfig::None, |r| r.sample(scale, rng)),
             },
         })
     }
@@ -163,7 +231,7 @@ impl Dealer for DealerFixed {
     }
 }
 
-fn sample_range_option_scaled<R: RngCore>(
+fn sample_budget_scaled<R: RngCore>(
     range: &Option<RangeInclusive<f64>>,
     scale: f64,
     rng: &mut R,
@@ -177,8 +245,8 @@ fn set_machine_limits<R: RngCore>(
     scale: f64,
     rng: &mut R,
 ) {
-    let decoy_budget = sample_range_option_scaled(&limits.decoy_budget, scale, rng);
-    let delay_budget = sample_range_option_scaled(&limits.delay_budget, scale, rng);
+    let decoy_budget = sample_budget_scaled(&limits.decoy_budget, scale, rng);
+    let delay_budget = sample_budget_scaled(&limits.delay_budget, scale, rng);
 
     let n_machines_with_decoy_budget = machines
         .iter()

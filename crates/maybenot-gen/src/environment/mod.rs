@@ -5,7 +5,7 @@ use std::{fmt, ops::RangeInclusive, time::Duration};
 use traces::load_traces;
 
 use maybenot_simulator::{
-    SimulatorArgs,
+    DecoyLimitConfig, DelayLimitConfig, SimulatorArgs,
     integration::{BinDist, Integration},
     network::Network,
     queue::SimQueue,
@@ -137,16 +137,16 @@ impl Environment {
         args.max_sim_iterations = max_sim_steps;
         args.client_integration = client_integration;
         args.server_integration = server_integration;
-        args.max_decoy_frac_client =
-            overhead2frac(&constraints.client_load, cfg.implied_framework_limits);
-        args.max_decoy_frac_server =
-            overhead2frac(&constraints.server_load, cfg.implied_framework_limits);
+        args.decoy_limit_client =
+            overhead2decoy_limit(&constraints.client_load, cfg.implied_framework_limits);
+        args.decoy_limit_server =
+            overhead2decoy_limit(&constraints.server_load, cfg.implied_framework_limits);
         // FIXME: note that we cannot have different delay fractions for
         // client and server as-is.
-        args.max_delay_frac_client =
-            overhead2frac(&constraints.delay, cfg.implied_framework_limits);
-        args.max_delay_frac_server =
-            overhead2frac(&constraints.delay, cfg.implied_framework_limits);
+        args.delay_limit_client =
+            overhead2delay_limit(&constraints.delay, cfg.implied_framework_limits);
+        args.delay_limit_server =
+            overhead2delay_limit(&constraints.delay, cfg.implied_framework_limits);
 
         // Compute relative durations for every sent packet for all traces,
         // once, for later use in computing constraints related to time. We get
@@ -198,16 +198,36 @@ impl fmt::Display for Environment {
     }
 }
 
-fn overhead2frac(oh: &Option<RangeInclusive<f64>>, implied_framework_limits: Option<bool>) -> f64 {
+fn overhead2decoy_limit(
+    oh: &Option<RangeInclusive<f64>>,
+    implied_framework_limits: Option<bool>,
+) -> DecoyLimitConfig {
     if oh.is_none() || !implied_framework_limits.unwrap_or(false) {
-        return 0.0;
+        return DecoyLimitConfig::None;
     }
     let load = *oh.clone().unwrap().end();
     // The load is expressed as #defended/#undefended packets, for the two
     // complete traces. The fraction in the framework is the fraction of
     // decoy/normal packets. For example, a load of 1.0 means a fraction of 0.5,
     // and a load of 2.0 means a fraction of 0.6666666666666666. Converting:
-    (load / (load + 1.0)).clamp(0.0, 1.0)
+    let frac = (load / (load + 1.0)).clamp(0.0, 1.0);
+    DecoyLimitConfig::Frac { frac }
+}
+
+fn overhead2delay_limit(
+    oh: &Option<RangeInclusive<f64>>,
+    implied_framework_limits: Option<bool>,
+) -> DelayLimitConfig {
+    if oh.is_none() || !implied_framework_limits.unwrap_or(false) {
+        return DelayLimitConfig::None;
+    }
+    let load = *oh.clone().unwrap().end();
+    let frac = (load / (load + 1.0)).clamp(0.0, 1.0);
+    DelayLimitConfig::Frac {
+        frac,
+        window_ms: 1000,
+        max_packets: usize::MAX,
+    }
 }
 
 pub fn get_example_client() -> Option<Integration> {
