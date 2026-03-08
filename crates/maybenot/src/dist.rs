@@ -162,8 +162,10 @@ impl Dist {
         if !self.start.is_finite() {
             return Err(Error::Machine("dist start must be finite".to_string()));
         }
-        if self.max.is_nan() {
-            return Err(Error::Machine("dist max must not be NaN".to_string()));
+        if !self.max.is_finite() || self.max < 0.0 {
+            return Err(Error::Machine(
+                "dist max must be finite and non-negative".to_string(),
+            ));
         }
 
         match self.dist {
@@ -624,6 +626,48 @@ mod tests {
 
         let r = d.validate();
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_dist_max_infinite() {
+        // infinite max should be rejected
+        let d = Dist {
+            dist: DistType::Uniform {
+                low: 10.0,
+                high: 10.0,
+            },
+            start: 0.0,
+            max: f64::INFINITY,
+        };
+        assert!(d.validate().is_err());
+    }
+
+    #[test]
+    fn validate_dist_max_negative() {
+        // negative max should be rejected
+        let d = Dist {
+            dist: DistType::Uniform {
+                low: 10.0,
+                high: 10.0,
+            },
+            start: 0.0,
+            max: -1.0,
+        };
+        assert!(d.validate().is_err());
+    }
+
+    #[test]
+    fn validate_dist_max_nan() {
+        // NaN max should be rejected
+        let d = Dist {
+            dist: DistType::Uniform {
+                low: 10.0,
+                high: 10.0,
+            },
+            start: 0.0,
+            max: f64::NAN,
+        };
+        assert!(d.validate().is_err());
     }
 
     #[test]

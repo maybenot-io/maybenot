@@ -188,11 +188,13 @@ impl Action {
             Action::DelayTraffic {
                 timeout,
                 duration,
+                n,
                 limit,
                 ..
             } => {
                 timeout.validate()?;
                 duration.validate()?;
+                n.validate()?;
                 if let Some(limit) = limit {
                     limit.validate()?;
                 }
@@ -642,6 +644,43 @@ mod tests {
                 max: 0.0,
             });
         }
+
+        let r = a.validate();
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_delay_action_invalid_n() {
+        // DelayTraffic with invalid n dist should fail validation
+        let a = Action::DelayTraffic {
+            bypass: false,
+            replace: false,
+            timeout: Dist {
+                dist: DistType::Uniform {
+                    low: 10.0,
+                    high: 10.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            n: Dist {
+                dist: DistType::Uniform {
+                    low: 15.0, // NOTE low > high
+                    high: 5.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            duration: Dist {
+                dist: DistType::Uniform {
+                    low: 10.0,
+                    high: 10.0,
+                },
+                start: 0.0,
+                max: 0.0,
+            },
+            limit: None,
+        };
 
         let r = a.validate();
         assert!(r.is_err());

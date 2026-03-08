@@ -112,11 +112,16 @@ impl FromStr for Machine {
             .decode(body.as_bytes())
             .map_err(|_| Error::Machine("base64 decoding failed".to_string()))?;
         // decompress, but scared of exceeding memory limits / zlib bombs
-        let mut decoder = ZlibDecoder::new(compressed.as_slice());
-        let mut buf = vec![0; MAX_DECOMPRESSED_SIZE];
-        let bytes_read = decoder
-            .read(&mut buf)
+        let decoder = ZlibDecoder::new(compressed.as_slice());
+        let mut buf = Vec::new();
+        decoder
+            .take(MAX_DECOMPRESSED_SIZE as u64 + 1)
+            .read_to_end(&mut buf)
             .map_err(|e| Error::Machine(e.to_string()))?;
+        if buf.len() > MAX_DECOMPRESSED_SIZE {
+            return Err(Error::Machine("decompressed data too large".to_string()));
+        }
+        let bytes_read = buf.len();
 
         let m: Machine = match version {
             "03" => postcard::from_bytes(&buf[..bytes_read])

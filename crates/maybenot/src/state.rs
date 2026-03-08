@@ -114,7 +114,7 @@ impl State {
                 }
                 seen.insert(t.0);
 
-                if t.1 <= 0.0 || t.1 > 1.0 {
+                if !t.1.is_finite() || t.1 <= 0.0 || t.1 > 1.0 {
                     Err(Error::Machine(format!(
                         "found probability {}, has to be (0.0, 1.0]",
                         t.1
@@ -359,6 +359,35 @@ mod tests {
 
         let r = s.validate(num_states);
         println!("{:?}", r.as_ref().err());
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_nan_transition_probability() {
+        let num_states = 2;
+
+        // NaN probability should be rejected
+        let s = State::new(enum_map! {
+            Event::DecoyQueued => vec![Trans(0, f32::NAN)],
+            _ => vec![],
+        });
+        let r = s.validate(num_states);
+        assert!(r.is_err());
+
+        // Infinity probability should be rejected
+        let s = State::new(enum_map! {
+            Event::DecoyQueued => vec![Trans(0, f32::INFINITY)],
+            _ => vec![],
+        });
+        let r = s.validate(num_states);
+        assert!(r.is_err());
+
+        // Negative infinity probability should be rejected
+        let s = State::new(enum_map! {
+            Event::DecoyQueued => vec![Trans(0, f32::NEG_INFINITY)],
+            _ => vec![],
+        });
+        let r = s.validate(num_states);
         assert!(r.is_err());
     }
 
