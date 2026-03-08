@@ -102,7 +102,6 @@ include_after_last_normal = false
 traces = ["BigEnough", "TorCircuit"]
 num_traces = [1, 3]
 sim_steps = { start = 1000, end = 5000 }
-implied_framework_limits = true
 
 # Network configuration - test both formats
 [derive.env.network]
@@ -192,7 +191,6 @@ min_action_timeout = [0.0, 1000.0]
                 assert_eq!(derive_config.env.num_traces.end(), &3);
                 assert_eq!(derive_config.env.sim_steps.start(), &1000);
                 assert_eq!(derive_config.env.sim_steps.end(), &5000);
-                assert_eq!(derive_config.env.implied_framework_limits, Some(true));
 
                 // test network ranges - both formats
                 assert_eq!(derive_config.env.network.rtt_in_ms.start(), &10);

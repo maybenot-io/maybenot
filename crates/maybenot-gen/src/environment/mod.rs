@@ -5,7 +5,7 @@ use std::{fmt, ops::RangeInclusive, time::Duration};
 use traces::load_traces;
 
 use maybenot_simulator::{
-    DecoyLimitConfig, DelayLimitConfig, SimulatorArgs,
+    SimulatorArgs,
     integration::{BinDist, Integration},
     network::Network,
     queue::SimQueue,
@@ -14,7 +14,7 @@ use maybenot_simulator::{
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::{constraints::ConstraintsConfig, rng_range};
+use crate::rng_range;
 
 /// Network traces for the basis of the environment that we evaluate defenses
 /// within.
@@ -63,10 +63,6 @@ pub struct EnvironmentConfig {
     pub sim_steps: RangeInclusive<usize>,
     /// The integration type to use.
     pub integration: Option<IntegrationType>,
-    /// Whether to apply implied framework limits, i.e., based on set
-    /// constraints, derive framework limits for the upper bound of the
-    /// constraints.
-    pub implied_framework_limits: Option<bool>,
     /// Configuration for the network used in the simulation environment.
     pub network: NetworkConfig,
 }
@@ -100,11 +96,7 @@ pub struct Environment {
 }
 
 impl Environment {
-    pub fn new<R: Rng>(
-        cfg: &EnvironmentConfig,
-        constraints: &ConstraintsConfig,
-        rng: &mut R,
-    ) -> Result<Self> {
+    pub fn new<R: Rng>(cfg: &EnvironmentConfig, rng: &mut R) -> Result<Self> {
         let (client_integration, server_integration) = match cfg.integration {
             Some(IntegrationType::Example) => (get_example_client(), get_example_server()),
             Some(IntegrationType::File { ref src }) => {
@@ -137,16 +129,6 @@ impl Environment {
         args.max_sim_iterations = max_sim_steps;
         args.client_integration = client_integration;
         args.server_integration = server_integration;
-        args.decoy_limit_client =
-            overhead2decoy_limit(&constraints.client_load, cfg.implied_framework_limits);
-        args.decoy_limit_server =
-            overhead2decoy_limit(&constraints.server_load, cfg.implied_framework_limits);
-        // FIXME: note that we cannot have different delay fractions for
-        // client and server as-is.
-        args.delay_limit_client =
-            overhead2delay_limit(&constraints.delay, cfg.implied_framework_limits);
-        args.delay_limit_server =
-            overhead2delay_limit(&constraints.delay, cfg.implied_framework_limits);
 
         // Compute relative durations for every sent packet for all traces,
         // once, for later use in computing constraints related to time. We get
@@ -195,38 +177,6 @@ impl fmt::Display for Environment {
         } else {
             write!(f, "Environment {{{}, {} }}", self.description, self.network,)
         }
-    }
-}
-
-fn overhead2decoy_limit(
-    oh: &Option<RangeInclusive<f64>>,
-    implied_framework_limits: Option<bool>,
-) -> DecoyLimitConfig {
-    if oh.is_none() || !implied_framework_limits.unwrap_or(false) {
-        return DecoyLimitConfig::None;
-    }
-    let load = *oh.clone().unwrap().end();
-    // The load is expressed as #defended/#undefended packets, for the two
-    // complete traces. The fraction in the framework is the fraction of
-    // decoy/normal packets. For example, a load of 1.0 means a fraction of 0.5,
-    // and a load of 2.0 means a fraction of 0.6666666666666666. Converting:
-    let frac = (load / (load + 1.0)).clamp(0.0, 1.0);
-    DecoyLimitConfig::Frac { frac }
-}
-
-fn overhead2delay_limit(
-    oh: &Option<RangeInclusive<f64>>,
-    implied_framework_limits: Option<bool>,
-) -> DelayLimitConfig {
-    if oh.is_none() || !implied_framework_limits.unwrap_or(false) {
-        return DelayLimitConfig::None;
-    }
-    let load = *oh.clone().unwrap().end();
-    let frac = (load / (load + 1.0)).clamp(0.0, 1.0);
-    DelayLimitConfig::Frac {
-        frac,
-        window_ms: 1000,
-        max_packets: usize::MAX,
     }
 }
 

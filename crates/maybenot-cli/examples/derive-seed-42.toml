@@ -13,7 +13,6 @@ include_after_last_normal = false
 traces = ["DeepFingerprinting", "GongSurakav"]
 num_traces = [4, 14]
 sim_steps = [1_000, 5_000]
-implied_framework_limits = true
 
 [derive.env.network]
 rtt_in_ms = [10, 100]

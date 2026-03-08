@@ -52,7 +52,7 @@ impl DeriveConfig {
                 .map(|sec| Duration::from_secs(sec as u64))
         });
 
-        let env = Environment::new(&self.env, &self.constraints, rng)?;
+        let env = Environment::new(&self.env, rng)?;
 
         // attempt to derive the defense
         find_constrained_defense(

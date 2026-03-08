@@ -57,7 +57,7 @@ pub fn combine_machines<R: Rng>(
     }
 
     let constraints = constraints.unwrap();
-    let env = Environment::new(&env.unwrap(), &constraints, rng)?;
+    let env = Environment::new(&env.unwrap(), rng)?;
 
     let mut attempts = 0;
     while attempts < max_attempts {
