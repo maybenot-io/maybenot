@@ -5,16 +5,76 @@ use std::{fmt, ops::RangeInclusive, time::Duration};
 use traces::load_traces;
 
 use maybenot_simulator::{
-    SimulatorArgs,
+    DecoyLimitConfig, DelayLimitConfig, SimulatorArgs,
     integration::{BinDist, Integration},
     network::Network,
     queue::SimQueue,
     sim_advanced,
 };
-use rand::Rng;
+use rand::{Rng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use crate::rng_range;
+
+/// Configurable decoy limit range for sampling in an instance of the framework.
+#[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DecoyLimitRange {
+    Frac {
+        frac: RangeInclusive<f64>,
+    },
+    FracWindowed {
+        frac: RangeInclusive<f64>,
+        window_ms: RangeInclusive<u64>,
+        min_normal: RangeInclusive<u64>,
+    },
+}
+
+impl DecoyLimitRange {
+    pub fn sample<R: RngCore>(&self, rng: &mut R) -> DecoyLimitConfig {
+        match self {
+            DecoyLimitRange::Frac { frac } => DecoyLimitConfig::Frac {
+                frac: rng_range!(rng, frac).clamp(0.0, 1.0),
+            },
+            DecoyLimitRange::FracWindowed {
+                frac,
+                window_ms,
+                min_normal,
+            } => DecoyLimitConfig::FracWindowed {
+                frac: rng_range!(rng, frac).clamp(0.0, 1.0),
+                window_ms: rng_range!(rng, window_ms),
+                min_normal: rng_range!(rng, min_normal),
+            },
+        }
+    }
+}
+
+/// Configurable delay limit range for sampling in an instance of the framework.
+#[derive(Debug, Deserialize, Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DelayLimitRange {
+    Frac {
+        frac: RangeInclusive<f64>,
+        window_ms: RangeInclusive<u64>,
+        max_packets: RangeInclusive<usize>,
+    },
+}
+
+impl DelayLimitRange {
+    pub fn sample<R: RngCore>(&self, rng: &mut R) -> DelayLimitConfig {
+        match self {
+            DelayLimitRange::Frac {
+                frac,
+                window_ms,
+                max_packets,
+            } => DelayLimitConfig::Frac {
+                frac: rng_range!(rng, frac).clamp(0.0, 1.0),
+                window_ms: rng_range!(rng, window_ms),
+                max_packets: rng_range!(rng, max_packets),
+            },
+        }
+    }
+}
 
 /// Network traces for the basis of the environment that we evaluate defenses
 /// within.
@@ -65,6 +125,14 @@ pub struct EnvironmentConfig {
     pub integration: Option<IntegrationType>,
     /// Configuration for the network used in the simulation environment.
     pub network: NetworkConfig,
+    /// Optional framework-wide decoy limit for the client.
+    pub client_decoy_limit: Option<DecoyLimitRange>,
+    /// Optional framework-wide delay limit for the client.
+    pub client_delay_limit: Option<DelayLimitRange>,
+    /// Optional framework-wide decoy limit for the server.
+    pub server_decoy_limit: Option<DecoyLimitRange>,
+    /// Optional framework-wide delay limit for the server.
+    pub server_delay_limit: Option<DelayLimitRange>,
 }
 
 /// Configuration for the network used in the simulation environment.
@@ -151,6 +219,20 @@ impl Environment {
             .collect();
         // fresh seed
         args.insecure_rng_seed = Some(rng.next_u64());
+
+        // apply environment-level framework limits
+        if let Some(ref r) = cfg.client_decoy_limit {
+            args.decoy_limit_client = r.sample(rng);
+        }
+        if let Some(ref r) = cfg.client_delay_limit {
+            args.delay_limit_client = r.sample(rng);
+        }
+        if let Some(ref r) = cfg.server_decoy_limit {
+            args.decoy_limit_server = r.sample(rng);
+        }
+        if let Some(ref r) = cfg.server_delay_limit {
+            args.delay_limit_server = r.sample(rng);
+        }
 
         Ok(Self {
             network,

@@ -9,7 +9,11 @@ use rand::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{defense::Defense, rng_range};
+use crate::{
+    defense::Defense,
+    environment::{DecoyLimitRange, DelayLimitRange},
+    rng_range,
+};
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Setup {
@@ -38,66 +42,6 @@ pub trait Dealer {
     fn len(&self) -> usize;
     /// whether the dealer is empty
     fn is_empty(&self) -> bool;
-}
-
-/// Configurable decoy limit range for sampling in a dealer.
-#[derive(Debug, Deserialize, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum DecoyLimitRange {
-    Frac {
-        frac: RangeInclusive<f64>,
-    },
-    FracWindowed {
-        frac: RangeInclusive<f64>,
-        window_ms: RangeInclusive<u64>,
-        min_normal: RangeInclusive<u64>,
-    },
-}
-
-impl DecoyLimitRange {
-    pub fn sample<R: RngCore>(&self, scale: f64, rng: &mut R) -> DecoyLimitConfig {
-        match self {
-            DecoyLimitRange::Frac { frac } => DecoyLimitConfig::Frac {
-                frac: (rng_range!(rng, frac) * scale).clamp(0.0, 1.0),
-            },
-            DecoyLimitRange::FracWindowed {
-                frac,
-                window_ms,
-                min_normal,
-            } => DecoyLimitConfig::FracWindowed {
-                frac: (rng_range!(rng, frac) * scale).clamp(0.0, 1.0),
-                window_ms: rng_range!(rng, window_ms),
-                min_normal: rng_range!(rng, min_normal),
-            },
-        }
-    }
-}
-
-/// Configurable delay limit range for sampling in a dealer.
-#[derive(Debug, Deserialize, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum DelayLimitRange {
-    Frac {
-        frac: RangeInclusive<f64>,
-        window_ms: RangeInclusive<u64>,
-        max_packets: RangeInclusive<usize>,
-    },
-}
-
-impl DelayLimitRange {
-    pub fn sample<R: RngCore>(&self, scale: f64, rng: &mut R) -> DelayLimitConfig {
-        match self {
-            DelayLimitRange::Frac {
-                frac,
-                window_ms,
-                max_packets,
-            } => DelayLimitConfig::Frac {
-                frac: (rng_range!(rng, frac) * scale).clamp(0.0, 1.0),
-                window_ms: rng_range!(rng, window_ms),
-                max_packets: rng_range!(rng, max_packets),
-            },
-        }
-    }
 }
 
 /// Limits for the client and server setups. Each is used only if set. The
@@ -181,12 +125,12 @@ impl Dealer for DealerFixed {
                     .client_limits
                     .as_ref()
                     .and_then(|l| l.decoy_limit.as_ref())
-                    .map_or(DecoyLimitConfig::None, |r| r.sample(scale, rng)),
+                    .map_or(DecoyLimitConfig::None, |r| r.sample(rng)),
                 delay_limit: self
                     .client_limits
                     .as_ref()
                     .and_then(|l| l.delay_limit.as_ref())
-                    .map_or(DelayLimitConfig::None, |r| r.sample(scale, rng)),
+                    .map_or(DelayLimitConfig::None, |r| r.sample(rng)),
             },
             server: Params {
                 machines: def.server,
@@ -194,12 +138,12 @@ impl Dealer for DealerFixed {
                     .server_limits
                     .as_ref()
                     .and_then(|l| l.decoy_limit.as_ref())
-                    .map_or(DecoyLimitConfig::None, |r| r.sample(scale, rng)),
+                    .map_or(DecoyLimitConfig::None, |r| r.sample(rng)),
                 delay_limit: self
                     .server_limits
                     .as_ref()
                     .and_then(|l| l.delay_limit.as_ref())
-                    .map_or(DelayLimitConfig::None, |r| r.sample(scale, rng)),
+                    .map_or(DelayLimitConfig::None, |r| r.sample(rng)),
             },
         })
     }
