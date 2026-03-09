@@ -115,7 +115,6 @@ allow_delay_client = true
 allow_delay_server = false
 allow_expressive = true
 allow_fixed_budget = false
-allow_frac_limits = true
 duration_point = [1000.0, 100000.0]
 count_point = { start = 10, end = 100 }
 min_action_timeout = [0.0, 1000.0]

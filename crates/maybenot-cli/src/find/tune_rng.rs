@@ -146,11 +146,10 @@ pub fn tune_rng(
 }
 
 fn wiggle_wf_cfg(cfg: &mut Config, prob: f64, rng: &mut Xoshiro256StarStar) -> String {
-    // what we want to wiggle with some probability: attempts, states,
-    // allow_frac_limits, duration ref point, count int ref point, min action
-    // timeout, traces, num_traces, sim steps, client load, server load, delay,
-    // client min normal packets, server min normal packets, include after last
-    // normal
+    // what we want to wiggle with some probability: attempts, states, duration
+    // ref point, count int ref point, min action timeout, traces, num_traces,
+    // sim steps, client load, server load, delay, client min normal packets,
+    // server min normal packets, include after last normal
 
     // for each change we make, we build a new filename
     let mut fname = String::new();

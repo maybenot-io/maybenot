@@ -4,3 +4,6 @@
 fuzz/out/
 fuzz/seeds/
 local/
+.python-version
+pyproject.toml
+uv.lock

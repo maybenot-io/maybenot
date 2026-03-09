@@ -294,15 +294,7 @@ fn random_action_decoy<R: Rng>(count_point: u64, duration_point: f64, rng: &mut 
         bypass: rng.random_bool(0.5),
         replace: rng.random_bool(0.5),
         timeout: random_timeout(duration_point, rng),
-        // TODO/FIXME: randomize this later properly
-        n: Dist {
-            dist: DistType::Uniform {
-                low: 0.0,
-                high: 0.0,
-            },
-            start: 1.0,
-            max: 0.0,
-        },
+        n: random_dist(count_point as f64, false, rng),
         limit: random_limit(count_point, rng),
     }
 }
@@ -325,15 +317,7 @@ fn random_action_delay<R: Rng>(
         timeout: random_timeout(duration_point, rng),
         duration: random_timeout(duration_point, rng),
         limit: random_limit(count_point, rng),
-        // TODO/FIXME: randomize this later properly
-        n: Dist {
-            dist: DistType::Uniform {
-                low: 0.0,
-                high: 0.0,
-            },
-            start: f64::MAX,
-            max: 0.0,
-        },
+        n: random_dist(count_point as f64, false, rng),
     }
 }
 

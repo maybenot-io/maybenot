@@ -28,7 +28,6 @@ allow_delay_client = false
 allow_delay_server = false
 allow_expressive = false
 allow_fixed_budget = true
-allow_frac_limits = false
 duration_point = [672_000.0, 950_000.0]
 
 [search]
