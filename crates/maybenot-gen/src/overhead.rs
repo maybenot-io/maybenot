@@ -48,7 +48,7 @@ impl DefendedTraceStats {
         let tail_vec = defended
             .lines()
             .rev()
-            .take_while(|l| l.contains("sp") || l.contains("rp"))
+            .take_while(|l| l.contains("sp") || l.contains("rp") || l.contains("sd") || l.contains("rd"))
             .collect::<Vec<&str>>();
         let tail_sent = tail_vec
             .iter()
