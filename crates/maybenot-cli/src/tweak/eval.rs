@@ -337,6 +337,39 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         "overhead_duration",
     );
 
+    info!("");
+    info!("decoy-normal correlation 📊 (+reactive, -proactive)");
+    print_relative_state_line(
+        "decoy_normal_corr",
+        "corr",
+        defended_stats
+            .iter()
+            .filter_map(DefendedTraceStats::decoy_normal_correlation)
+            .collect(),
+        &mut fixed_metrics,
+        "decoy_normal_corr",
+    );
+    print_relative_state_line(
+        "-sent",
+        "corr",
+        defended_stats
+            .iter()
+            .filter_map(DefendedTraceStats::decoy_normal_correlation_sent)
+            .collect(),
+        &mut fixed_metrics,
+        "decoy_normal_corr_sent",
+    );
+    print_relative_state_line(
+        "-recv",
+        "corr",
+        defended_stats
+            .iter()
+            .filter_map(DefendedTraceStats::decoy_normal_correlation_recv)
+            .collect(),
+        &mut fixed_metrics,
+        "decoy_normal_corr_recv",
+    );
+
     // run classifiers if configured
     let mut classifier_metrics = BTreeMap::<String, String>::new();
     if let Some(classifiers) = &cfg.classifiers {
