@@ -646,6 +646,20 @@ fn print_absolute_state_line(
     metrics_prefix: &str,
     metrics: &mut HashMap<String, f64>,
 ) {
+    // empty data produces NaN from median(), which serde_json serializes as
+    // null—a value that cannot be deserialized back into f64, breaking
+    // results.json round-tripping
+    if data.is_empty() {
+        info!(
+            "{print_prefix:<20}\t{:8.0} {:8.0} {:8.0} {:8}",
+            0.0, 0.0, 0.0, unit
+        );
+        metrics.insert(format!("{metrics_prefix}_mean_{unit}"), 0.0);
+        metrics.insert(format!("{metrics_prefix}_std_dev_{unit}"), 0.0);
+        metrics.insert(format!("{metrics_prefix}_median_{unit}"), 0.0);
+        return;
+    }
+
     let data = Data::new(data);
     let mean = data.mean().unwrap_or(0.0);
     let std_dev = data.std_dev().unwrap_or(0.0);
@@ -665,6 +679,20 @@ fn print_relative_state_line(
     metrics: &mut HashMap<String, f64>,
     base_key: &str,
 ) {
+    // empty data produces NaN from median(), which serde_json serializes as
+    // null—a value that cannot be deserialized back into f64, breaking
+    // results.json round-tripping
+    if data.is_empty() {
+        info!(
+            "{print_prefix:<20}\t{:8.2} {:8.2} {:8.2} {:>7}",
+            0.0, 0.0, 0.0, unit
+        );
+        metrics.insert(format!("{base_key}_mean_{unit}"), 0.0);
+        metrics.insert(format!("{base_key}_std_dev_{unit}"), 0.0);
+        metrics.insert(format!("{base_key}_median_{unit}"), 0.0);
+        return;
+    }
+
     let data = Data::new(data);
     let mean = data.mean().unwrap_or(0.0);
     let std_dev = data.std_dev().unwrap_or(0.0);
