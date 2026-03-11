@@ -370,6 +370,99 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         "decoy_normal_corr_recv",
     );
 
+    info!("");
+    info!("capacity excess (100ms windows) 📈");
+    print_relative_state_line(
+        "fraction",
+        "frac",
+        defended_stats
+            .iter()
+            .filter_map(|s| s.capacity_excess().map(|ce| ce.fraction))
+            .collect(),
+        &mut fixed_metrics,
+        "capacity_excess_fraction",
+    );
+    print_relative_state_line(
+        "-sent",
+        "frac",
+        defended_stats
+            .iter()
+            .filter_map(|s| s.capacity_excess_sent().map(|ce| ce.fraction))
+            .collect(),
+        &mut fixed_metrics,
+        "capacity_excess_fraction_sent",
+    );
+    print_relative_state_line(
+        "-recv",
+        "frac",
+        defended_stats
+            .iter()
+            .filter_map(|s| s.capacity_excess_recv().map(|ce| ce.fraction))
+            .collect(),
+        &mut fixed_metrics,
+        "capacity_excess_fraction_recv",
+    );
+    print_relative_state_line(
+        "peak_ratio",
+        "ratio",
+        defended_stats
+            .iter()
+            .filter_map(|s| s.capacity_excess().map(|ce| ce.peak_ratio))
+            .collect(),
+        &mut fixed_metrics,
+        "capacity_excess_peak_ratio",
+    );
+    print_relative_state_line(
+        "-sent",
+        "ratio",
+        defended_stats
+            .iter()
+            .filter_map(|s| s.capacity_excess_sent().map(|ce| ce.peak_ratio))
+            .collect(),
+        &mut fixed_metrics,
+        "capacity_excess_peak_ratio_sent",
+    );
+    print_relative_state_line(
+        "-recv",
+        "ratio",
+        defended_stats
+            .iter()
+            .filter_map(|s| s.capacity_excess_recv().map(|ce| ce.peak_ratio))
+            .collect(),
+        &mut fixed_metrics,
+        "capacity_excess_peak_ratio_recv",
+    );
+    print_relative_state_line(
+        "max_consecutive",
+        "windows",
+        defended_stats
+            .iter()
+            .filter_map(|s| s.capacity_excess().map(|ce| ce.max_consecutive as f64))
+            .collect(),
+        &mut fixed_metrics,
+        "capacity_excess_max_consecutive",
+    );
+    print_relative_state_line(
+        "-sent",
+        "windows",
+        defended_stats
+            .iter()
+            .filter_map(|s| s.capacity_excess_sent().map(|ce| ce.max_consecutive as f64))
+            .collect(),
+        &mut fixed_metrics,
+        "capacity_excess_max_consecutive_sent",
+    );
+    print_relative_state_line(
+        "-recv",
+        "windows",
+        defended_stats
+            .iter()
+            .filter_map(|s| s.capacity_excess_recv().map(|ce| ce.max_consecutive as f64))
+            .collect(),
+        &mut fixed_metrics,
+        "capacity_excess_max_consecutive_recv",
+    );
+
     // run classifiers if configured
     let mut classifier_metrics = BTreeMap::<String, String>::new();
     if let Some(classifiers) = &cfg.classifiers {
