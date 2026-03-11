@@ -108,12 +108,13 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
 
     info!("");
     info!(
-        "{:<25}{:>8} {:>8} {:>8} {:>7}",
+        "{:<22}{:>8} {:>8} {:>8} {:>8}",
         "Metric", "Mean", "StdDev", "Median", "Unit"
     );
-    info!("===========================================================");
+    info!("{}", "=".repeat(57));
+    info!("⚪ base dataset");
     print_absolute_state_line(
-        "base 🌐",
+        "total",
         "packets",
         defended_stats
             .iter()
@@ -123,7 +124,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         &mut fixed_metrics,
     );
     print_absolute_state_line(
-        "-sent",
+        "sent",
         "packets",
         defended_stats
             .iter()
@@ -133,7 +134,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         &mut fixed_metrics,
     );
     print_absolute_state_line(
-        "-recv",
+        "recv",
         "packets",
         defended_stats
             .iter()
@@ -144,8 +145,9 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
     );
 
     info!("");
+    info!("🌐 defended dataset");
     print_absolute_state_line(
-        "defended 🛡️",
+        "total",
         "packets",
         defended_stats
             .iter()
@@ -155,7 +157,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         &mut fixed_metrics,
     );
     print_absolute_state_line(
-        "-sent",
+        "sent",
         "packets",
         defended_stats
             .iter()
@@ -165,7 +167,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         &mut fixed_metrics,
     );
     print_absolute_state_line(
-        "-recv",
+        "recv",
         "packets",
         defended_stats
             .iter()
@@ -176,8 +178,9 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
     );
 
     info!("");
+    info!("🚨 missing normal in defended dataset");
     print_absolute_state_line(
-        "missing ⚠️",
+        "total",
         "packets",
         defended_stats
             .iter()
@@ -187,7 +190,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         &mut fixed_metrics,
     );
     print_absolute_state_line(
-        "-sent",
+        "sent",
         "packets",
         defended_stats
             .iter()
@@ -197,7 +200,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         &mut fixed_metrics,
     );
     print_absolute_state_line(
-        "-recv",
+        "recv",
         "packets",
         defended_stats
             .iter()
@@ -208,8 +211,9 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
     );
 
     info!("");
+    info!("📦 total decoy packets");
     print_absolute_state_line(
-        "total decoy packets 📦",
+        "total",
         "packets",
         defended_stats
             .iter()
@@ -234,8 +238,9 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
     );
 
     info!("");
+    info!("🐍 tail decoy packets");
     print_absolute_state_line(
-        "tail decoy packets 🔚",
+        "total",
         "packets",
         defended_stats
             .iter()
@@ -245,14 +250,14 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         &mut fixed_metrics,
     );
     print_absolute_state_line(
-        "-sent",
+        "sent",
         "packets",
         defended_stats.iter().map(|s| s.tail_sent).collect(),
         "tail_sent",
         &mut fixed_metrics,
     );
     print_absolute_state_line(
-        "-recv",
+        "recv",
         "packets",
         defended_stats.iter().map(|s| s.tail_received).collect(),
         "tail_received",
@@ -260,7 +265,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
     );
 
     info!("");
-    info!("durations ⏱️");
+    info!("⌛ durations");
     print_absolute_state_line(
         "base",
         "seconds",
@@ -282,7 +287,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         &mut fixed_metrics,
     );
     print_absolute_state_line(
-        "-last normal",
+        "last normal",
         "seconds",
         defended_stats
             .iter()
@@ -293,11 +298,11 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
     );
 
     info!("");
-    info!("overheads (last normal) 💸");
+    info!("💸 overheads (until last normal)");
     // only count the decoy packets sent until the last normal packet, so we
     // don't count the tail (decoy) packets
     print_relative_state_line(
-        "data",
+        "total",
         "multiple",
         defended_stats
             .iter()
@@ -307,7 +312,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         "overhead_data",
     );
     print_relative_state_line(
-        "-sent",
+        "sent",
         "multiple",
         defended_stats
             .iter()
@@ -317,7 +322,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         "overhead_data_sent",
     );
     print_relative_state_line(
-        "-recv",
+        "recv",
         "multiple",
         defended_stats
             .iter()
@@ -338,9 +343,9 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
     );
 
     info!("");
-    info!("decoy-normal correlation 📊 (+reactive, -proactive)");
+    info!("📊 decoy-normal correlation (+reactive, -proactive)");
     print_relative_state_line(
-        "decoy_normal_corr",
+        "total",
         "corr",
         defended_stats
             .iter()
@@ -350,7 +355,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         "decoy_normal_corr",
     );
     print_relative_state_line(
-        "-sent",
+        "sent",
         "corr",
         defended_stats
             .iter()
@@ -360,7 +365,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
         "decoy_normal_corr_sent",
     );
     print_relative_state_line(
-        "-recv",
+        "recv",
         "corr",
         defended_stats
             .iter()
@@ -371,7 +376,7 @@ pub fn eval(config: Config, input: &Path, output: Option<&PathBuf>) -> Result<()
     );
 
     info!("");
-    info!("capacity excess (100ms windows) 📈");
+    info!("📈 capacity excess (100ms windows)");
     print_relative_state_line(
         "fraction",
         "frac",
@@ -651,7 +656,7 @@ fn print_absolute_state_line(
     // results.json round-tripping
     if data.is_empty() {
         info!(
-            "{print_prefix:<20}\t{:8.0} {:8.0} {:8.0} {:8}",
+            "{print_prefix:<22}{:>8.0} {:>8.0} {:>8.0} {:>8}",
             0.0, 0.0, 0.0, unit
         );
         metrics.insert(format!("{metrics_prefix}_mean_{unit}"), 0.0);
@@ -665,7 +670,7 @@ fn print_absolute_state_line(
     let std_dev = data.std_dev().unwrap_or(0.0);
     let median = data.median();
 
-    info!("{print_prefix:<20}\t{mean:8.0} {std_dev:8.0} {median:8.0} {unit:8}",);
+    info!("{print_prefix:<22}{mean:>8.0} {std_dev:>8.0} {median:>8.0} {unit:>8}");
 
     metrics.insert(format!("{metrics_prefix}_mean_{unit}"), mean);
     metrics.insert(format!("{metrics_prefix}_std_dev_{unit}"), std_dev);
@@ -684,7 +689,7 @@ fn print_relative_state_line(
     // results.json round-tripping
     if data.is_empty() {
         info!(
-            "{print_prefix:<20}\t{:8.2} {:8.2} {:8.2} {:>7}",
+            "{print_prefix:<22}{:>8.2} {:>8.2} {:>8.2} {:>8}",
             0.0, 0.0, 0.0, unit
         );
         metrics.insert(format!("{base_key}_mean_{unit}"), 0.0);
@@ -697,7 +702,7 @@ fn print_relative_state_line(
     let mean = data.mean().unwrap_or(0.0);
     let std_dev = data.std_dev().unwrap_or(0.0);
     let median = data.median();
-    info!("{print_prefix:<20}\t{mean:8.2} {std_dev:8.2} {median:8.2} {unit:>7}",);
+    info!("{print_prefix:<22}{mean:>8.2} {std_dev:>8.2} {median:>8.2} {unit:>8}");
 
     metrics.insert(format!("{base_key}_mean_{unit}"), mean);
     metrics.insert(format!("{base_key}_std_dev_{unit}"), std_dev);
