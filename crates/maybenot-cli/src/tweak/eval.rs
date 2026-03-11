@@ -9,7 +9,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use chrono::Utc;
 use indicatif::ParallelProgressIterator;
 use log::info;
-use maybenot_gen::overhead::DefendedTraceStats;
+use maybenot_gen::trace_stats::DefendedTraceStats;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};

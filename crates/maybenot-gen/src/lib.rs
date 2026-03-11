@@ -7,8 +7,8 @@ pub mod dealer;
 pub mod defense;
 pub mod derive;
 pub mod environment;
-pub mod overhead;
 pub mod random_machine;
+pub mod trace_stats;
 
 #[macro_use]
 mod macros;
