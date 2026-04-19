@@ -1,6 +1,6 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use maybenot::dist::{Dist, DistType};
-use rand::Rng;
+use rand::RngExt;
 use rand::SeedableRng;
 use rand_xoshiro::Xoshiro256StarStar;
 
@@ -196,7 +196,7 @@ criterion_group! {
 }
 criterion_main!(dists);
 
-fn bench_dist<R: rand_core::RngCore>(rng: &mut R, d: Dist, n: usize) {
+fn bench_dist<R: rand_core::Rng>(rng: &mut R, d: Dist, n: usize) {
     for _ in 0..n {
         d.sample(rng);
     }

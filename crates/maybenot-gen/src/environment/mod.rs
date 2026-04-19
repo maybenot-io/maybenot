@@ -11,7 +11,7 @@ use maybenot_simulator::{
     queue::SimQueue,
     sim_advanced,
 };
-use rand::{Rng, RngCore};
+use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
 use crate::rng_range;
@@ -31,7 +31,7 @@ pub enum DecoyLimitRange {
 }
 
 impl DecoyLimitRange {
-    pub fn sample<R: RngCore>(&self, rng: &mut R) -> DecoyLimitConfig {
+    pub fn sample<R: Rng>(&self, rng: &mut R) -> DecoyLimitConfig {
         match self {
             DecoyLimitRange::Frac { frac } => DecoyLimitConfig::Frac {
                 frac: rng_range!(rng, frac).clamp(0.0, 1.0),
@@ -61,7 +61,7 @@ pub enum DelayLimitRange {
 }
 
 impl DelayLimitRange {
-    pub fn sample<R: RngCore>(&self, rng: &mut R) -> DelayLimitConfig {
+    pub fn sample<R: Rng>(&self, rng: &mut R) -> DelayLimitConfig {
         match self {
             DelayLimitRange::Frac {
                 frac,

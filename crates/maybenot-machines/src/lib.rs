@@ -3,7 +3,7 @@ use std::str::FromStr;
 use anyhow::{Result, bail};
 use enum_map::enum_map;
 use maybenot::{Machine, state::State};
-use rand_core::RngCore;
+use rand_core::Rng;
 use serde::{Deserialize, Serialize};
 
 pub mod break_pad;
@@ -259,7 +259,7 @@ pub fn get_static_machine_strings() -> Vec<String> {
 }
 
 /// Get one or more machines from a list of static machines.
-pub fn get_machine<R: RngCore>(s: &[StaticMachine], rng: &mut R) -> Vec<Machine> {
+pub fn get_machine<R: Rng>(s: &[StaticMachine], rng: &mut R) -> Vec<Machine> {
     let mut machines = vec![];
 
     for m in s {

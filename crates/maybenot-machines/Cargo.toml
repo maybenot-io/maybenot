@@ -19,6 +19,6 @@ workspace = true
 serde = { version = "1.0", features = ["derive"] }
 maybenot = { version = "3.0.0", path = "../maybenot/" }
 enum-map = "2.7"
-rand = "0.9"
-rand_core = "0.9"
+rand = "0.10"
+rand_core = "0.10"
 anyhow = "1.0"

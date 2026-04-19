@@ -1,6 +1,6 @@
 //! Actions for [`State`](crate::state) transitions.
 
-use rand_core::RngCore;
+use rand_core::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
@@ -106,7 +106,7 @@ impl fmt::Display for Action {
 
 impl Action {
     /// Sample a timeout for a decoy or delay action.
-    pub(crate) fn sample_timeout<R: RngCore>(&self, rng: &mut R) -> u64 {
+    pub(crate) fn sample_timeout<R: Rng>(&self, rng: &mut R) -> u64 {
         match self {
             Action::DecoyTraffic { timeout, .. } | Action::DelayTraffic { timeout, .. } => {
                 timeout.sample(rng).min(MAX_SAMPLED_TIMEOUT).round() as u64
@@ -116,7 +116,7 @@ impl Action {
     }
 
     /// Sample a duration for a delay or timer update action.
-    pub(crate) fn sample_duration<R: RngCore>(&self, rng: &mut R) -> u64 {
+    pub(crate) fn sample_duration<R: Rng>(&self, rng: &mut R) -> u64 {
         match self {
             Action::DelayTraffic { duration, .. } => {
                 duration.sample(rng).min(MAX_SAMPLED_DELAY_DURATION).round() as u64
@@ -129,7 +129,7 @@ impl Action {
     }
 
     /// Sample the number of decoy packets for a decoy action.
-    pub(crate) fn sample_decoy_n<R: RngCore>(&self, rng: &mut R) -> usize {
+    pub(crate) fn sample_decoy_n<R: Rng>(&self, rng: &mut R) -> usize {
         match self {
             Action::DecoyTraffic { n: amount, .. } => {
                 amount.sample(rng).min(MAX_SAMPLED_DECOY_N as f64).round() as usize
@@ -139,7 +139,7 @@ impl Action {
     }
 
     /// Sample the number of packets to delay for a delay action.
-    pub(crate) fn sample_delay_n<R: RngCore>(&self, rng: &mut R) -> usize {
+    pub(crate) fn sample_delay_n<R: Rng>(&self, rng: &mut R) -> usize {
         match self {
             Action::DelayTraffic { n: amount, .. } => {
                 amount.sample(rng).min(MAX_SAMPLED_DELAY_N as f64).round() as usize
@@ -149,7 +149,7 @@ impl Action {
     }
 
     /// Sample a limit.
-    pub(crate) fn sample_limit<R: RngCore>(&self, rng: &mut R) -> u64 {
+    pub(crate) fn sample_limit<R: Rng>(&self, rng: &mut R) -> u64 {
         match self {
             Action::DecoyTraffic { limit, .. }
             | Action::DelayTraffic { limit, .. }

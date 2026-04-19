@@ -6,7 +6,8 @@ use crate::constants::{EVENT_NUM, STATE_END, STATE_SIGNAL};
 use crate::{Error, action, counter, event};
 use enum_map::Enum;
 use enum_map::EnumMap;
-use rand::RngCore;
+use rand::RngExt;
+use rand_core::Rng;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashSet;
@@ -147,8 +148,7 @@ impl State {
     }
 
     /// Sample a state to transition to given an [`Event`].
-    pub fn sample_state<R: RngCore>(&self, event: Event, rng: &mut R) -> Option<usize> {
-        use rand::Rng;
+    pub fn sample_state<R: Rng>(&self, event: Event, rng: &mut R) -> Option<usize> {
         if let Some(vector) = &self.transitions[event.to_usize()] {
             let mut sum = 0.0;
             let r = rng.random_range(0.0..1.0);

@@ -1,7 +1,7 @@
 //! Maybenot is a framework for traffic analysis defenses that hide patterns in
 //! encrypted communication.
 
-use rand_core::RngCore;
+use rand_core::Rng;
 
 use crate::limit::{LimitDecoy, LimitDelay};
 use crate::{
@@ -110,7 +110,7 @@ where
 impl<M, R, T, C, L> Framework<M, R, T, C, L>
 where
     M: AsRef<[Machine]>,
-    R: RngCore,
+    R: Rng,
     T: crate::time::Instant,
     C: LimitDecoy<T>,
     L: LimitDelay<T>,

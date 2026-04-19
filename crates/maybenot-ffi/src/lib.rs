@@ -11,7 +11,10 @@ pub use error::MaybenotResult;
 
 mod ffi;
 pub use ffi::*;
-use rand::rngs::{OsRng, ReseedingRng};
+use rand::{
+    SeedableRng,
+    rngs::{StdRng, SysRng},
+};
 
 /// A dynamic limit that can be either no limit or a fraction-based
 /// limit. This allows FFI to choose the limit type at runtime.
@@ -132,13 +135,9 @@ pub struct MaybenotFramework {
 
 /// The randomness generator used for the framework.
 ///
-/// This setup uses [OsRng] as the source of entropy, but extrapolates each call to [OsRng] into
-/// at least [RNG_RESEED_THRESHOLD] bytes of randomness using [rand_chacha::ChaCha12Core].
-///
-/// This is the same Rng that [rand::thread_rng] uses internally,
-/// but unlike thread_rng, this is Sync.
-type Rng = ReseedingRng<rand_chacha::ChaCha12Core, OsRng>;
-const RNG_RESEED_THRESHOLD: u64 = 1024 * 64; // 64 KiB
+/// Uses [StdRng] (ChaCha12) seeded from the operating system entropy source ([SysRng]).
+/// Unlike [rand::rng], this is Sync.
+type Rng = StdRng;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -263,7 +262,7 @@ impl MaybenotFramework {
 
         let machines_count = machines.len();
 
-        let rng = Rng::new(RNG_RESEED_THRESHOLD, OsRng).unwrap();
+        let rng = StdRng::try_from_rng(&mut SysRng).unwrap();
 
         // Convert max_decoy_frac to limit: if 0, use no limit (allows all decoys)
         let decoy_limit = if max_decoy_frac > 0.0 {
@@ -313,7 +312,7 @@ impl MaybenotFramework {
 
         let machines_count = machines.len();
 
-        let rng = Rng::new(RNG_RESEED_THRESHOLD, OsRng).unwrap();
+        let rng = StdRng::try_from_rng(&mut SysRng).unwrap();
 
         let decoy_limit = match decoy_limit_type {
             0 => DynamicLimitDecoy::None(LimitDecoyNone),

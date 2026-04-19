@@ -160,10 +160,8 @@ pub fn load_traces<R: Rng>(
                     }
 
                     // choose n random distinct files
-                    let chosen_files: Vec<_> = file_paths
-                        .choose_multiple(rng, num_traces)
-                        .cloned()
-                        .collect();
+                    let chosen_files: Vec<_> =
+                        file_paths.sample(rng, num_traces).cloned().collect();
 
                     // for each chosen file, read its contents, create SimQueues, and return
                     return Ok(chosen_files
@@ -193,10 +191,7 @@ pub fn load_traces<R: Rng>(
 
     if num_traces < candidate_traces.len() {
         // select a random subset of traces
-        candidate_traces = candidate_traces
-            .choose_multiple(rng, num_traces)
-            .cloned()
-            .collect();
+        candidate_traces = candidate_traces.sample(rng, num_traces).cloned().collect();
     }
 
     Ok(candidate_traces

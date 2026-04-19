@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use maybenot::Machine;
 use maybenot_simulator::{DecoyLimitConfig, DelayLimitConfig};
 use rand::{
-    Rng, RngCore,
+    Rng, RngExt,
     seq::{IndexedMutRandom, SliceRandom},
 };
 use serde::{Deserialize, Serialize};
@@ -35,9 +35,9 @@ pub struct Params {
 /// useful for creating defense-overhead trade-offs.
 pub trait Dealer {
     /// draw a setup for the client and server
-    fn draw<R: RngCore>(&mut self, scale: f64, rng: &mut R) -> Result<Setup>;
+    fn draw<R: Rng>(&mut self, scale: f64, rng: &mut R) -> Result<Setup>;
     /// draw n setups for the client and server
-    fn draw_n<R: RngCore>(&mut self, n: usize, scale: f64, rng: &mut R) -> Result<Vec<Setup>>;
+    fn draw_n<R: Rng>(&mut self, n: usize, scale: f64, rng: &mut R) -> Result<Vec<Setup>>;
     /// the number of defenses left in the dealer
     fn len(&self) -> usize;
     /// whether the dealer is empty
@@ -71,7 +71,7 @@ pub struct DealerFixed {
 }
 
 impl DealerFixed {
-    pub fn new<R: RngCore>(
+    pub fn new<R: Rng>(
         mut defenses: Vec<Defense>,
         client_limits: Option<Limits>,
         server_limits: Option<Limits>,
@@ -94,7 +94,7 @@ impl DealerFixed {
 }
 
 impl Dealer for DealerFixed {
-    fn draw<R: RngCore>(&mut self, scale: f64, rng: &mut R) -> Result<Setup> {
+    fn draw<R: Rng>(&mut self, scale: f64, rng: &mut R) -> Result<Setup> {
         if !(0.0..=1.0).contains(&scale) {
             bail!("invalid scale");
         }
@@ -148,7 +148,7 @@ impl Dealer for DealerFixed {
         })
     }
 
-    fn draw_n<R: RngCore>(&mut self, n: usize, scale: f64, rng: &mut R) -> Result<Vec<Setup>> {
+    fn draw_n<R: Rng>(&mut self, n: usize, scale: f64, rng: &mut R) -> Result<Vec<Setup>> {
         if !(0.0..=1.0).contains(&scale) {
             bail!("invalid scale");
         }
@@ -175,7 +175,7 @@ impl Dealer for DealerFixed {
     }
 }
 
-fn sample_budget_scaled<R: RngCore>(
+fn sample_budget_scaled<R: Rng>(
     range: &Option<RangeInclusive<f64>>,
     scale: f64,
     rng: &mut R,
@@ -183,12 +183,7 @@ fn sample_budget_scaled<R: RngCore>(
     range.as_ref().map_or(0.0, |r| rng_range!(rng, r) * scale)
 }
 
-fn set_machine_limits<R: RngCore>(
-    machines: &mut [Machine],
-    limits: &Limits,
-    scale: f64,
-    rng: &mut R,
-) {
+fn set_machine_limits<R: Rng>(machines: &mut [Machine], limits: &Limits, scale: f64, rng: &mut R) {
     let decoy_budget = sample_budget_scaled(&limits.decoy_budget, scale, rng);
     let delay_budget = sample_budget_scaled(&limits.delay_budget, scale, rng);
 

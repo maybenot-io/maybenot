@@ -12,7 +12,7 @@ use crate::{
 use anyhow::{Result, bail};
 use log::info;
 use maybenot_gen::{environment::Traces, random_machine::round_f64};
-use rand::{Rng, seq::SliceRandom};
+use rand::{RngExt, seq::SliceRandom};
 use rand_seeder::Seeder;
 use rand_xoshiro::Xoshiro256StarStar;
 

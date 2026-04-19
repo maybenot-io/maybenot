@@ -6,7 +6,7 @@ use maybenot::{
     event::Event,
     state::{State, Trans},
 };
-use rand::Rng;
+use rand::{Rng, RngExt};
 use std::ops::RangeInclusive;
 
 use crate::{

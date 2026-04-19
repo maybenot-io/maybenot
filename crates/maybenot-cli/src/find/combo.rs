@@ -16,7 +16,7 @@ use maybenot_gen::{
     constraints::ConstraintsConfig,
     environment::EnvironmentConfig,
 };
-use rand::{Rng, seq::SliceRandom};
+use rand::{RngExt, seq::SliceRandom};
 use rand_seeder::Seeder;
 use rand_xoshiro::Xoshiro256StarStar;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -74,7 +74,7 @@ pub fn combo(
         bail!("output '{}' already exists", output.display());
     }
 
-    let mut rng: Box<dyn rand::RngCore> = match &seed.or(combo_config.seed.clone()) {
+    let mut rng: Box<dyn rand::Rng> = match &seed.or(combo_config.seed.clone()) {
         Some(seed) => {
             info!("deterministic, using seed {seed}");
             Box::new(Seeder::from(seed).into_rng::<Xoshiro256StarStar>())

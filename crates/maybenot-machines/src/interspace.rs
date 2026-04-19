@@ -7,12 +7,11 @@ use maybenot::{
 };
 
 use enum_map::enum_map;
-use rand::Rng;
-use rand::RngCore;
+use rand::{Rng, RngExt};
 
 // based on
 // https://github.com/pylls/padding-machines-for-tor/blob/master/machines/phase3/interspace-mc.c
-pub fn interspace_client<R: RngCore>(rng: &mut R) -> Vec<Machine> {
+pub fn interspace_client<R: Rng>(rng: &mut R) -> Vec<Machine> {
     let mut states = vec![];
 
     let start = State::new(enum_map! {
@@ -84,7 +83,7 @@ pub fn interspace_client<R: RngCore>(rng: &mut R) -> Vec<Machine> {
 
 // based on
 // https://github.com/pylls/padding-machines-for-tor/blob/master/machines/phase3/interspace-mr.c
-pub fn interspace_server<R: RngCore>(rng: &mut R) -> Vec<Machine> {
+pub fn interspace_server<R: Rng>(rng: &mut R) -> Vec<Machine> {
     if rng.random_bool(0.5) {
         interspace_server_manual(rng)
     } else {
@@ -92,7 +91,7 @@ pub fn interspace_server<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     }
 }
 
-fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
+fn interspace_server_manual<R: Rng>(rng: &mut R) -> Vec<Machine> {
     let mut states = vec![];
 
     let start = State::new(enum_map! {
@@ -187,7 +186,7 @@ fn interspace_server_manual<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     vec![Machine::new(1500, 0, states).unwrap()]
 }
 
-fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
+fn interspace_server_spring<R: Rng>(rng: &mut R) -> Vec<Machine> {
     let mut states = vec![];
 
     let mut s0 = State::new(enum_map! {
@@ -277,7 +276,7 @@ fn interspace_server_spring<R: RngCore>(rng: &mut R) -> Vec<Machine> {
     vec![Machine::new(1500, 0, states).unwrap()]
 }
 
-fn random_pareto<R: RngCore>(start: f64, max: f64, rng: &mut R) -> Dist {
+fn random_pareto<R: Rng>(start: f64, max: f64, rng: &mut R) -> Dist {
     Dist {
         dist: DistType::Pareto {
             scale: rng.random_range(0.0..10.0),
@@ -288,7 +287,7 @@ fn random_pareto<R: RngCore>(start: f64, max: f64, rng: &mut R) -> Dist {
     }
 }
 
-fn random_log_logistic<R: RngCore>(start: f64, max: f64, rng: &mut R) -> Dist {
+fn random_log_logistic<R: Rng>(start: f64, max: f64, rng: &mut R) -> Dist {
     // Problem: we don't have a log-logistic distribution in Maybenot. We
     // approximate it with a Gamma distribution. We also have to take into
     // account how the circuit padding framework (see

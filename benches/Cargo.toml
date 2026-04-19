@@ -19,9 +19,9 @@ criterion = "0.5.1"
 enum-map = "2.7.3"
 maybenot = { path = "../crates/maybenot/" }
 maybenot-simulator = { path = "../crates/maybenot-simulator" }
-rand = "0.9"
-rand_core = "0.9"
-rand_xoshiro = "0.7"
+rand = "0.10"
+rand_core = "0.10"
+rand_xoshiro = "0.8"
 
 [[bench]]
 name = "rng"

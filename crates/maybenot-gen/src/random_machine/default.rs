@@ -10,8 +10,8 @@ use maybenot::{
     state::{State, Trans},
 };
 
-use rand::Rng;
 use rand::prelude::SliceRandom;
+use rand::{Rng, RngExt};
 
 use crate::{
     random_machine::{DEFAULT_REF_COUNT_POINT, check_machine_states, round_f32, round_f64},

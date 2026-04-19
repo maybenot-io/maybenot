@@ -23,7 +23,7 @@ use maybenot_gen::{
     rng_range,
 };
 use maybenot_simulator::{SimulatorArgs, network::Network, parse_trace_advanced, sim_advanced};
-use rand::{Rng, RngCore, SeedableRng, seq::SliceRandom};
+use rand::{Rng, RngExt, SeedableRng, seq::SliceRandom};
 use rand_seeder::Seeder;
 use rand_xoshiro::Xoshiro256StarStar;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
@@ -82,7 +82,7 @@ pub fn sim(
             info!("deterministic, using seed {seed}");
             Seeder::from(seed).into_rng()
         }
-        None => Xoshiro256StarStar::from_os_rng(),
+        None => Xoshiro256StarStar::from_rng(&mut rand::rng()),
     };
 
     let mut defenses = Vec::new();
@@ -165,7 +165,7 @@ pub fn sim(
     )
 }
 
-pub fn do_sim_def<R: RngCore>(
+pub fn do_sim_def<R: Rng>(
     cfg: &SimConfig,
     defenses: &mut [Defense],
     dataset: &[(usize, String, String)],
@@ -264,7 +264,7 @@ pub fn do_sim_def<R: RngCore>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn sim_dataset<R: RngCore>(
+fn sim_dataset<R: Rng>(
     dataset: &[(usize, String, String)],
     dataset_samples: usize,
     enough_defenses: bool,

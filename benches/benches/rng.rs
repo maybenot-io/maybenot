@@ -10,7 +10,7 @@ use maybenot_simulator::network::Network;
 use maybenot_simulator::queue::SimQueue;
 use maybenot_simulator::{SimulatorArgs, parse_trace, sim_advanced};
 use rand::SeedableRng;
-use rand_core::RngCore;
+use rand_core::Rng;
 use rand_xoshiro::Xoshiro256StarStar;
 
 pub fn dist_rng_source_benchmarks(c: &mut Criterion) {
@@ -134,13 +134,13 @@ fn run_sim(
     }
 }
 
-fn sample_state<R: RngCore>(s: &State, rng: &mut R, n: usize) {
+fn sample_state<R: Rng>(s: &State, rng: &mut R, n: usize) {
     for _ in 0..n {
         s.sample_state(Event::PacketSent, rng);
     }
 }
 
-fn sample_uniform<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_uniform<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::Uniform {
             low: 0.0,
@@ -155,7 +155,7 @@ fn sample_uniform<R: RngCore>(rng: &mut R, n: usize) {
     }
 }
 
-fn sample_normal<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_normal<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::Normal {
             mean: 10.0,
@@ -170,7 +170,7 @@ fn sample_normal<R: RngCore>(rng: &mut R, n: usize) {
     }
 }
 
-fn sample_skew_normal<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_skew_normal<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::SkewNormal {
             location: 10.0,
@@ -186,7 +186,7 @@ fn sample_skew_normal<R: RngCore>(rng: &mut R, n: usize) {
     }
 }
 
-fn sample_log_normal<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_log_normal<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::LogNormal {
             mu: 10.0,
@@ -201,7 +201,7 @@ fn sample_log_normal<R: RngCore>(rng: &mut R, n: usize) {
     }
 }
 
-fn sample_binomial<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_binomial<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::Binomial {
             trials: 10,
@@ -216,7 +216,7 @@ fn sample_binomial<R: RngCore>(rng: &mut R, n: usize) {
     }
 }
 
-fn sample_geometric<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_geometric<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::Geometric { probability: 0.5 },
         start: 20.0 * 1000.0,
@@ -228,7 +228,7 @@ fn sample_geometric<R: RngCore>(rng: &mut R, n: usize) {
     }
 }
 
-fn sample_pareto<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_pareto<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::Pareto {
             shape: 2.0,
@@ -243,7 +243,7 @@ fn sample_pareto<R: RngCore>(rng: &mut R, n: usize) {
     }
 }
 
-fn sample_poisson<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_poisson<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::Poisson { lambda: 2.0 },
         start: 20.0 * 1000.0,
@@ -255,7 +255,7 @@ fn sample_poisson<R: RngCore>(rng: &mut R, n: usize) {
     }
 }
 
-fn sample_weibull<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_weibull<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::Weibull {
             shape: 2.0,
@@ -270,7 +270,7 @@ fn sample_weibull<R: RngCore>(rng: &mut R, n: usize) {
     }
 }
 
-fn sample_gamma<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_gamma<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::Gamma {
             shape: 2.0,
@@ -285,7 +285,7 @@ fn sample_gamma<R: RngCore>(rng: &mut R, n: usize) {
     }
 }
 
-fn sample_beta<R: RngCore>(rng: &mut R, n: usize) {
+fn sample_beta<R: Rng>(rng: &mut R, n: usize) {
     let d = Dist {
         dist: DistType::Beta {
             alpha: 2.0,

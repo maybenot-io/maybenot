@@ -32,7 +32,7 @@ pub fn fixed(
     }
     // note that we need to Box here, since if in a setting where adversaries
     // can observe some machines, using Xoshiro256StarStar is insecure
-    let mut rng: Box<dyn rand::RngCore> = match seed {
+    let mut rng: Box<dyn rand::Rng> = match seed {
         Some(seed) => {
             info!("deterministic, using seed {seed}");
             Box::new(Seeder::from(seed).into_rng::<Xoshiro256StarStar>())

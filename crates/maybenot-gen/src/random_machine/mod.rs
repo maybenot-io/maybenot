@@ -7,7 +7,7 @@ use petgraph::{
     Graph,
     algo::{connected_components, kosaraju_scc},
 };
-use rand::Rng;
+use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
 use crate::{

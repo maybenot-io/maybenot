@@ -11,7 +11,7 @@ use maybenot::Machine;
 use num_bigint::BigUint;
 use num_integer::binomial;
 use num_traits::Zero;
-use rand::{Rng, seq::IndexedRandom};
+use rand::{Rng, RngExt, seq::IndexedRandom};
 
 /// Create a new defense by randomly combining machines. Repeatedly samples
 /// \[1,height\] machines from the clients and servers, independently, combining
@@ -51,8 +51,8 @@ pub fn combine_machines<R: Rng>(
         // no constraints or environment, we can skip validation
         let n_client = rng.random_range(1..=height);
         let n_server = rng.random_range(1..=height);
-        let client = clients.choose_multiple(rng, n_client).cloned().collect();
-        let server = servers.choose_multiple(rng, n_server).cloned().collect();
+        let client = clients.sample(rng, n_client).cloned().collect();
+        let server = servers.sample(rng, n_server).cloned().collect();
         return Ok(Some(Defense::new(client, server)));
     }
 
@@ -65,8 +65,8 @@ pub fn combine_machines<R: Rng>(
 
         let n_client = rng.random_range(1..=height);
         let n_server = rng.random_range(1..=height);
-        let client: Vec<Machine> = clients.choose_multiple(rng, n_client).cloned().collect();
-        let server: Vec<Machine> = servers.choose_multiple(rng, n_server).cloned().collect();
+        let client: Vec<Machine> = clients.sample(rng, n_client).cloned().collect();
+        let server: Vec<Machine> = servers.sample(rng, n_server).cloned().collect();
 
         match constraints.check(&client, &server, &env, rng.next_u64()) {
             Ok(_) => {
