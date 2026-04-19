@@ -737,7 +737,7 @@ pub fn sim_advanced(
     }
 
     // sort the trace by time
-    trace.sort_by(|a, b| a.time.cmp(&b.time));
+    trace.sort_by_key(|a| a.time);
 
     trace
 }

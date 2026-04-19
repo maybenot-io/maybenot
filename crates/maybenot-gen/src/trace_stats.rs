@@ -203,6 +203,7 @@ impl DefendedTraceStats {
         } else {
             let num_bins = (last_normal.as_millis() as usize / 100).max(MIN_CORRELATION_BINS);
             let bin_width = last_normal_nanos / num_bins as u64;
+            #[allow(clippy::manual_checked_ops)]
             if bin_width == 0 {
                 (None, None, None)
             } else {
