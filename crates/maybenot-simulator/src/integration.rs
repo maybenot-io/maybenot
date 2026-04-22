@@ -28,22 +28,16 @@ pub struct Integration {
 }
 
 impl Integration {
-    pub fn action_delay(&self) -> Duration {
-        // TODO: needs to use the configured RngSource if we want to support
-        // deterministic testing of integration delays
-        self.action_delay.sample(&mut rand::rng())
+    pub fn action_delay<R: Rng>(&self, rng: &mut R) -> Duration {
+        self.action_delay.sample(rng)
     }
 
-    pub fn reporting_delay(&self) -> Duration {
-        // TODO: needs to use the configured RngSource if we want to support
-        // deterministic testing of integration delays
-        self.reporting_delay.sample(&mut rand::rng())
+    pub fn reporting_delay<R: Rng>(&self, rng: &mut R) -> Duration {
+        self.reporting_delay.sample(rng)
     }
 
-    pub fn trigger_delay(&self) -> Duration {
-        // TODO: needs to use the configured RngSource if we want to support
-        // deterministic testing of integration delays
-        self.trigger_delay.sample(&mut rand::rng())
+    pub fn trigger_delay<R: Rng>(&self, rng: &mut R) -> Duration {
+        self.trigger_delay.sample(rng)
     }
 }
 

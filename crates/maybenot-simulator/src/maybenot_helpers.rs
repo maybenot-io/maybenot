@@ -3,7 +3,7 @@ use crate::topology::maybenot_nodes::MaybenotNode;
 use crate::topology::maybenot_nodes::{ActionProducer, MaybenotState, ScheduledAction};
 use crate::{SimEvent, SimInfo, SimQueue, SimTime, SimulatorArgs};
 use log::debug;
-use maybenot::{Machine, MachineId, Timer, TriggerAction, TriggerEvent};
+use maybenot::{Machine, Timer, TriggerAction, TriggerEvent};
 use std::time::Duration;
 
 /// Initialize Maybenot nodes with MaybenotState for simulation
@@ -58,6 +58,7 @@ pub fn initialize_user_provided_sim_states(
         client_producer,
         args.drain_delayed_by_time,
         args.client_integration.clone(),
+        args.insecure_rng_seed,
     );
 
     let relay: &dyn MaybenotNode = topology.get_maybenot_relay();
@@ -65,6 +66,7 @@ pub fn initialize_user_provided_sim_states(
         server_producer,
         args.drain_delayed_by_time,
         args.server_integration.clone(),
+        args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
     );
 }
 
@@ -84,59 +86,46 @@ pub fn pick_next_maybenot(
     let client_maybenot = topology.get_maybenot_client();
     let relay_maybenot = topology.get_maybenot_relay();
 
-    // Collect scheduled actions and internal timers from Maybenot nodes
+    // Read the cached minimums from both Maybenot nodes. These are O(1)
+    // lookups — the `scheduled_action` / `scheduled_internal_timer` vectors
+    // maintain their per-node min via the setter/clear helpers so we never
+    // scan all machine slots on the main-loop fast path.
     let mut min_scheduled_action = Duration::MAX;
     let mut action_node = client_maybenot;
     let mut min_internal_timer = Duration::MAX;
     let mut timer_node = client_maybenot;
 
-    // Check client Maybenot node
     let state = client_maybenot.get_sim_state().borrow();
-
-    // Check scheduled actions
-    for action in state.scheduled_action.iter().flatten() {
-        if action.time >= current_time {
-            let duration = action.time - current_time;
-            if duration < min_scheduled_action {
-                min_scheduled_action = duration;
-            }
-        }
+    if let Some((t, _)) = state.peek_min_scheduled_action()
+        && t >= current_time
+    {
+        min_scheduled_action = t - current_time;
     }
-
-    // Check internal timers
-    for timer in state.scheduled_internal_timer.iter().flatten() {
-        if *timer >= current_time {
-            let duration = *timer - current_time;
-            if duration < min_internal_timer {
-                min_internal_timer = duration;
-            }
-        }
+    if let Some((t, _)) = state.peek_min_scheduled_internal_timer()
+        && t >= current_time
+    {
+        min_internal_timer = t - current_time;
     }
     let client_delay_until = state.delay_until;
     drop(state);
 
-    // Check server Maybenot node
     let state = relay_maybenot.get_sim_state().borrow();
-
-    // Check scheduled actions
-    for action in state.scheduled_action.iter().flatten() {
-        if action.time >= current_time {
-            let duration = action.time - current_time;
-            if duration < min_scheduled_action {
-                min_scheduled_action = duration;
-                action_node = relay_maybenot;
-            }
+    if let Some((t, _)) = state.peek_min_scheduled_action()
+        && t >= current_time
+    {
+        let duration = t - current_time;
+        if duration < min_scheduled_action {
+            min_scheduled_action = duration;
+            action_node = relay_maybenot;
         }
     }
-
-    // Check internal timers
-    for timer in state.scheduled_internal_timer.iter().flatten() {
-        if *timer >= current_time {
-            let duration = *timer - current_time;
-            if duration < min_internal_timer {
-                min_internal_timer = duration;
-                timer_node = relay_maybenot;
-            }
+    if let Some((t, _)) = state.peek_min_scheduled_internal_timer()
+        && t >= current_time
+    {
+        let duration = t - current_time;
+        if duration < min_internal_timer {
+            min_internal_timer = duration;
+            timer_node = relay_maybenot;
         }
     }
     let server_delay_until = state.delay_until;
@@ -308,14 +297,14 @@ pub fn maybenot_trigger_update<T: MaybenotNode>(
                 // cancel actions
                 match timer {
                     Timer::Action => {
-                        state.scheduled_action[machine.into_raw()] = None;
+                        state.clear_scheduled_action(machine);
                     }
                     Timer::Internal => {
-                        state.scheduled_internal_timer[machine.into_raw()] = None;
+                        state.clear_scheduled_internal_timer(machine);
                     }
                     Timer::All => {
-                        state.scheduled_action[machine.into_raw()] = None;
-                        state.scheduled_internal_timer[machine.into_raw()] = None;
+                        state.clear_scheduled_action(machine);
+                        state.clear_scheduled_internal_timer(machine);
                     }
                 }
             }
@@ -326,10 +315,14 @@ pub fn maybenot_trigger_update<T: MaybenotNode>(
                     "\ttrigger_update(): decoy traffic action {:?} {:?}",
                     timeout, machine
                 );
-                state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
-                    action: action.clone(),
-                    time: *current_time + timeout + trigger_delay,
-                });
+                let time = *current_time + timeout + trigger_delay;
+                state.set_scheduled_action(
+                    machine,
+                    ScheduledAction {
+                        action: action.clone(),
+                        time,
+                    },
+                );
             }
             TriggerAction::DelayTraffic {
                 timeout, machine, ..
@@ -338,10 +331,14 @@ pub fn maybenot_trigger_update<T: MaybenotNode>(
                     "\ttrigger_update(): delay traffic action {:?} {:?}",
                     timeout, machine
                 );
-                state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
-                    action: action.clone(),
-                    time: *current_time + timeout + trigger_delay,
-                });
+                let time = *current_time + timeout + trigger_delay;
+                state.set_scheduled_action(
+                    machine,
+                    ScheduledAction {
+                        action: action.clone(),
+                        time,
+                    },
+                );
             }
             TriggerAction::UpdateTimer {
                 duration,
@@ -353,13 +350,13 @@ pub fn maybenot_trigger_update<T: MaybenotNode>(
                     duration, machine
                 );
                 // get current internal timer duration, if any
-                let current =
-                    state.scheduled_internal_timer[machine.into_raw()].unwrap_or(*current_time);
+                let current = state
+                    .get_scheduled_internal_timer(machine)
+                    .unwrap_or(*current_time);
 
                 // update the timer
                 if replace || current < *current_time + duration {
-                    state.scheduled_internal_timer[machine.into_raw()] =
-                        Some(*current_time + duration);
+                    state.set_scheduled_internal_timer(machine, *current_time + duration);
                     // TimerBegin event
                     sq.push(SimEvent {
                         event: TriggerEvent::TimerBegin { machine },
@@ -383,21 +380,18 @@ pub fn maybenot_trigger_update<T: MaybenotNode>(
 
 pub fn maybenot_do_internal_timer<T: MaybenotNode>(node: &T, target: Duration) -> Option<SimEvent> {
     let mut state = node.get_sim_state().borrow_mut();
-    let mut machine: Option<MachineId> = None;
+    // `pick_next_maybenot` already identified this node as owning the earliest
+    // internal timer; we consume it directly instead of rescanning the slot
+    // vector.
+    let (machine, time) = state.take_min_scheduled_internal_timer()?;
+    debug_assert_eq!(
+        time, target,
+        "internal timer min drifted from caller target"
+    );
 
-    for (id, opt) in state.scheduled_internal_timer.iter_mut().enumerate() {
-        if let Some(a) = opt {
-            if *a == target {
-                machine = Some(MachineId::from_raw(id));
-                *opt = None;
-                break;
-            }
-        }
-    }
-
-    machine.map(|machine| SimEvent {
+    Some(SimEvent {
         event: TriggerEvent::TimerEnd { machine },
-        time: target,
+        time,
         packet_id: usize::MAX,
         node_id: node.node_id(),
         link_id: node.get_action_link_id(),
@@ -417,11 +411,14 @@ pub fn maybenot_do_scheduled_action<T: MaybenotNode>(
     sq: &mut SimQueue,
 ) -> Option<SimEvent> {
     let mut state = node.get_sim_state().borrow_mut();
-    let action = state
-        .scheduled_action
-        .iter_mut()
-        .find(|opt| opt.as_ref().is_some_and(|sa| sa.time == target))
-        .and_then(Option::take)?;
+    // Mirror of `maybenot_do_internal_timer`: `pick_next_maybenot` picked this
+    // node because its cached min matches `target`, so we consume that entry
+    // directly instead of rescanning.
+    let (_machine, action) = state.take_min_scheduled_action()?;
+    debug_assert_eq!(
+        action.time, target,
+        "scheduled action min drifted from caller target"
+    );
 
     match action.action {
         TriggerAction::Cancel { .. } => {

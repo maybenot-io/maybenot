@@ -11,7 +11,7 @@ use crate::{
 use log::debug;
 use maybenot::{
     Framework, LimitDecoyFrac, LimitDecoyFracWindowed, LimitDecoyNone, LimitDelayFrac,
-    LimitDelayNone, Machine, TriggerAction, TriggerEvent,
+    LimitDelayNone, Machine, MachineId, TriggerAction, TriggerEvent,
 };
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -123,10 +123,22 @@ pub struct MaybenotState {
     /// [`maybenot::Framework`] (via the blanket [`ActionProducer`] impl);
     /// [`crate::sim_user_provided`] swaps in a caller-supplied producer.
     pub action_producer: Box<dyn ActionProducer>,
-    /// scheduled action timers
+    /// scheduled action timers. Indexed by `MachineId::into_raw()`. Mutations
+    /// must go through the `set_scheduled_action` / `clear_scheduled_action` /
+    /// `take_min_scheduled_action` helpers so the cached minimum
+    /// ([`Self::min_scheduled_action`]) stays in sync.
     pub scheduled_action: Vec<Option<ScheduledAction>>,
-    /// scheduled internal timers
+    /// scheduled internal timers. See the note on [`Self::scheduled_action`]
+    /// about using the dedicated helpers for mutation.
     pub scheduled_internal_timer: Vec<Option<Duration>>,
+    /// Cached `(time, machine)` of the earliest non-`None` entry in
+    /// [`Self::scheduled_action`]. Maintained by the helpers so
+    /// `pick_next_maybenot` can peek the next scheduled action in O(1) instead
+    /// of scanning all machine slots each event.
+    min_scheduled_action: Option<(Duration, MachineId)>,
+    /// Cached `(time, machine)` of the earliest non-`None` entry in
+    /// [`Self::scheduled_internal_timer`]. See [`Self::min_scheduled_action`].
+    min_scheduled_internal_timer: Option<(Duration, MachineId)>,
     /// delay until time, active is set
     pub delay_until: Option<Duration>,
     /// whether the active delay is bypassable or not
@@ -140,6 +152,11 @@ pub struct MaybenotState {
     pub drain_delayed_by_time: bool,
     /// integration aspects for this state
     pub integration: Option<Integration>,
+    /// RNG used exclusively for sampling integration delays. Separate from the
+    /// framework's RNG so we don't need to pierce the boxed
+    /// [`ActionProducer`] to reach it. Persisted across calls so we don't
+    /// reacquire the thread-local handle on every sample.
+    pub(crate) integration_rng: RngSource,
 }
 
 impl MaybenotState {
@@ -149,17 +166,21 @@ impl MaybenotState {
         action_producer: Box<dyn ActionProducer>,
         drain_delayed_by_time: bool,
         integration: Option<Integration>,
+        insecure_rng_seed: Option<u64>,
     ) -> Self {
         let num_machines = action_producer.num_machines();
         Self {
             action_producer,
             scheduled_action: vec![None; num_machines],
             scheduled_internal_timer: vec![None; num_machines],
+            min_scheduled_action: None,
+            min_scheduled_internal_timer: None,
             delay_until: None,
             delay_bypassable: false,
             delay_max_packets: None,
             drain_delayed_by_time,
             integration,
+            integration_rng: build_integration_rng(insecure_rng_seed),
         }
     }
 
@@ -215,28 +236,189 @@ impl MaybenotState {
         )
         .unwrap();
 
-        Self::with_producer(Box::new(framework), drain_delayed_by_time, integration)
+        Self::with_producer(
+            Box::new(framework),
+            drain_delayed_by_time,
+            integration,
+            insecure_rng_seed,
+        )
     }
 
-    pub(crate) fn reporting_delay(&self) -> Duration {
-        self.integration
-            .as_ref()
-            .map(Integration::reporting_delay)
-            .unwrap_or(Duration::from_micros(0))
+    /// Peek the earliest scheduled action without taking it.
+    pub(crate) fn peek_min_scheduled_action(&self) -> Option<(Duration, MachineId)> {
+        self.min_scheduled_action
     }
 
-    pub(crate) fn action_delay(&self) -> Duration {
-        self.integration
-            .as_ref()
-            .map(Integration::action_delay)
-            .unwrap_or(Duration::from_micros(0))
+    /// Peek the earliest scheduled internal timer without taking it.
+    pub(crate) fn peek_min_scheduled_internal_timer(&self) -> Option<(Duration, MachineId)> {
+        self.min_scheduled_internal_timer
     }
 
-    pub(crate) fn trigger_delay(&self) -> Duration {
-        self.integration
-            .as_ref()
-            .map(Integration::trigger_delay)
-            .unwrap_or(Duration::from_micros(0))
+    /// Write `action` into the slot for `machine`, overwriting any prior entry.
+    /// Keeps [`Self::min_scheduled_action`] in sync without doing a full O(M)
+    /// scan in the fast path (the only case that requires a rescan is when we
+    /// just pushed the previous min slot to a *later* time and therefore can no
+    /// longer trust the cache).
+    pub(crate) fn set_scheduled_action(&mut self, machine: MachineId, action: ScheduledAction) {
+        let raw = machine.into_raw();
+        let new_time = action.time;
+        let was_min_slot = self
+            .min_scheduled_action
+            .map(|(_, m)| m == machine)
+            .unwrap_or(false);
+        self.scheduled_action[raw] = Some(action);
+
+        match (self.min_scheduled_action, was_min_slot) {
+            (None, _) => self.min_scheduled_action = Some((new_time, machine)),
+            (Some((min_t, _)), false) => {
+                if new_time < min_t {
+                    self.min_scheduled_action = Some((new_time, machine));
+                }
+            }
+            (Some((min_t, _)), true) => {
+                if new_time <= min_t {
+                    self.min_scheduled_action = Some((new_time, machine));
+                } else {
+                    self.recompute_min_scheduled_action();
+                }
+            }
+        }
+    }
+
+    /// Clear the slot for `machine`. Only rescans when the cleared slot was the
+    /// cached minimum.
+    pub(crate) fn clear_scheduled_action(&mut self, machine: MachineId) {
+        let raw = machine.into_raw();
+        if self.scheduled_action[raw].take().is_none() {
+            return;
+        }
+        if self
+            .min_scheduled_action
+            .map(|(_, m)| m == machine)
+            .unwrap_or(false)
+        {
+            self.recompute_min_scheduled_action();
+        }
+    }
+
+    /// Consume the earliest scheduled action, clear its slot, and refresh the
+    /// cached minimum. Returns `(machine, action)`.
+    pub(crate) fn take_min_scheduled_action(&mut self) -> Option<(MachineId, ScheduledAction)> {
+        let (_, machine) = self.min_scheduled_action?;
+        let raw = machine.into_raw();
+        let action = self.scheduled_action[raw]
+            .take()
+            .expect("min_scheduled_action points to an occupied slot");
+        self.recompute_min_scheduled_action();
+        Some((machine, action))
+    }
+
+    /// See [`Self::set_scheduled_action`].
+    pub(crate) fn set_scheduled_internal_timer(&mut self, machine: MachineId, time: Duration) {
+        let raw = machine.into_raw();
+        let was_min_slot = self
+            .min_scheduled_internal_timer
+            .map(|(_, m)| m == machine)
+            .unwrap_or(false);
+        self.scheduled_internal_timer[raw] = Some(time);
+
+        match (self.min_scheduled_internal_timer, was_min_slot) {
+            (None, _) => self.min_scheduled_internal_timer = Some((time, machine)),
+            (Some((min_t, _)), false) => {
+                if time < min_t {
+                    self.min_scheduled_internal_timer = Some((time, machine));
+                }
+            }
+            (Some((min_t, _)), true) => {
+                if time <= min_t {
+                    self.min_scheduled_internal_timer = Some((time, machine));
+                } else {
+                    self.recompute_min_scheduled_internal_timer();
+                }
+            }
+        }
+    }
+
+    /// See [`Self::clear_scheduled_action`].
+    pub(crate) fn clear_scheduled_internal_timer(&mut self, machine: MachineId) {
+        let raw = machine.into_raw();
+        if self.scheduled_internal_timer[raw].take().is_none() {
+            return;
+        }
+        if self
+            .min_scheduled_internal_timer
+            .map(|(_, m)| m == machine)
+            .unwrap_or(false)
+        {
+            self.recompute_min_scheduled_internal_timer();
+        }
+    }
+
+    /// See [`Self::take_min_scheduled_action`].
+    pub(crate) fn take_min_scheduled_internal_timer(&mut self) -> Option<(MachineId, Duration)> {
+        let (_, machine) = self.min_scheduled_internal_timer?;
+        let raw = machine.into_raw();
+        let time = self.scheduled_internal_timer[raw]
+            .take()
+            .expect("min_scheduled_internal_timer points to an occupied slot");
+        self.recompute_min_scheduled_internal_timer();
+        Some((machine, time))
+    }
+
+    fn recompute_min_scheduled_action(&mut self) {
+        self.min_scheduled_action = self
+            .scheduled_action
+            .iter()
+            .enumerate()
+            .filter_map(|(i, opt)| opt.as_ref().map(|a| (a.time, MachineId::from_raw(i))))
+            .min_by_key(|(t, _)| *t);
+    }
+
+    fn recompute_min_scheduled_internal_timer(&mut self) {
+        self.min_scheduled_internal_timer = self
+            .scheduled_internal_timer
+            .iter()
+            .enumerate()
+            .filter_map(|(i, opt)| opt.map(|t| (t, MachineId::from_raw(i))))
+            .min_by_key(|(t, _)| *t);
+    }
+
+    /// Read the current internal timer for `machine` (no mutation).
+    pub(crate) fn get_scheduled_internal_timer(&self, machine: MachineId) -> Option<Duration> {
+        self.scheduled_internal_timer[machine.into_raw()]
+    }
+
+    pub(crate) fn reporting_delay(&mut self) -> Duration {
+        match self.integration {
+            Some(ref i) => i.reporting_delay(&mut self.integration_rng),
+            None => Duration::ZERO,
+        }
+    }
+
+    pub(crate) fn action_delay(&mut self) -> Duration {
+        match self.integration {
+            Some(ref i) => i.action_delay(&mut self.integration_rng),
+            None => Duration::ZERO,
+        }
+    }
+
+    pub(crate) fn trigger_delay(&mut self) -> Duration {
+        match self.integration {
+            Some(ref i) => i.trigger_delay(&mut self.integration_rng),
+            None => Duration::ZERO,
+        }
+    }
+}
+
+// Derive a seeded integration RNG for a given `MaybenotState`. Uses an
+// arbitrary offset so the integration RNG doesn't produce the same stream as
+// the framework RNG when both are seeded from `insecure_rng_seed`.
+fn build_integration_rng(insecure_rng_seed: Option<u64>) -> RngSource {
+    match insecure_rng_seed {
+        Some(seed) => {
+            RngSource::Xoshiro(Xoshiro256StarStar::seed_from_u64(seed ^ 0x9E3779B97F4A7C15))
+        }
+        None => RngSource::Thread(rand::rng()),
     }
 }
 

@@ -165,8 +165,14 @@ fn test_action_delay() {
         reporting_delay: get_0ms_delay_dist(),
         trigger_delay: get_0ms_delay_dist(),
     };
-    assert_eq!(integration.action_delay(), Duration::from_micros(1000));
-    assert_eq!(integration.reporting_delay(), Duration::from_micros(0));
+    assert_eq!(
+        integration.action_delay(&mut rand::rng()),
+        Duration::from_micros(1000)
+    );
+    assert_eq!(
+        integration.reporting_delay(&mut rand::rng()),
+        Duration::from_micros(0)
+    );
 
     // for client
     let base_trace = run_sim(None, None, true);
@@ -181,7 +187,7 @@ fn test_action_delay() {
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
-        integration.action_delay()
+        integration.action_delay(&mut rand::rng())
     );
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
@@ -194,7 +200,7 @@ fn test_action_delay() {
     // note below that first recv is 5ms in
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
-        Duration::from_millis(5) * 2 + integration.action_delay()
+        Duration::from_millis(5) * 2 + integration.action_delay(&mut rand::rng())
     );
 
     // for server, everything should be the same (no action there due to machine
@@ -223,8 +229,14 @@ fn test_reporting_delay() {
         reporting_delay: get_1ms_delay_dist(),
         trigger_delay: get_0ms_delay_dist(),
     };
-    assert_eq!(integration.action_delay(), Duration::from_micros(0));
-    assert_eq!(integration.reporting_delay(), Duration::from_micros(1000));
+    assert_eq!(
+        integration.action_delay(&mut rand::rng()),
+        Duration::from_micros(0)
+    );
+    assert_eq!(
+        integration.reporting_delay(&mut rand::rng()),
+        Duration::from_micros(1000)
+    );
 
     // for client
     let base_trace = run_sim(None, None, true);
@@ -239,7 +251,7 @@ fn test_reporting_delay() {
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
-        integration.reporting_delay()
+        integration.reporting_delay(&mut rand::rng())
     );
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
@@ -252,7 +264,7 @@ fn test_reporting_delay() {
     // note below that first recv is 5ms in
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
-        Duration::from_millis(5) * 2 + integration.reporting_delay()
+        Duration::from_millis(5) * 2 + integration.reporting_delay(&mut rand::rng())
     );
 
     // for server, everything should be the same (no action there due to machine
@@ -280,9 +292,18 @@ fn test_trigger_delay() {
         reporting_delay: get_0ms_delay_dist(),
         trigger_delay: get_1ms_delay_dist(),
     };
-    assert_eq!(integration.action_delay(), Duration::from_micros(0));
-    assert_eq!(integration.reporting_delay(), Duration::from_micros(0));
-    assert_eq!(integration.trigger_delay(), Duration::from_micros(1000));
+    assert_eq!(
+        integration.action_delay(&mut rand::rng()),
+        Duration::from_micros(0)
+    );
+    assert_eq!(
+        integration.reporting_delay(&mut rand::rng()),
+        Duration::from_micros(0)
+    );
+    assert_eq!(
+        integration.trigger_delay(&mut rand::rng()),
+        Duration::from_micros(1000)
+    );
 
     // for client
     let base_trace = run_sim(None, None, true);
@@ -297,7 +318,7 @@ fn test_trigger_delay() {
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
-        integration.trigger_delay()
+        integration.trigger_delay(&mut rand::rng())
     );
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
@@ -310,7 +331,7 @@ fn test_trigger_delay() {
     // note below that first recv is 5ms in
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
-        Duration::from_millis(5) * 2 + integration.trigger_delay()
+        Duration::from_millis(5) * 2 + integration.trigger_delay(&mut rand::rng())
     );
 
     // for server, everything should be the same (no action there due to machine
@@ -335,8 +356,14 @@ fn test_action_and_reporting_delay() {
         reporting_delay: get_1ms_delay_dist(),
         trigger_delay: get_0ms_delay_dist(),
     };
-    assert_eq!(integration.action_delay(), Duration::from_micros(1000));
-    assert_eq!(integration.reporting_delay(), Duration::from_micros(1000));
+    assert_eq!(
+        integration.action_delay(&mut rand::rng()),
+        Duration::from_micros(1000)
+    );
+    assert_eq!(
+        integration.reporting_delay(&mut rand::rng()),
+        Duration::from_micros(1000)
+    );
 
     // for client
     let base_trace = run_sim(None, None, true);
@@ -351,7 +378,7 @@ fn test_action_and_reporting_delay() {
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
-        integration.action_delay() + integration.reporting_delay()
+        integration.action_delay(&mut rand::rng()) + integration.reporting_delay(&mut rand::rng())
     );
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
@@ -359,7 +386,9 @@ fn test_action_and_reporting_delay() {
     // note below that first recv is 5ms in
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
-        Duration::from_millis(5) * 2 + integration.reporting_delay() + integration.action_delay()
+        Duration::from_millis(5) * 2
+            + integration.reporting_delay(&mut rand::rng())
+            + integration.action_delay(&mut rand::rng())
     );
 
     // for server, everything should be the same (no action there due to machine
@@ -384,9 +413,18 @@ fn test_action_reporting_and_delay() {
         reporting_delay: get_1ms_delay_dist(),
         trigger_delay: get_1ms_delay_dist(),
     };
-    assert_eq!(integration.action_delay(), Duration::from_micros(1000));
-    assert_eq!(integration.reporting_delay(), Duration::from_micros(1000));
-    assert_eq!(integration.trigger_delay(), Duration::from_micros(1000));
+    assert_eq!(
+        integration.action_delay(&mut rand::rng()),
+        Duration::from_micros(1000)
+    );
+    assert_eq!(
+        integration.reporting_delay(&mut rand::rng()),
+        Duration::from_micros(1000)
+    );
+    assert_eq!(
+        integration.trigger_delay(&mut rand::rng()),
+        Duration::from_micros(1000)
+    );
 
     // for client
     let base_trace = run_sim(None, None, true);
@@ -401,7 +439,9 @@ fn test_action_reporting_and_delay() {
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
-        integration.action_delay() + integration.reporting_delay() + integration.trigger_delay()
+        integration.action_delay(&mut rand::rng())
+            + integration.reporting_delay(&mut rand::rng())
+            + integration.trigger_delay(&mut rand::rng())
     );
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
@@ -410,9 +450,9 @@ fn test_action_reporting_and_delay() {
     assert_eq!(
         delayed_trace_server[2].time - delayed_trace_server[0].time + Duration::from_millis(5),
         Duration::from_millis(5) * 2
-            + integration.reporting_delay()
-            + integration.action_delay()
-            + integration.trigger_delay()
+            + integration.reporting_delay(&mut rand::rng())
+            + integration.action_delay(&mut rand::rng())
+            + integration.trigger_delay(&mut rand::rng())
     );
 
     // for server, everything should be the same (no action there due to machine

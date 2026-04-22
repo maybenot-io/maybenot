@@ -661,8 +661,10 @@ fn run_sim(
             if next.node_id == topology.mb_client {
                 if let Some(client_maybenot) = client_maybenot {
                     debug!("sim(): trigger @client framework {:?}", next.event);
-                    let reporting_delay =
-                        client_maybenot.get_sim_state().borrow().reporting_delay();
+                    let reporting_delay = client_maybenot
+                        .get_sim_state()
+                        .borrow_mut()
+                        .reporting_delay();
                     client_maybenot.trigger_update(
                         &next,
                         &(current_time + reporting_delay),
@@ -673,7 +675,10 @@ fn run_sim(
             } else if next.node_id == topology.mb_server {
                 if let Some(relay_maybenot) = relay_maybenot {
                     debug!("sim(): trigger @server framework {:?}", next.event);
-                    let reporting_delay = relay_maybenot.get_sim_state().borrow().reporting_delay();
+                    let reporting_delay = relay_maybenot
+                        .get_sim_state()
+                        .borrow_mut()
+                        .reporting_delay();
                     relay_maybenot.trigger_update(
                         &next,
                         &(current_time + reporting_delay),
