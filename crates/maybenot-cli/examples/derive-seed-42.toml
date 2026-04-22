@@ -16,6 +16,7 @@ sim_steps = [1_000, 5_000]
 
 [derive.env.network]
 rtt_in_ms = [10, 100]
+mbps = [100, 1000]
 
 [derive.machine]
 num_states = [3,3]

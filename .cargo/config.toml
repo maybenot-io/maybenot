@@ -1,0 +1,14 @@
+# Cargo configuration for the Maybenot workspace
+
+[alias]
+# Run automation tasks for test data generation and other project tooling
+# Usage: cargo xtask-<tool> <command> [args]
+# Example: cargo xtask-linktrace create-synthlinktrace --save-file "test.tr" --linecount 1000
+# Note: Uses --release profile for performance (trace generation is compute-intensive)
+xtask-linktrace = "run --release --package xtask --bin linktrace --"
+
+# Test aliases for trace-dependent tests
+# Run all tests including trace-dependent ones
+test-all = "test --features trace-tests"
+# Run only trace-dependent tests
+test-traces = "test --features trace-tests -- trace"

@@ -1,0 +1,67 @@
+# Basic test configuration for maybenot-simulator
+# Network topology: Client -> Relay -> Endpoint
+
+# Node definitions
+[[Node]]
+id = 0
+type = "ClientMaybenot"
+coreside_out = 2
+
+[[Node]]
+id = 1
+type = "RelayMaybenot"
+coreside_out = 3
+edgeside_out = 1
+edgeside_in = 2
+
+[[Node]]
+id = 2
+type = "EndpointBasic"
+edgeside_out = 0
+
+# Link definitions
+# Link 0: from node 2 to node 1 (Endpoint -> Relay)
+[[Link]]
+id = 0
+from = 2
+to = 1
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 10_000
+
+# Link 1: from node 1 to node 0 (Relay -> Client)
+[[Link]]
+id = 1
+from = 1
+to = 0
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 10_000
+
+# Link 2: from node 0 to node 1 (Client -> Relay)
+[[Link]]
+id = 2
+from = 0
+to = 1
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 10_000
+
+# Link 3: from node 1 to node 2 (Relay -> Endpoint)
+[[Link]]
+id = 3
+from = 1
+to = 2
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 10_000
+
+# Routing rules for the Relay node (id = 1)
+[[Route]]
+node_id = 1
+# Traffic coming from node 0 (Client) goes out via link 3 (to Endpoint)
+# Traffic coming from node 2 (Endpoint) goes out via link 1 (to Client)
+forwarding_rules = [
+    { in_link = 2, out_link = 3 },  # Client->Relay traffic goes to Endpoint
+    { in_link = 0, out_link = 1 }   # Endpoint->Relay traffic goes to Client
+]

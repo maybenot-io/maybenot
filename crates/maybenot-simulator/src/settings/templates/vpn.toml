@@ -1,0 +1,57 @@
+# VPN topology: Client <-> VPN Server <-> Endpoint
+
+[[Node]]
+id = 0
+type = "ClientMaybenot"
+coreside_out = 0
+
+[[Node]]
+id = 1
+type = "RelayMaybenot"
+coreside_out = 2
+edgeside_in = 0
+edgeside_out = 1
+
+[[Node]]
+id = 2
+type = "EndpointBasic"
+edgeside_out = 3
+
+[[Link]]
+id = 0
+from = 0
+to = 1
+type = "FixedTput"
+tput_bps = 100_000_000
+prop_us = 10_000
+
+[[Link]]
+id = 1
+from = 1
+to = 0
+type = "FixedTput"
+tput_bps = 100_000_000
+prop_us = 10_000
+
+[[Link]]
+id = 2
+from = 1
+to = 2
+type = "FixedTput"
+tput_bps = 1_000_000_000
+prop_us = 5_000
+
+[[Link]]
+id = 3
+from = 2
+to = 1
+type = "FixedTput"
+tput_bps = 1_000_000_000
+prop_us = 5_000
+
+[[Route]]
+node_id = 1
+forwarding_rules = [
+    { in_link = 0, out_link = 2 },
+    { in_link = 3, out_link = 1 }
+]

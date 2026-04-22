@@ -19,7 +19,7 @@ members = [
     "crates/maybenot-machine-parser",
     # ffi lib for the Maybenot framework
     "crates/maybenot-ffi",
-    # simulator for the Maybenot framework
+    # configurable multi-node simulator for the Maybenot framework
     "crates/maybenot-simulator",
     # lib of implemented Maybenot machines
     "crates/maybenot-machines",
@@ -31,6 +31,8 @@ members = [
     "benches",
     # fuzzing
     "fuzz",
+    # automation tasks (test data generation, etc.)
+    "xtask",
 ]
 
 [workspace.lints.rust]

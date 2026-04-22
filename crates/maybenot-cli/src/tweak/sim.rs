@@ -1,7 +1,8 @@
 use std::{
     fs::{create_dir, create_dir_all, metadata, read_dir, read_to_string},
+    num::NonZeroUsize,
     path::{Path, PathBuf},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use crate::{
@@ -22,7 +23,7 @@ use maybenot_gen::{
     },
     rng_range,
 };
-use maybenot_simulator::{SimulatorArgs, network::Network, parse_trace_advanced, sim_advanced};
+use maybenot_simulator::{SimulatorArgs, parse_trace, settings::Setting, sim_advanced};
 use rand::{Rng, RngExt, SeedableRng, seq::SliceRandom};
 use rand_seeder::Seeder;
 use rand_xoshiro::Xoshiro256StarStar;
@@ -36,7 +37,9 @@ pub struct SimConfig {
     /// any number of characters, but splitting on '-' must yield the class
     /// (first) and sample (last) parts.
     pub base_dataset: String,
-    /// configuration for the network
+    /// configuration for the client ↔ relay network link (maps onto the
+    /// `VpnCustom` topology in the simulator: `rtt_in_ms` drives propagation
+    /// and `mbps` drives throughput)
     pub network: NetworkConfig,
     /// trace length to simulate
     pub trace_length: usize,
@@ -338,43 +341,38 @@ fn sim_dataset<R: Rng>(
             for a in 0..augmentation {
                 let setup = &setups[index + dataset.len() * a];
 
-                // sample delay and packets per second
-                let network = Network::new(
-                    Duration::from_millis((rng_range!(rng, cfg.network.rtt_in_ms) / 2) as u64),
-                    cfg.network
-                        .packets_per_sec
-                        .as_ref()
-                        .map(|pps| rng_range!(rng, pps)),
-                );
+                // sample network characteristics, then build the VpnCustom
+                // topology. rtt/2 is reused as the parse-time one-way delay.
+                let mbps: u64 = rng_range!(rng, cfg.network.mbps);
+                let rtt = Duration::from_millis(rng_range!(rng, cfg.network.rtt_in_ms) as u64);
+                let (topology, mut link_state) = Setting::VpnCustom { mbps, rtt }
+                    .create()
+                    .expect("failed to build VpnCustom topology");
 
-                // parse content into a pq and sim
-                let mut pq = parse_trace_advanced(
-                    base_trace,
-                    network,
-                    c_integration.as_ref(),
-                    s_integration.as_ref(),
-                );
+                let (si, mut sq) =
+                    parse_trace(base_trace, &topology, rtt / 2).expect("failed to parse trace");
+
+                let mut args = SimulatorArgs::new(cfg.trace_length, true);
+                args.max_sim_steps = NonZeroUsize::new(cfg.trace_length * cfg.events_multiplier);
+                args.stop_after_all_normal_packets =
+                    cfg.stop_after_all_normal_packets_processed.unwrap_or(false);
+                args.only_client_events = true;
+                args.decoy_limit_client = setup.client.decoy_limit.clone();
+                args.delay_limit_client = setup.client.delay_limit.clone();
+                args.decoy_limit_server = setup.server.decoy_limit.clone();
+                args.delay_limit_server = setup.server.delay_limit.clone();
+                args.insecure_rng_seed = Some(rng.next_u64());
+                args.client_integration = c_integration.clone();
+                args.server_integration = s_integration.clone();
+
                 let trace = sim_advanced(
                     &setup.client.machines,
                     &setup.server.machines,
-                    &mut pq,
-                    &SimulatorArgs {
-                        network,
-                        max_trace_length: cfg.trace_length,
-                        max_sim_iterations: cfg.trace_length * cfg.events_multiplier,
-                        continue_after_all_normal_packets_processed: !cfg
-                            .stop_after_all_normal_packets_processed
-                            .unwrap_or(false),
-                        only_client_events: true,
-                        only_network_activity: true,
-                        decoy_limit_client: setup.client.decoy_limit.clone(),
-                        delay_limit_client: setup.client.delay_limit.clone(),
-                        decoy_limit_server: setup.server.decoy_limit.clone(),
-                        delay_limit_server: setup.server.delay_limit.clone(),
-                        insecure_rng_seed: Some(rng.next_u64()),
-                        client_integration: c_integration.clone(),
-                        server_integration: s_integration.clone(),
-                    },
+                    &topology,
+                    &mut link_state,
+                    &si,
+                    &mut sq,
+                    &args,
                 );
 
                 // in trace, filter out the events at the client
@@ -384,7 +382,7 @@ fn sim_dataset<R: Rng>(
                 let starting_time = if !trace.is_empty() {
                     trace[0].time
                 } else {
-                    Instant::now()
+                    Duration::ZERO
                 };
 
                 let mut s = String::with_capacity(cfg.trace_length * 20);
@@ -396,7 +394,7 @@ fn sim_dataset<R: Rng>(
                     }
 
                     // timestamp, nanoseconds granularity (for consistency)
-                    let ts = &format!("{}", t.time.duration_since(starting_time).as_nanos());
+                    let ts = &format!("{}", (t.time - starting_time).as_nanos());
 
                     match t.event {
                         TriggerEvent::PacketRecv => {

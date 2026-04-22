@@ -68,8 +68,18 @@ impl ConstraintsConfig {
         args.insecure_rng_seed = Some(seed);
 
         // compute all stats
-        for (i, pq) in env.traces.iter().enumerate() {
-            let mut trace = sim_advanced(client, server, &mut pq.clone(), &args);
+        for (i, (si, sq)) in env.traces.iter().enumerate() {
+            let mut link_state = env.link_state.clone();
+            let mut sq = sq.clone();
+            let mut trace = sim_advanced(
+                client,
+                server,
+                &env.topology,
+                &mut link_state,
+                si,
+                &mut sq,
+                &args,
+            );
             // increment for next trace
             args.insecure_rng_seed = args.insecure_rng_seed.map(|s| s + 1);
 
@@ -249,40 +259,40 @@ fn count_events(client: &mut Stats, server: &mut Stats, trace: &[SimEvent]) {
         match event.event {
             TriggerEvent::PacketSent => {
                 if event.contains_decoy {
-                    if event.client {
+                    if event.is_client {
                         client.decoy += 1;
                     } else {
                         server.decoy += 1;
                     }
-                } else if event.client {
+                } else if event.is_client {
                     client.normal += 1;
                 } else {
                     server.normal += 1;
                 }
             }
             TriggerEvent::DelayBegin { .. } => {
-                if event.client {
+                if event.is_client {
                     client.delay_begin += 1;
                 } else {
                     server.delay_begin += 1;
                 }
             }
             TriggerEvent::DelayEnd => {
-                if event.client {
+                if event.is_client {
                     client.delay_end += 1;
                 } else {
                     server.delay_end += 1;
                 }
             }
             TriggerEvent::TimerBegin { .. } => {
-                if event.client {
+                if event.is_client {
                     client.timer_begin += 1;
                 } else {
                     server.timer_begin += 1;
                 }
             }
             TriggerEvent::TimerEnd { .. } => {
-                if event.client {
+                if event.is_client {
                     client.timer_end += 1;
                 } else {
                     server.timer_end += 1;
@@ -300,7 +310,7 @@ fn get_durations(defended: &[SimEvent], base: &[Duration]) -> (Option<Duration>,
     // the duration of the last normal sent packet in the defended trace for the client
     let defended_duration = defended.iter().rev().find_map(|event| {
         if let TriggerEvent::PacketSent = event.event {
-            if !event.contains_decoy && event.client {
+            if !event.contains_decoy && event.is_client {
                 return Some(event.time - starting_time);
             }
         }
@@ -311,7 +321,9 @@ fn get_durations(defended: &[SimEvent], base: &[Duration]) -> (Option<Duration>,
     let defended_normal = defended
         .iter()
         .filter(|event| {
-            matches!(event.event, TriggerEvent::PacketSent) && !event.contains_decoy && event.client
+            matches!(event.event, TriggerEvent::PacketSent)
+                && !event.contains_decoy
+                && event.is_client
         })
         .count();
 

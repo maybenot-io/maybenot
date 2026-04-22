@@ -7,12 +7,12 @@ use std::{collections::HashMap, error::Error, time::Duration};
 #[derive(Clone, Debug)]
 pub struct Integration {
     /// The *action* delay is the time between the integration taking action and
-    /// the action happening. For example, if a decoy packet is to be sent, user
-    /// space might need to signal to kernel space to craft one. NOTE: we assume
-    /// that the DecoyQueued event is triggered directly as decoy is sent from
-    /// Maybenot, while we assume that the BlockingBegin event is triggered when
-    /// the delay actually begins in the protocol and the event is
-    /// transported with a reporting delay.
+    /// the action happening. For example, if a decoy packet is to be sent,
+    /// user space might need to signal to kernel space to craft one. NOTE: we
+    /// assume that the DecoyQueued event is triggered directly as decoy is
+    /// queued from Maybenot, while we assume that the DelayBegin event is
+    /// triggered when the delay actually begins in the protocol and the event
+    /// is transported with a reporting delay.
     pub action_delay: BinDist,
     /// The *reporting* delay is the time between an event being created by the
     /// integrated protocol and the event being reported (trigger_events) to
@@ -71,7 +71,7 @@ impl BinDist {
                     .collect::<Result<Vec<f64>, _>>()?;
 
                 if range_values.len() != 2 {
-                    return Err("range must have exactly two values".into());
+                    return Err("Range must have exactly two values".into());
                 }
 
                 Ok(((range_values[0], range_values[1]), prob))
@@ -98,7 +98,7 @@ impl BinDist {
     }
 
     pub fn sample<R: Rng>(&self, rng: &mut R) -> Duration {
-        let sample_prob = rng.random::<f64>();
+        let sample_prob: f64 = rng.random();
         let bin_index = match self
             .cumulative_probabilities
             .binary_search_by(|prob| prob.partial_cmp(&sample_prob).unwrap())

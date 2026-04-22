@@ -1,0 +1,43 @@
+# Test for faster configuration for maybenot-simulator
+# Network topology: Client -> Relay with inbuilt Endpoint
+
+# Node definitions
+[[Node]]
+id = 0
+type = "ClientMaybenot"
+coreside_out = 1
+
+[[Node]]
+id = 1
+type = "RelayMaybenotEndpoint"
+edgeside_out = 0
+edgeside_in = 1
+#endpoint_prop_us = 10_000
+endpoint_prop_us = 5
+
+# Link 0: from node 1 to node 0 (Relay -> Client)
+[[Link]]
+id = 0
+from = 1
+to = 0
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+#prop_us = 10_000
+prop_us = 5
+
+# Link 1: from node 0 to node 1 (Client -> Relay)
+[[Link]]
+id = 1
+from = 0
+to = 1
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+#prop_us = 10_000
+prop_us = 5
+
+
+# Routing rules for the Relay node (id = 1)
+[[Route]]
+node_id = 1
+forwarding_rules = [
+]

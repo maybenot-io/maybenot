@@ -1,0 +1,136 @@
+# Complex test configuration for maybenot-simulator
+# Network topology: Client -> WLAN -> Starlink -> Relay -> Endpoint
+
+# Node definitions
+[[Node]]
+id = 0
+type = "ClientMaybenot"
+coreside_out = 0  # Client sends via link 0 to WLAN
+
+#WLAN
+[[Node]]
+id = 1
+type = "RouterBasic"
+coreside_out = 1   # WLAN sends via link 1 to Starlink
+edgeside_out = 4   # WLAN sends via link 4 to Client
+edgeside_in = 0    # WLAN receives via link 0 from Client
+
+#Starlink
+[[Node]]
+id = 2
+type = "RouterBasic"
+coreside_out = 2   # Starlink sends via link 2 to Relay
+edgeside_out = 5   # Starlink sends via link 5 to WLAN
+edgeside_in = 1    # Starlink receives via link 1 from WLAN
+
+#VPN Relay
+[[Node]]
+id = 3
+type = "RelayMaybenot"
+coreside_out = 3   # Relay sends via link 3 to Endpoint
+edgeside_out = 6   # Relay sends via link 6 to Starlink
+edgeside_in = 2    # Relay receives via link 2 from Starlink
+
+[[Node]]
+id = 4
+type = "EndpointBasic"
+edgeside_out = 7   # Endpoint sends via link 7 to Relay
+
+# Link definitions
+# Forward direction links (0->1->2->3->4)
+# Link 0: from Client to WLAN
+[[Link]]
+id = 0
+from = 0  # Client
+to = 1    # WLAN
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 1
+
+# Link 1: from WLAN to Starlink
+[[Link]]
+id = 1
+from = 1  # WLAN
+to = 2    # Starlink
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 1
+
+# Link 2: from Starlink to Relay
+[[Link]]
+id = 2
+from = 2  # Starlink
+to = 3    # Relay
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 3
+
+# Link 3: from Relay to Endpoint
+[[Link]]
+id = 3
+from = 3  # Relay
+to = 4    # Endpoint
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 5
+
+# Return direction links (4->3->2->1->0)
+# Link 4: from WLAN to Client
+[[Link]]
+id = 4
+from = 1  # WLAN
+to = 0    # Client
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 1
+
+# Link 5: from Starlink to WLAN
+[[Link]]
+id = 5
+from = 2  # Starlink
+to = 1    # WLAN
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 1
+
+# Link 6: from Relay to Starlink
+[[Link]]
+id = 6
+from = 3  # Relay
+to = 2    # Starlink
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 3
+
+# Link 7: from Endpoint to Relay
+[[Link]]
+id = 7
+from = 4  # Endpoint
+to = 3    # Relay
+type = "FixedTput"
+tput_bps = 100_000_000_000_000
+prop_us = 5
+
+# Routing rules for WLAN node (id = 1)
+[[Route]]
+node_id = 1
+forwarding_rules = [
+    { in_link = 0, out_link = 1 },  # Client -> Starlink
+    { in_link = 5, out_link = 4 }   # Starlink -> Client
+]
+
+# Routing rules for Starlink node (id = 2)
+[[Route]]
+node_id = 2
+forwarding_rules = [
+    { in_link = 1, out_link = 2 },  # WLAN -> Relay
+    { in_link = 6, out_link = 5 }   # Relay -> WLAN
+]
+
+# Routing rules for Relay node (id = 3)
+[[Route]]
+node_id = 3
+forwarding_rules = [
+    { in_link = 2, out_link = 3 },  # Starlink -> Endpoint
+    { in_link = 7, out_link = 6 }   # Endpoint -> Starlink
+]

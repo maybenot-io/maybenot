@@ -106,7 +106,7 @@ sim_steps = { start = 1000, end = 5000 }
 # Network configuration - test both formats
 [derive.env.network]
 rtt_in_ms = [10, 100]
-packets_per_sec = { start = 100, end = 1000 }
+mbps = { start = 100, end = 1000 }
 
 # Machine configuration - test comprehensive settings with mixed formats
 [derive.machine]
@@ -194,26 +194,8 @@ min_action_timeout = [0.0, 1000.0]
                 // test network ranges - both formats
                 assert_eq!(derive_config.env.network.rtt_in_ms.start(), &10);
                 assert_eq!(derive_config.env.network.rtt_in_ms.end(), &100);
-                assert_eq!(
-                    derive_config
-                        .env
-                        .network
-                        .packets_per_sec
-                        .as_ref()
-                        .unwrap()
-                        .start(),
-                    &100
-                );
-                assert_eq!(
-                    derive_config
-                        .env
-                        .network
-                        .packets_per_sec
-                        .as_ref()
-                        .unwrap()
-                        .end(),
-                    &1000
-                );
+                assert_eq!(derive_config.env.network.mbps.start(), &100);
+                assert_eq!(derive_config.env.network.mbps.end(), &1000);
 
                 // test machine configuration with comprehensive range testing
                 assert_eq!(derive_config.machine.num_states.start(), &2);

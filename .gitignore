@@ -7,3 +7,8 @@ local/
 .python-version
 pyproject.toml
 uv.lock
+*.simtrace
+*.ltbin.gz
+*.ltbin
+*.tr.gz
+*.tr

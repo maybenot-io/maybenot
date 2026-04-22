@@ -1,13 +1,12 @@
 use anyhow::{Result, bail};
-use maybenot_simulator::{
-    integration::Integration, network::Network, parse_trace_advanced, queue::SimQueue,
-};
+use maybenot_simulator::{SimInfo, SimQueue, parse_trace, topology::NetworkTopology};
 use rand::Rng;
 use rand::seq::IndexedRandom;
 
 use super::Traces;
 use std::fs::{metadata, read_dir, read_to_string};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// From the BigEnough dataset by Mathews et al., "SoK: A Critical Evaluation of
 /// Efficient Website Fingerprinting Defenses", S&P 2023. Selected to have at
@@ -98,11 +97,10 @@ const GONG_SURAKAV_TRACES: [&str; 14] = [
 pub fn load_traces<R: Rng>(
     traces: &[Traces],
     num_traces: usize,
-    network: Network,
-    client_integration: &Option<Integration>,
-    server_integration: &Option<Integration>,
+    topology: &NetworkTopology,
+    one_way_delay: Duration,
     rng: &mut R,
-) -> Result<Vec<SimQueue>> {
+) -> Result<Vec<(SimInfo, SimQueue)>> {
     let mut candidate_traces: Vec<&str> = Vec::new();
 
     for t in traces {
@@ -124,58 +122,52 @@ pub fn load_traces<R: Rng>(
                 min_bytes,
                 max_bytes,
             } => {
-                {
-                    let root_path = Path::new(&root);
-                    let mut file_paths = Vec::new();
+                let root_path = Path::new(&root);
+                let mut file_paths = Vec::new();
 
-                    // recursively traverse directory and collect all file paths
-                    fn visit_dirs(
-                        dir: &Path,
-                        files: &mut Vec<PathBuf>,
-                        min_size: u64,
-                        max_size: u64,
-                    ) -> Result<()> {
-                        for entry in read_dir(dir)? {
-                            let entry = entry?;
-                            let path = entry.path();
-                            if path.is_dir() {
-                                visit_dirs(&path, files, min_size, max_size)?;
-                            } else if path.is_file()
-                                && metadata(&path)?.len() >= min_size
-                                && metadata(&path)?.len() <= max_size
-                            {
-                                files.push(path);
-                            }
+                // recursively traverse directory and collect all file paths
+                fn visit_dirs(
+                    dir: &Path,
+                    files: &mut Vec<PathBuf>,
+                    min_size: u64,
+                    max_size: u64,
+                ) -> Result<()> {
+                    for entry in read_dir(dir)? {
+                        let entry = entry?;
+                        let path = entry.path();
+                        if path.is_dir() {
+                            visit_dirs(&path, files, min_size, max_size)?;
+                        } else if path.is_file()
+                            && metadata(&path)?.len() >= min_size
+                            && metadata(&path)?.len() <= max_size
+                        {
+                            files.push(path);
                         }
-                        Ok(())
                     }
-                    visit_dirs(root_path, &mut file_paths, *min_bytes, *max_bytes)?;
-
-                    if file_paths.len() < num_traces {
-                        bail!(
-                            "only {} files found in custom root, requested {}",
-                            file_paths.len(),
-                            num_traces
-                        );
-                    }
-
-                    // choose n random distinct files
-                    let chosen_files: Vec<_> =
-                        file_paths.sample(rng, num_traces).cloned().collect();
-
-                    // for each chosen file, read its contents, create SimQueues, and return
-                    return Ok(chosen_files
-                        .iter()
-                        .map(|file| {
-                            parse_trace_advanced(
-                                &read_to_string(file).expect("file not found"),
-                                network,
-                                client_integration.as_ref(),
-                                server_integration.as_ref(),
-                            )
-                        })
-                        .collect::<Vec<_>>());
+                    Ok(())
                 }
+                visit_dirs(root_path, &mut file_paths, *min_bytes, *max_bytes)?;
+
+                if file_paths.len() < num_traces {
+                    bail!(
+                        "only {} files found in custom root, requested {}",
+                        file_paths.len(),
+                        num_traces
+                    );
+                }
+
+                // choose n random distinct files
+                let chosen_files: Vec<_> = file_paths.sample(rng, num_traces).cloned().collect();
+
+                return chosen_files
+                    .iter()
+                    .map(|file| {
+                        let content = read_to_string(file)
+                            .map_err(|e| anyhow::anyhow!("reading {}: {e}", file.display()))?;
+                        parse_trace(&content, topology, one_way_delay)
+                            .map_err(|e| anyhow::anyhow!("parsing {}: {e:?}", file.display()))
+                    })
+                    .collect();
             }
         }
     }
@@ -194,15 +186,11 @@ pub fn load_traces<R: Rng>(
         candidate_traces = candidate_traces.sample(rng, num_traces).cloned().collect();
     }
 
-    Ok(candidate_traces
+    candidate_traces
         .iter()
         .map(|trace| {
-            parse_trace_advanced(
-                trace,
-                network,
-                client_integration.as_ref(),
-                server_integration.as_ref(),
-            )
+            parse_trace(trace, topology, one_way_delay)
+                .map_err(|e| anyhow::anyhow!("parsing trace: {e:?}"))
         })
-        .collect::<Vec<_>>())
+        .collect()
 }

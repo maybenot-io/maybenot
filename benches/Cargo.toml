@@ -18,7 +18,7 @@ workspace = true
 criterion = "0.5.1"
 enum-map = "2.7.3"
 maybenot = { path = "../crates/maybenot/" }
-maybenot-simulator = { path = "../crates/maybenot-simulator" }
+maybenot-simulator = { version = "3.0.0", path = "../crates/maybenot-simulator" }
 rand = "0.10"
 rand_core = "0.10"
 rand_xoshiro = "0.8"

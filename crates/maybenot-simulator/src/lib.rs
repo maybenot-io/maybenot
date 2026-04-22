@@ -1,326 +1,82 @@
-//! A simulator for the Maybenot framework. The [`Maybenot`](maybenot) framework
-//! is intended for traffic analysis defenses that can be used to hide patterns
-//! in encrypted communication. The goal of the simulator is to assist in the
-//! development of such defenses.
-//!
-//! The simulator consists of two core functions: [`parse_trace`] and [`sim`].
-//! The intended use is to first parse a trace (e.g., from a pcap file or a
-//! Website Fingerprinting dataset) using [`parse_trace`], and then simulate the
-//! trace using [`sim`] together with one or more Maybenot
-//! [`Machines`](maybenot::Machine) running at the client and/or server. The
-//! output of the simulator can then be parsed to produce a simulated trace that
-//! then in turn can be used to, e.g., train a Website Fingerprinting attack.
-//!
-//! ## Example usage
-//! ```
-//! use maybenot::{event::TriggerEvent, Machine};
-//! use maybenot_simulator::{network::Network, parse_trace, sim};
-//! use std::{str::FromStr, time::Duration};
-//!
-//! // The first ten packets of a network trace from the client's perspective
-//! // when visiting google.com. The format is: "time,direction\n". The
-//! // direction is either "s" (sent) or "r" (received). The time is in
-//! // nanoseconds since the start of the trace.
-//! let raw_trace = "0,s
-//! 19714282,r
-//! 183976147,s
-//! 243699564,r
-//! 1696037773,s
-//! 2047985926,s
-//! 2055955094,r
-//! 9401039609,s
-//! 9401094589,s
-//! 9420892765,r";
-//!
-//! // The network model for simulating the network between the client and the
-//! // server. Currently just a delay.
-//! let network = Network::new(Duration::from_millis(10), None);
-//!
-//! // Parse the raw trace into a queue of events for the simulator. This uses
-//! // the delay to generate a queue of events at the client and server in such
-//! // a way that the client is ensured to get the packets in the same order and
-//! // at the same time as in the raw trace.
-//! let mut input_trace = parse_trace(raw_trace, network);
-//!
-//! // A simple machine that sends one decoy packet 20 milliseconds after the
-//! // first normal packet is sent.
-//! let m = "03eNp9ybERACAIxdB8F8PRLN3PRRzBk4IKeF0uMHCSYBnhd26fSe9auR7NIQOR";
-//! let m = Machine::from_str(m).unwrap();
-//!
-//! // Run the simulator with the machine at the client. Run the simulation up
-//! // until 100 packets have been recorded (total, client and server).
-//! let trace = sim(&[m], &[], &mut input_trace, network.delay, 100, true);
-//!
-//! // print packets from the client's perspective
-//! let starting_time = trace[0].time;
-//! trace
-//!     .into_iter()
-//!     .filter(|p| p.client)
-//!     .for_each(|p| match p.event {
-//!         TriggerEvent::PacketSent => {
-//!             if p.contains_decoy {
-//!                 println!(
-//!                     "sent a decoy packet at {} ms",
-//!                     (p.time - starting_time).as_millis()
-//!                 );
-//!             } else {
-//!                 println!(
-//!                     "sent a normal packet at {} ms",
-//!                     (p.time - starting_time).as_millis()
-//!                 );
-//!             }
-//!         }
-//!         TriggerEvent::PacketRecv => {
-//!             if p.contains_decoy {
-//!                 println!(
-//!                     "received a decoy packet at {} ms",
-//!                     (p.time - starting_time).as_millis()
-//!                 );
-//!             } else {
-//!                 println!(
-//!                     "received a normal packet at {} ms",
-//!                     (p.time - starting_time).as_millis()
-//!                 );
-//!             }
-//!         }
-//!         _ => {}
-//!     });
-
-//!
-//! // Output:
-//! // sent a normal packet at 0 ms
-//! // received a normal packet at 19 ms
-//! // sent a decoy packet at 20 ms
-//! // sent a normal packet at 183 ms
-//! // received a normal packet at 243 ms
-//! // sent a normal packet at 1696 ms
-//! // sent a normal packet at 2047 ms
-//! // received a normal packet at 2055 ms
-//! // sent a normal packet at 9401 ms
-//! // sent a normal packet at 9401 ms
-//! // received a normal packet at 9420 ms
-//! ```
-
-pub mod delay;
 pub mod integration;
-pub mod network;
-pub mod queue;
-pub mod queue_event;
-pub mod queue_peek;
+pub mod limits;
+pub mod links;
+pub(crate) mod maybenot_helpers;
+pub mod settings;
+pub mod topology;
+pub mod traffic_parse;
 
-use std::{
-    cmp::Ordering,
-    slice,
-    time::{Duration, Instant},
+// re-export the core public API surface
+pub use integration::Integration;
+pub use limits::{DecoyLimitConfig, DelayLimitConfig, DynamicLimitDecoy, DynamicLimitDelay};
+pub use links::LinkType;
+pub use settings::{PACKET_SIZE_MAX, PACKET_SIZE_TOR, PACKET_SIZE_WG, Setting, SettingError};
+pub use topology::maybenot_nodes::ActionProducer;
+pub use topology::{NetworkLinkState, NetworkTopology};
+pub use traffic_parse::{
+    PARSE_ONE_WAY_DELAY_HTTPS, PARSE_ONE_WAY_DELAY_MULTIHOP, PARSE_ONE_WAY_DELAY_TOR,
+    PARSE_ONE_WAY_DELAY_VPN, TraceParseError, parse_trace,
 };
 
-use delay::agg_delay_on_delay_expire;
-use integration::Integration;
+use std::{cmp::Ordering, collections::BinaryHeap, num::NonZeroUsize, time::Duration};
+
 use log::debug;
-use network::{Network, NetworkBottleneck, WindowCount};
-use queue::SimQueue;
+use traffic_parse::EventKind;
 
-use core::convert::Infallible;
-use maybenot::{
-    Framework, LimitDecoy, LimitDecoyFrac, LimitDecoyFracWindowed, LimitDecoyNone, LimitDelay,
-    LimitDelayFrac, LimitDelayNone, Machine, MachineId, Timer, TriggerAction, TriggerEvent,
-};
-use rand::{Rng, TryRng, rngs::ThreadRng};
-use rand_xoshiro::Xoshiro256StarStar;
-use rand_xoshiro::rand_core::SeedableRng;
-use serde::{Deserialize, Serialize};
+use maybenot::{Machine, TriggerEvent};
+use maybenot_helpers::{initialize_maybenot_sim_states, initialize_user_provided_sim_states};
 
-/// Configuration for the decoy limit used in the simulator.
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum DecoyLimitConfig {
-    #[default]
-    None,
-    Frac {
-        frac: f64,
-    },
-    FracWindowed {
-        frac: f64,
-        window_ms: u64,
-        min_normal: u64,
-    },
-}
+use crate::maybenot_helpers::pick_next_maybenot;
 
-/// Configuration for the delay limit used in the simulator.
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum DelayLimitConfig {
-    #[default]
-    None,
-    Frac {
-        frac: f64,
-        window_ms: u64,
-        max_packets: usize,
-    },
-}
+/// Newtype wrapping a relative [`Duration`] so it can satisfy the
+/// [`maybenot::time::Instant`] trait required by the `Framework` generic
+/// parameter of [`DynamicLimitDecoy`] / [`DynamicLimitDelay`]. Used only at
+/// the framework boundary; the simulator's public APIs expose plain
+/// [`Duration`] for event timestamps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SimTime(pub Duration);
 
-/// A dynamic limit that can be either no limit or a fraction-based
-/// limit. This allows the simulator to choose the limit type at
-/// runtime.
-#[derive(Debug, Clone)]
-enum DynamicLimitDecoy {
-    None(LimitDecoyNone),
-    Frac(LimitDecoyFrac),
-    FracWindowed(LimitDecoyFracWindowed<Instant>),
-}
+impl maybenot::time::Instant for SimTime {
+    type Duration = Duration;
 
-impl LimitDecoy<Instant> for DynamicLimitDecoy {
-    fn allow_decoy(&self, current_time: Instant, machine: MachineId) -> bool {
-        match self {
-            DynamicLimitDecoy::None(t) => t.allow_decoy(current_time, machine),
-            DynamicLimitDecoy::Frac(t) => t.allow_decoy(current_time, machine),
-            DynamicLimitDecoy::FracWindowed(t) => t.allow_decoy(current_time, machine),
-        }
-    }
-
-    fn max_decoys(&self, current_time: Instant, machine: MachineId) -> usize {
-        match self {
-            DynamicLimitDecoy::None(t) => t.max_decoys(current_time, machine),
-            DynamicLimitDecoy::Frac(t) => t.max_decoys(current_time, machine),
-            DynamicLimitDecoy::FracWindowed(t) => t.max_decoys(current_time, machine),
-        }
-    }
-
-    fn packet_sent(&mut self, current_time: Instant) {
-        match self {
-            DynamicLimitDecoy::None(t) => t.packet_sent(current_time),
-            DynamicLimitDecoy::Frac(t) => t.packet_sent(current_time),
-            DynamicLimitDecoy::FracWindowed(t) => t.packet_sent(current_time),
-        }
-    }
-
-    fn normal_queued(&mut self, current_time: Instant) {
-        match self {
-            DynamicLimitDecoy::None(t) => t.normal_queued(current_time),
-            DynamicLimitDecoy::Frac(t) => t.normal_queued(current_time),
-            DynamicLimitDecoy::FracWindowed(t) => t.normal_queued(current_time),
-        }
-    }
-
-    fn decoy_queued(&mut self, current_time: Instant, machine: MachineId) {
-        match self {
-            DynamicLimitDecoy::None(t) => t.decoy_queued(current_time, machine),
-            DynamicLimitDecoy::Frac(t) => t.decoy_queued(current_time, machine),
-            DynamicLimitDecoy::FracWindowed(t) => t.decoy_queued(current_time, machine),
-        }
-    }
-
-    fn congestion(&mut self, current_time: Instant) {
-        match self {
-            DynamicLimitDecoy::None(t) => t.congestion(current_time),
-            DynamicLimitDecoy::Frac(t) => t.congestion(current_time),
-            DynamicLimitDecoy::FracWindowed(t) => t.congestion(current_time),
-        }
+    #[inline(always)]
+    fn saturating_duration_since(&self, earlier: Self) -> Duration {
+        self.0.saturating_sub(earlier.0)
     }
 }
 
-/// A dynamic limit that can be either no limit or a fraction-based
-/// limit for delays. This allows the simulator to choose the limit type
-/// at runtime.
-#[derive(Debug, Clone)]
-enum DynamicLimitDelay {
-    None(LimitDelayNone),
-    Frac(LimitDelayFrac<Instant>),
-}
-
-impl LimitDelay<Instant> for DynamicLimitDelay {
-    fn allow_delay(&self, current_time: Instant, machine: MachineId) -> bool {
-        match self {
-            DynamicLimitDelay::None(t) => t.allow_delay(current_time, machine),
-            DynamicLimitDelay::Frac(t) => t.allow_delay(current_time, machine),
-        }
-    }
-
-    fn max_delayed_packets(&self, current_time: Instant, machine: MachineId) -> usize {
-        match self {
-            DynamicLimitDelay::None(t) => t.max_delayed_packets(current_time, machine),
-            DynamicLimitDelay::Frac(t) => t.max_delayed_packets(current_time, machine),
-        }
-    }
-
-    fn max_delayed_duration(&self, current_time: Instant, machine: MachineId) -> Duration {
-        match self {
-            DynamicLimitDelay::None(t) => t.max_delayed_duration(current_time, machine),
-            DynamicLimitDelay::Frac(t) => t.max_delayed_duration(current_time, machine),
-        }
-    }
-
-    fn delay_begin(&mut self, current_time: Instant) {
-        match self {
-            DynamicLimitDelay::None(t) => t.delay_begin(current_time),
-            DynamicLimitDelay::Frac(t) => t.delay_begin(current_time),
-        }
-    }
-
-    fn delay_end(&mut self, current_time: Instant) {
-        match self {
-            DynamicLimitDelay::None(t) => t.delay_end(current_time),
-            DynamicLimitDelay::Frac(t) => t.delay_end(current_time),
-        }
-    }
-}
-
-use crate::{
-    network::sim_network_stack,
-    queue_peek::{
-        peek_blocked_exp, peek_queue, peek_scheduled_action, peek_scheduled_internal_timer,
-    },
-};
-
-// Enum to encapsulate different RngCore sources: in the Maybenot Framework, the
-// RngCore trait is not ?Sized (unnecessary overhead for the framework), so we
-// have to work around this by using an enum to support selecting rng source as
-// a simulation option.
-#[derive(Debug)]
-enum RngSource {
-    Thread(ThreadRng),
-    Xoshiro(Xoshiro256StarStar),
-}
-
-impl TryRng for RngSource {
-    type Error = Infallible;
-
-    fn try_next_u32(&mut self) -> Result<u32, Infallible> {
-        Ok(match self {
-            RngSource::Thread(rng) => rng.next_u32(),
-            RngSource::Xoshiro(rng) => rng.next_u32(),
-        })
-    }
-
-    fn try_next_u64(&mut self) -> Result<u64, Infallible> {
-        Ok(match self {
-            RngSource::Thread(rng) => rng.next_u64(),
-            RngSource::Xoshiro(rng) => rng.next_u64(),
-        })
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Infallible> {
-        match self {
-            RngSource::Thread(rng) => rng.fill_bytes(dest),
-            RngSource::Xoshiro(rng) => rng.fill_bytes(dest),
-        }
-        Ok(())
-    }
-}
-
-/// SimEvent represents an event in the simulator. It is used internally to
-/// represent events that are to be processed by the simulator (in SimQueue) and
-/// events that are produced by the simulator (the resulting trace).
+/// Represents a single network event in the Maybenot simulation.
+///
+/// `SimEvent` is the fundamental unit of simulation, representing packets being
+/// sent/received, machine actions (decoy, delay), and internal timer events.
+/// These events flow through the simulation priority queue and form the output
+/// trace.
 #[derive(PartialEq, Hash, Eq, Clone, Debug)]
 pub struct SimEvent {
     /// the actual event
     pub event: TriggerEvent,
-    /// the time of the event taking place
-    pub time: Instant,
-    /// the delay of the event due to integration
-    pub integration_delay: Duration,
-    /// flag to track if the event is from the client
-    pub client: bool,
+    /// the time of the event taking place, expressed as a duration from the
+    /// simulation's time zero (the earliest event in the parsed trace).
+    pub time: Duration,
+    /// Packet ID for triggering dependent tx events
+    pub packet_id: usize,
+    /// Node index for the event for routing and processing
+    pub node_id: usize,
+    /// Convenience flag set on events returned in the output trace: `true` if
+    /// [`node_id`] matches [`NetworkTopology::client`]. Internal events queued
+    /// during simulation leave this `false` — only the events delivered to the
+    /// caller by [`sim`] / [`sim_advanced`] are guaranteed to have it
+    /// populated. Exists so callers can filter by client/server perspective
+    /// without needing the topology at the filter site.
+    ///
+    /// [`node_id`]: Self::node_id
+    pub is_client: bool,
+    /// Link index for the event for routing and processing
+    pub link_id: usize,
+    /// sequence number for deterministic insertion ordering when timestamp is
+    /// identical
+    pub q_sequence_nr: u64,
+    // Start of Maybenot specific fields
     /// flag to track decoy or normal packet
     pub contains_decoy: bool,
     /// internal flag to mark event as bypass
@@ -328,25 +84,98 @@ pub struct SimEvent {
     /// internal flag to mark event as replace
     replace: bool,
     // debug note
+    #[cfg(debug_assertions)]
     pub debug_note: Option<String>,
 }
 
-/// Helper function to convert a TriggerEvent to a usize for sorting purposes.
-fn event_to_usize(e: &TriggerEvent) -> usize {
-    match e {
-        // packet before normal before decoy
-        TriggerEvent::PacketSent => 0,
-        TriggerEvent::NormalQueued => 1,
-        TriggerEvent::DecoyQueued { .. } => 2,
-        TriggerEvent::PacketRecv => 3,
-        TriggerEvent::NormalRecv => 4,
-        TriggerEvent::DecoyRecv => 5,
-        // begin before end
-        TriggerEvent::DelayBegin { .. } => 6,
-        TriggerEvent::DelayEnd => 7,
-        TriggerEvent::TimerBegin { .. } => 8,
-        TriggerEvent::TimerEnd { .. } => 9,
-        TriggerEvent::Congestion => 10,
+impl SimEvent {
+    /// Format event as compact string for column alignment
+    fn format_event_compact(&self) -> String {
+        match &self.event {
+            TriggerEvent::NormalQueued => "NormalQueued".to_string(),
+            TriggerEvent::NormalRecv => "NormalRecv".to_string(),
+            TriggerEvent::PacketSent => "PacketSent".to_string(),
+            TriggerEvent::PacketRecv => "PacketRecv".to_string(),
+            TriggerEvent::DecoyQueued { machine } => format!("DecoyQueued-M{}", machine.into_raw()),
+            TriggerEvent::DecoyRecv => "DecoyRecv".to_string(),
+            TriggerEvent::DelayBegin { machine } => format!("DelayBeg-M{}", machine.into_raw()),
+            TriggerEvent::DelayEnd => "DelayEnd".to_string(),
+            TriggerEvent::TimerBegin { machine } => format!("TimerBeg-M{}", machine.into_raw()),
+            TriggerEvent::TimerEnd { machine } => format!("TimerEnd-M{}", machine.into_raw()),
+            TriggerEvent::Congestion => "Congestion".to_string(),
+        }
+    }
+
+    /// Display SimEvent with time as microseconds since simulation time zero.
+    pub fn display_relative(&self, si: &SimInfo) -> String {
+        let time_since_zero = self.time.as_micros() as i64 - si.time_zero.as_micros() as i64;
+        format!(
+            "{:?} at {}μs (pkt {}, node {}, link {}) P:{} B:{} R:{}",
+            self.event,
+            time_since_zero,
+            self.packet_id,
+            if self.packet_id == usize::MAX {
+                "MAX".to_string()
+            } else {
+                self.packet_id.to_string()
+            },
+            self.link_id,
+            if self.contains_decoy { "T" } else { "F" },
+            if self.bypass { "T" } else { "F" },
+            if self.replace { "T" } else { "F" }
+        )
+    }
+
+    /// Display SimEvent as display_relative but with shortform of nodetype
+    /// string printed for each node, from - to nodeid for each link
+    pub fn display_full(
+        &self,
+        si: &SimInfo,
+        topology: &NetworkTopology,
+        link_state: &NetworkLinkState,
+    ) -> String {
+        let time_since_zero = self.time.as_micros() as i64 - si.time_zero.as_micros() as i64;
+        let link = link_state.get_link(self.link_id).unwrap();
+        // Adjust formatting so field lengths are appropriate for example line
+        // below NormalQueued at 25 μs (pkt 5, node 2 EndpointBasic, link 0
+        // n2->n1) P:F B:F R:F
+        format!(
+            "{:<12} at{:>8} μs (pkt {:<5} node {:<2} {:<20} link {:<2} n{:<2}->n{:<2})   P:{} B:{} R:{}",
+            self.format_event_compact(),
+            time_since_zero,
+            if self.packet_id == usize::MAX {
+                "MAX".to_string()
+            } else {
+                self.packet_id.to_string()
+            },
+            self.node_id,
+            topology.nodes[self.node_id].type_name(),
+            self.link_id,
+            link.from_node(),
+            link.to_node(),
+            if self.contains_decoy { "T" } else { "F" },
+            if self.bypass { "T" } else { "F" },
+            if self.replace { "T" } else { "F" }
+        )
+    }
+}
+
+// A display fmt for SimEvent that shows the event type, time, and packet index
+// as one line and has D:T B:F R:T according to the booleans
+impl std::fmt::Display for SimEvent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{:?} at {:?} (pkt {}, node {}, link {}) D:{} B:{} R:{}",
+            self.event,
+            self.time,
+            self.packet_id,
+            self.node_id,
+            self.link_id,
+            if self.contains_decoy { "T" } else { "F" },
+            if self.bypass { "T" } else { "F" },
+            if self.replace { "T" } else { "F" }
+        )
     }
 }
 
@@ -357,6 +186,7 @@ impl Ord for SimEvent {
         self.time
             .cmp(&other.time)
             .then_with(|| event_to_usize(&self.event).cmp(&event_to_usize(&other.event)))
+            .then_with(|| self.q_sequence_nr.cmp(&other.q_sequence_nr))
             .reverse()
     }
 }
@@ -367,173 +197,271 @@ impl PartialOrd for SimEvent {
     }
 }
 
-/// ScheduledAction represents an action that is scheduled to be executed at a
-/// certain time.
-#[derive(PartialEq, Clone, Debug)]
-pub struct ScheduledAction {
-    action: TriggerAction,
-    time: Instant,
+#[derive(Clone, Debug)]
+pub struct SimInfo {
+    /// Location of the original trace's t=0 within the simulation's shifted,
+    /// non-negative timeline. Non-zero only when endpoint events land below
+    /// zero after the client-delay adjustment in [`parse_trace`] and the
+    /// timeline had to be pushed forward so every [`Duration`] stays
+    /// non-negative.
+    ///
+    /// Purely a display/reporting aid — the simulator itself never reads this.
+    /// Subtracting it from `SimEvent.time` reproduces the original
+    /// trace-relative timestamp (which can be negative for server-initiated
+    /// events). Kept on `SimInfo` so callers get back timestamps that line up
+    /// with their input trace instead of the shifted timeline; the alternative
+    /// (drop it, report shifted times) is simpler internally but forces every
+    /// consumer and every hardcoded test expectation to think in post-shift
+    /// coordinates.
+    pub(crate) time_zero: Duration,
+    pub(crate) dependent_tx: Vec<Vec<(usize, i64, EventKind)>>,
 }
 
-/// The state of the client or the server in the simulator.
-#[derive(Debug)]
-pub struct SimState<M, R> {
-    /// an instance of the Maybenot framework
-    framework: Framework<M, R, Instant, DynamicLimitDecoy, DynamicLimitDelay>,
-    /// scheduled action timers
-    scheduled_action: Vec<Option<ScheduledAction>>,
-    /// scheduled internal timers
-    scheduled_internal_timer: Vec<Option<Instant>>,
-    /// delay until time, active is set
-    delay_until: Option<Instant>,
-    /// whether the active delay bypassable or not
-    delay_bypassable: bool,
-    /// integration aspects for this state
-    integration: Option<Integration>,
+impl Default for SimInfo {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-impl<M> SimState<M, RngSource>
-where
-    M: AsRef<[Machine]>,
-{
-    pub fn new(
-        machines: M,
-        current_time: Instant,
-        decoy_limit: &DecoyLimitConfig,
-        delay_limit: &DelayLimitConfig,
-        integration: Option<Integration>,
-        insecure_rng_seed: Option<u64>,
-    ) -> Self {
-        let rng = match insecure_rng_seed {
-            // deterministic, insecure RNG
-            Some(seed) => RngSource::Xoshiro(Xoshiro256StarStar::seed_from_u64(seed)),
-            // secure RNG, default
-            None => RngSource::Thread(rand::rng()),
-        };
-
-        let num_machines = machines.as_ref().len();
-
-        let decoy_limit = match decoy_limit {
-            DecoyLimitConfig::None => DynamicLimitDecoy::None(LimitDecoyNone),
-            DecoyLimitConfig::Frac { frac } => DynamicLimitDecoy::Frac(
-                LimitDecoyFrac::new(*frac).expect("decoy frac must be in [0.0, 1.0]"),
-            ),
-            DecoyLimitConfig::FracWindowed {
-                frac,
-                window_ms,
-                min_normal,
-            } => DynamicLimitDecoy::FracWindowed(
-                LimitDecoyFracWindowed::new(*frac, Duration::from_millis(*window_ms), *min_normal)
-                    .expect("decoy frac windowed parameters invalid"),
-            ),
-        };
-
-        let delay_limit = match delay_limit {
-            DelayLimitConfig::None => DynamicLimitDelay::None(LimitDelayNone),
-            DelayLimitConfig::Frac {
-                frac,
-                window_ms,
-                max_packets,
-            } => DynamicLimitDelay::Frac(
-                LimitDelayFrac::new(*frac, Duration::from_millis(*window_ms), *max_packets)
-                    .expect("delay frac must be in [0.0, 1.0]"),
-            ),
-        };
-
+impl SimInfo {
+    pub fn new() -> Self {
         Self {
-            framework: Framework::new(machines, decoy_limit, delay_limit, current_time, rng)
-                .unwrap(),
-            scheduled_action: vec![None; num_machines],
-            scheduled_internal_timer: vec![None; num_machines],
-            delay_until: None,
-            delay_bypassable: false,
-            integration,
+            time_zero: Duration::ZERO,
+            dependent_tx: Vec::new(),
         }
     }
 
-    pub fn reporting_delay(&self) -> Duration {
-        self.integration
-            .as_ref()
-            .map(Integration::reporting_delay)
-            .unwrap_or(Duration::from_micros(0))
+    /// Read-only view of the dependency mapping built by [`parse_trace`].
+    /// Intended for tests and debug inspection; the simulator consumes the
+    /// field directly.
+    pub fn dependent_tx(&self) -> &[Vec<(usize, i64, EventKind)>] {
+        &self.dependent_tx
     }
 
-    pub fn action_delay(&self) -> Duration {
-        self.integration
-            .as_ref()
-            .map(Integration::action_delay)
-            .unwrap_or(Duration::from_micros(0))
-    }
-
-    pub fn trigger_delay(&self) -> Duration {
-        self.integration
-            .as_ref()
-            .map(Integration::trigger_delay)
-            .unwrap_or(Duration::from_micros(0))
+    /// Offset between the original trace's t=0 and the simulation's
+    /// non-negative timeline. Subtract from [`SimEvent::time`] to recover
+    /// the timestamp a caller would have read off their input trace.
+    pub fn time_zero(&self) -> Duration {
+        self.time_zero
     }
 }
 
-/// The main simulator function.
+#[derive(Clone, Debug)]
+pub struct SimQueue {
+    pub heap: BinaryHeap<SimEvent>,
+    next_q_sequence_nr: u64,
+}
+
+impl Default for SimQueue {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SimQueue {
+    pub fn new() -> Self {
+        Self {
+            heap: BinaryHeap::new(),
+            next_q_sequence_nr: 0,
+        }
+    }
+
+    pub fn push(&mut self, mut s_event: SimEvent) {
+        s_event.q_sequence_nr = self.next_q_sequence_nr;
+        self.next_q_sequence_nr += 1;
+        self.heap.push(s_event);
+    }
+
+    pub fn pop(&mut self) -> Option<SimEvent> {
+        self.heap.pop()
+    }
+
+    pub fn peek(&self) -> Option<&SimEvent> {
+        self.heap.peek()
+    }
+
+    pub fn len(&self) -> usize {
+        self.heap.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.heap.is_empty()
+    }
+
+    // This function is called for every processed event if
+    // stop_after_all_normal_packets is true
+    pub fn no_normal_packets(&self, topology: &topology::NetworkTopology) -> bool {
+        // check main simulation queue, see if any of traffic trace packer are
+        // in it
+        if self.heap.iter().any(|e| e.packet_id < usize::MAX) {
+            return false;
+        }
+        // check Maybenot node delaying queues if they exist
+        if topology.has_mb {
+            let client_maybenot = topology.get_maybenot_client();
+            if !client_maybenot.get_queue_normal().borrow().is_empty() {
+                return false;
+            }
+
+            let relay_maybenot = topology.get_maybenot_relay();
+            if !relay_maybenot.get_queue_normal().borrow().is_empty() {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+/// Converts TriggerEvents to numeric priorities for deterministic event
+/// ordering.
 ///
-/// Zero or more machines can concurrently be run on the client and server. The
-/// machines can be different. The framework is designed to support many
-/// machines.
+/// When multiple events occur at the same timestamp, this function provides
+/// tie-breaking rules to ensure consistent simulation results:
 ///
-/// The queue MUST have been created by [`parse_trace`] with the same delay. The
-/// queue is modified by the simulator and should be re-created for each run of
-/// the simulator or cloned.
+/// - Packets > Control events
+/// - For Packets, Packet (wire) > Normal > Decoy
+/// - For Control events, Delay > Timer
 ///
-/// If max_trace_length is > 0, the simulator will stop after max_trace_length
-/// events have been *simulated* by the simulator and added to the simulating
-/// output trace. Note that some machines may schedule infinite actions (e.g.,
-/// schedule new decoy packet after sending a decoy packet), so the simulator
-/// may never stop. Use [`sim_advanced`] to set the maximum number of iterations
-/// to run the simulator for and other advanced settings.
+/// This ordering ensures that network transmission completes before triggering
+/// dependent events, which is useful for accurate simulation. XXX: we want
+/// decoys after packet/normal since decoys are generated by the framework and
+/// MAY have lower priority than normal/packet events in most integrations.
+fn event_to_usize(e: &TriggerEvent) -> usize {
+    match e {
+        // wire-level before enqueue, normal before decoy
+        TriggerEvent::PacketSent => 0,
+        TriggerEvent::PacketRecv => 1,
+        TriggerEvent::NormalQueued => 2,
+        TriggerEvent::NormalRecv => 3,
+        TriggerEvent::DecoyQueued { .. } => 4,
+        TriggerEvent::DecoyRecv => 5,
+        // begin before end
+        TriggerEvent::DelayBegin { .. } => 6,
+        TriggerEvent::DelayEnd => 7,
+        TriggerEvent::TimerBegin { .. } => 8,
+        TriggerEvent::TimerEnd { .. } => 9,
+        TriggerEvent::Congestion => 10,
+    }
+}
+
+/// Runs the Maybenot network traffic simulation.
 ///
-/// If only_network_activity is true, the simulator will only append events that
-/// are related to network activity (i.e., packets sent and received) to the
-/// output trace. This is recommended if you want to use the output trace for
-/// traffic analysis without further (recursive) simulation.
+/// This is the main simulation function that processes network events through a
+/// topology with optional Maybenot defense machines running on client and
+/// server nodes.
+///
+/// # Arguments
+///
+/// * `machines_client` - Slice of Maybenot [`Machine`]s to run on the client
+///   side
+/// * `machines_server` - Slice of Maybenot [`Machine`]s to run on the server
+///   side
+/// * `topology` - Network topology defining nodes, links and routing rules
+/// * `link_state` - Mutable network link states for throughput/delay simulation
+/// * `si` - Simulation info containing timing baselines and packet dependencies
+/// * `sq` - Mutable simulation queue pre-loaded with traffic trace events
+/// * `max_trace_length` - Maximum number of events to include in output (0 =
+///   unlimited)
+/// * `only_network_activity` - If true, only return wire-level packet
+///   sent/received events
+///
+/// # Returns
+///
+/// A `Vec<SimEvent>` representing the simulated network trace with defense
+/// modifications.
+///
+/// # Important Notes
+///
+/// - The simulation queue `sq` **must** be created by [`parse_trace`].
+/// - The queue is consumed during simulation - clone it if you need to reuse it
+/// - Some defense machines may generate infinite decoys, use `max_trace_length`
+///   to limit output
+/// - For traffic analysis, set `only_network_activity = true` to filter
+///   internal events
+///
+/// # See Also
+///
+/// - [`sim_advanced`] for advanced configuration options
+/// - [`parse_trace`] for creating the simulation queue from traffic traces
+#[allow(clippy::too_many_arguments)]
 pub fn sim(
     machines_client: &[Machine],
     machines_server: &[Machine],
+    topology: &NetworkTopology,
+    link_state: &mut NetworkLinkState,
+    si: &SimInfo,
     sq: &mut SimQueue,
-    delay: Duration,
     max_trace_length: usize,
     only_network_activity: bool,
 ) -> Vec<SimEvent> {
-    let network = Network::new(delay, None);
-    let args = SimulatorArgs::new(network, max_trace_length, only_network_activity);
-    sim_advanced(machines_client, machines_server, sq, &args)
+    let args = SimulatorArgs::new(max_trace_length, only_network_activity);
+    sim_advanced(
+        machines_client,
+        machines_server,
+        topology,
+        link_state,
+        si,
+        sq,
+        &args,
+    )
 }
 
-/// Arguments for [`sim_advanced`].
+/// Configuration parameters for advanced network simulation.
+///
+/// `SimulatorArgs` provides comprehensive control over simulation behavior,
+/// including termination conditions, output filtering, and Maybenot framework
+/// parameters.
+///
+/// # Usage Patterns
+///
+/// ```rust
+/// use maybenot_simulator::SimulatorArgs;
+/// // Basic configuration
+/// let args = SimulatorArgs::new(1000, true);  // 1K events, network activity only
+///
+/// // Advanced configuration
+/// use maybenot_simulator::DecoyLimitConfig;
+/// let mut args = SimulatorArgs::new(5000, false);
+/// args.decoy_limit_client = DecoyLimitConfig::Frac { frac: 0.3 }; // Limit decoy overhead
+/// args.insecure_rng_seed = Some(42);   // Reproducible results
+/// args.only_client_events = true;     // Filter to client perspective
+/// ```
+///
+/// # Termination Conditions
+///
+/// The simulator stops when **any** of these conditions are met:
+/// - `max_trace_length` events added to output trace
+/// - `max_sim_steps` processing iterations completed (when `Some`)
+/// - All normal (non-decoy) packets processed (if
+///   `stop_after_all_normal_packets = true`)
+///
 #[derive(Clone, Debug)]
 pub struct SimulatorArgs {
-    /// The network model for simulating the network between the client and the
-    /// server.
-    pub network: Network,
     /// The maximum number of events to simulate.
     pub max_trace_length: usize,
-    /// The maximum number of iterations to run the simulator for. If 0, the
-    /// simulator will run until it stops.
-    pub max_sim_iterations: usize,
-    /// If true, the simulator will continue after all normal packets have been
-    /// processed.
-    pub continue_after_all_normal_packets_processed: bool,
+    /// The maximum number of steps to run the simulator for. If `None`, the
+    /// simulator will run until it stops for another reason.
+    pub max_sim_steps: Option<NonZeroUsize>,
+    /// If true, the simulator stops once all normal (non-decoy) packets have
+    /// been processed.
+    pub stop_after_all_normal_packets: bool,
     /// If true, only client events are returned in the output trace.
     pub only_client_events: bool,
     /// If true, only events that represent network packets are returned in the
     /// output trace.
     pub only_network_activity: bool,
-    /// The decoy limit for the client's instance of the Maybenot framework.
+    /// Decoy limit for the client's Maybenot framework instance.
     pub decoy_limit_client: DecoyLimitConfig,
-    /// The delay limit for the client's instance of the Maybenot framework.
+    /// Delay limit for the client's Maybenot framework instance.
     pub delay_limit_client: DelayLimitConfig,
-    /// The decoy limit for the server's instance of the Maybenot framework.
+    /// Decoy limit for the server's Maybenot framework instance.
     pub decoy_limit_server: DecoyLimitConfig,
-    /// The delay limit for the server's instance of the Maybenot framework.
+    /// Delay limit for the server's Maybenot framework instance.
     pub delay_limit_server: DelayLimitConfig,
+    /// If true, delayed events will be drained based on their original
+    /// timestamps. If false, all normal will be drained first, and then
+    /// decoy.
+    pub drain_delayed_by_time: bool,
     /// The seed for the deterministic (insecure) Xoshiro256StarStar RNG. If
     /// None, the simulator will use the cryptographically secure thread_rng().
     pub insecure_rng_seed: Option<u64>,
@@ -544,18 +472,18 @@ pub struct SimulatorArgs {
 }
 
 impl SimulatorArgs {
-    pub fn new(network: Network, max_trace_length: usize, only_network_activity: bool) -> Self {
+    pub fn new(max_trace_length: usize, only_network_activity: bool) -> Self {
         Self {
-            network,
             max_trace_length,
-            max_sim_iterations: 0,
-            continue_after_all_normal_packets_processed: false,
+            max_sim_steps: None,
+            stop_after_all_normal_packets: false,
             only_client_events: false,
             only_network_activity,
             decoy_limit_client: DecoyLimitConfig::None,
             delay_limit_client: DelayLimitConfig::None,
             decoy_limit_server: DecoyLimitConfig::None,
             delay_limit_server: DelayLimitConfig::None,
+            drain_delayed_by_time: false,
             insecure_rng_seed: None,
             client_integration: None,
             server_integration: None,
@@ -563,62 +491,141 @@ impl SimulatorArgs {
     }
 }
 
-/// Like [`sim`], but allows to (i) set the maximum decoy and delay fractions
-/// for the client and server, (ii) specify the maximum number of iterations to
-/// run the simulator for, and (iii) only returning client events.
+/// Advanced network simulation with extensive configuration options.
+///
+/// This function provides fine-grained control over the simulation through
+/// [`SimulatorArgs`], including Maybenot framework parameters, output
+/// filtering, and termination conditions.
+///
+/// # Arguments
+///
+/// * `machines_client` - Maybenot defense machines for the client node
+/// * `machines_server` - Maybenot defense machines for the server/relay node  
+/// * `topology` - Network topology configuration
+/// * `link_state` - Mutable link states for network simulation
+/// * `si` - Simulation timing and dependency information
+/// * `sq` - Mutable event queue from parsed traffic trace
+/// * `args` - Advanced simulation configuration parameters
+///
+/// # Returns
+///
+/// A `Vec<SimEvent>` containing the simulated network trace with applied
+/// defenses.
+///
+/// # Key Configuration Options
+///
+/// - **Decoy/Delay limits**: Control maximum resource usage for defenses
+/// - **Output filtering**: Return only client events or network activity  
+/// - **Termination conditions**: Stop by trace length, iteration count, or
+///   traffic completion
+/// - **RNG control**: Use deterministic seeding for reproducible results
+/// - **Integration delays**: Model real-world implementation latencies
+///
+/// # See Also
+///
+/// - [`sim`] for a simpler interface with common defaults
+/// - [`SimulatorArgs`] for detailed parameter descriptions
 pub fn sim_advanced(
     machines_client: &[Machine],
     machines_server: &[Machine],
+    topology: &NetworkTopology,
+    link_state: &mut NetworkLinkState,
+    si: &SimInfo,
     sq: &mut SimQueue,
     args: &SimulatorArgs,
 ) -> Vec<SimEvent> {
-    // the resulting simulated trace
+    if topology.has_mb {
+        initialize_maybenot_sim_states(
+            topology,
+            machines_client,
+            machines_server,
+            Duration::ZERO,
+            args,
+        );
+    }
+    debug!("sim(): client machines {}", machines_client.len());
+    debug!("sim(): server machines {}", machines_server.len());
+    run_sim(topology, link_state, si, sq, args)
+}
+
+/// Runs the simulation with caller-supplied [`ActionProducer`]s on both the
+/// client and server Maybenot nodes, instead of constructing
+/// [`maybenot::Framework`] instances internally with provided Maybenot
+/// machines.
+///
+/// Use this when you want to swap out the standard Maybenot framework and
+/// machines for something else, like a competing defense. The simulator's
+/// scheduling, delay, integration-delay, and network machinery work identically
+/// regardless of which producer is in use.
+///
+/// Both nodes must be supplied with a producer; mixing a user producer on one
+/// side and the default framework on the other is not supported (use
+/// [`sim_advanced`] for the all-framework case).
+///
+/// # Arguments mirroring `sim_advanced`
+///
+/// - `topology`, `link_state`, `si`, `sq` — same as [`sim_advanced`].
+/// - `args` — only the trace-control fields (`max_trace_length`,
+///   `max_sim_steps`, `stop_after_all_normal_packets`, `only_client_events`,
+///   `only_network_activity`), the `drain_delayed_by_time` flag, and the
+///   `client_integration` / `server_integration` integration-delay
+///   distributions are honored. The `decoy_limit_*`, `delay_limit_*`, and
+///   `insecure_rng_seed` fields are framework-construction concerns and are
+///   ignored here — user producers own their own RNG and limits.
+///
+/// # Topology requirements
+///
+/// `topology.has_mb` must be true (i.e. the topology must declare Maybenot
+/// nodes) — otherwise this function falls back to the no-defense path and the
+/// producers are never consulted.
+pub fn sim_user_provided(
+    client_producer: Box<dyn ActionProducer>,
+    server_producer: Box<dyn ActionProducer>,
+    topology: &NetworkTopology,
+    link_state: &mut NetworkLinkState,
+    si: &SimInfo,
+    sq: &mut SimQueue,
+    args: &SimulatorArgs,
+) -> Vec<SimEvent> {
+    if topology.has_mb {
+        initialize_user_provided_sim_states(topology, client_producer, server_producer, args);
+    }
+    debug!("sim(): user-provided producers installed on client and server");
+    run_sim(topology, link_state, si, sq, args)
+}
+
+fn run_sim(
+    topology: &NetworkTopology,
+    link_state: &mut NetworkLinkState,
+    si: &SimInfo,
+    sq: &mut SimQueue,
+    args: &SimulatorArgs,
+) -> Vec<SimEvent> {
     let expected_trace_len = if args.max_trace_length > 0 {
         args.max_trace_length
     } else {
         // a rough estimate of the number of events in the trace
-        sq.len() * 2
+        sq.len() * 5
     };
     let mut trace: Vec<SimEvent> = Vec::with_capacity(expected_trace_len);
 
-    // put the mocked current time at the first event
-    let mut current_time = sq.get_first_time().unwrap();
+    // start the simulation clock at time zero (the earliest parsed event).
+    let mut current_time = Duration::ZERO;
 
-    let mut client = SimState::new(
-        machines_client,
-        current_time,
-        &args.decoy_limit_client,
-        &args.delay_limit_client,
-        args.clone().client_integration,
-        args.insecure_rng_seed,
-    );
-    let mut server = SimState::new(
-        machines_server,
-        current_time,
-        &args.decoy_limit_server,
-        &args.delay_limit_server,
-        args.clone().server_integration,
-        // if we have an insecure seed, we use the next number in the sequence
-        // to avoid the same seed for both client and server
-        args.insecure_rng_seed.map(|seed| seed.wrapping_add(1)),
-    );
-    debug!("sim(): client machines {}", machines_client.len());
-    debug!("sim(): server machines {}", machines_server.len());
-
-    let mut network = NetworkBottleneck::new(args.network, Duration::from_secs(1), sq.max_pps);
+    let client_maybenot = topology.has_mb.then(|| topology.get_maybenot_client());
+    let relay_maybenot = topology.has_mb.then(|| topology.get_maybenot_relay());
 
     let mut sim_iterations = 0;
-    let start_time = current_time;
-    while let Some(next) = pick_next(sq, &mut client, &mut server, &mut network, current_time) {
+    while let Some(next) = pick_next(si, sq, topology, current_time) {
         debug!("#########################################################");
         debug!("sim(): main loop start");
 
         // move time forward?
         match next.time.cmp(&current_time) {
             Ordering::Less => {
-                debug!("sim(): {current_time:#?}");
+                debug!("sim(): {:#?}", current_time);
                 debug!("sim(): {:#?}", next.time);
-                panic!("bug: next event moves time backwards");
+                panic!("BUG: next event moves time backwards");
             }
             Ordering::Greater => {
                 debug!("sim(): time moved forward {:#?}", next.time - current_time);
@@ -627,89 +634,66 @@ pub fn sim_advanced(
             _ => {}
         }
 
-        // status
-        debug!(
-            "sim(): at time {:#?}, aggregate network base delay {:#?} @client and {:#?} @server",
-            current_time.duration_since(start_time),
-            network.client_aggregate_base_delay,
-            network.server_aggregate_base_delay,
-        );
-        if next.client {
-            debug!("sim(): @client next\n{next:#?}");
-        } else {
-            debug!("sim(): @server next\n{next:#?}");
+        if let Some(client_maybenot) = client_maybenot {
+            if let Some(delay_until) = client_maybenot.get_sim_state().borrow().delay_until {
+                debug!(
+                    "sim(): client outgoing traffic is delayed until time {:#?}",
+                    delay_until
+                );
+            }
         }
-        if let Some(delay_until) = client.delay_until {
-            debug!(
-                "sim(): client is blocked until time {:#?}",
-                delay_until.duration_since(start_time)
-            );
-        }
-        if let Some(delay_until) = server.delay_until {
-            debug!(
-                "sim(): server is blocked until time {:#?}",
-                delay_until.duration_since(start_time)
-            );
+        if let Some(relay_maybenot) = relay_maybenot {
+            if let Some(delay_until) = relay_maybenot.get_sim_state().borrow().delay_until {
+                debug!(
+                    "sim(): server outgoing traffic is delayed until time {:#?}",
+                    delay_until
+                );
+            }
         }
 
-        // Where the simulator simulates the entire network between the client
-        // and the server. Returns true if there was network activity (i.e., a
-        // packet was sent or received over the network), false otherwise.
-        let network_activity = if next.client {
-            sim_network_stack(&next, sq, &client, &mut server, &mut network, &current_time)
-        } else {
-            sim_network_stack(&next, sq, &server, &mut client, &mut network, &current_time)
-        };
+        debug!("sim(): next event: {}", next.display_relative(si));
 
-        // get actions, update scheduled actions
-        if next.client {
-            debug!("sim(): trigger @client framework {:?}", next.event);
-            trigger_update(&mut client, &next, &current_time, sq, true);
-        } else {
-            debug!("sim(): trigger @server framework {:?}", next.event);
-            trigger_update(&mut server, &next, &current_time, sq, false);
+        // Handle event at node
+        topology.nodes[next.node_id].handle_event(&next, topology, link_state, si, sq);
+
+        // Call trigger_update on Maybenot nodes after handling the event
+        if topology.has_mb {
+            if next.node_id == topology.mb_client {
+                if let Some(client_maybenot) = client_maybenot {
+                    debug!("sim(): trigger @client framework {:?}", next.event);
+                    let reporting_delay =
+                        client_maybenot.get_sim_state().borrow().reporting_delay();
+                    client_maybenot.trigger_update(
+                        &next,
+                        &(current_time + reporting_delay),
+                        sq,
+                        topology,
+                    );
+                }
+            } else if next.node_id == topology.mb_server {
+                if let Some(relay_maybenot) = relay_maybenot {
+                    debug!("sim(): trigger @server framework {:?}", next.event);
+                    let reporting_delay = relay_maybenot.get_sim_state().borrow().reporting_delay();
+                    relay_maybenot.trigger_update(
+                        &next,
+                        &(current_time + reporting_delay),
+                        sq,
+                        topology,
+                    );
+                }
+            }
         }
 
         // conditional save to resulting trace: only on network activity if set
         // in fn arg, and only on client activity if set in fn arg
-        if (!args.only_network_activity || network_activity)
-            && (!args.only_client_events || next.client)
+        if (!args.only_client_events || next.node_id == topology.client)
+            && (!args.only_network_activity
+                || next.event == TriggerEvent::PacketRecv
+                || next.event == TriggerEvent::PacketSent)
         {
-            // this should be a network trace: adjust timestamps based on any
-            // integration delays
-            let mut n = next.clone();
-            match next.event {
-                TriggerEvent::NormalQueued => {
-                    // remove the reporting delay
-                    n.time -= n.integration_delay;
-                }
-                TriggerEvent::DecoyQueued { .. } => {
-                    // decoy packet adds the action delay
-                    n.time += n.integration_delay;
-                }
-                TriggerEvent::PacketSent => {
-                    if n.contains_decoy {
-                        // decoy packet adds the action delay
-                        n.time += n.integration_delay;
-                    } else {
-                        // normal packet removes the reporting delay
-                        n.time -= n.integration_delay;
-                    }
-                }
-                TriggerEvent::PacketRecv | TriggerEvent::DecoyRecv | TriggerEvent::NormalRecv => {
-                    // remove the reporting delay
-                    n.time -= n.integration_delay;
-                }
-
-                _ => {}
-            }
-
-            n.debug_note = Some(format!(
-                "agg. delay {:?} @c, {:?} @s",
-                network.client_aggregate_base_delay, network.server_aggregate_base_delay
-            ));
-
-            trace.push(n);
+            let mut out_event = next;
+            out_event.is_client = out_event.node_id == topology.client;
+            trace.push(out_event);
         }
 
         if args.max_trace_length > 0 && trace.len() >= args.max_trace_length {
@@ -719,20 +703,16 @@ pub fn sim_advanced(
             );
             break;
         }
-
-        // check if we should stop
         sim_iterations += 1;
-        if args.max_sim_iterations > 0 && sim_iterations >= args.max_sim_iterations {
-            debug!(
-                "sim(): we done, reached max sim iterations {}",
-                args.max_sim_iterations
-            );
+        if let Some(max) = args.max_sim_steps
+            && sim_iterations >= max.get()
+        {
+            debug!("sim(): we done, reached max sim iterations {}", max);
             break;
         }
-
-        // check if we should stop after all normal packets have been processed
-        if !args.continue_after_all_normal_packets_processed && sq.no_normal_packets() {
+        if args.stop_after_all_normal_packets && sq.no_normal_packets(topology) {
             debug!("sim(): we done, all normal packets processed");
+            debug!(" Heap: {:?}", sq.heap);
             break;
         }
 
@@ -740,539 +720,22 @@ pub fn sim_advanced(
         debug!("#########################################################");
     }
 
-    // sort the trace by time
-    trace.sort_by_key(|a| a.time);
-
     trace
 }
 
-fn pick_next<M: AsRef<[Machine]>>(
+// Selects the next event to process from multiple concurrent sources. This is
+// the core scheduling logic that determines simulation event ordering.
+fn pick_next(
+    si: &SimInfo,
     sq: &mut SimQueue,
-    client: &mut SimState<M, RngSource>,
-    server: &mut SimState<M, RngSource>,
-    network: &mut NetworkBottleneck,
-    current_time: Instant,
+    topology: &NetworkTopology,
+    current_time: Duration,
 ) -> Option<SimEvent> {
-    // find the earliest scheduled action, internal timer, block expiry,
-    // aggregate delay, and queued events to determine the next event
-    let s = peek_scheduled_action(
-        &client.scheduled_action,
-        &server.scheduled_action,
-        current_time,
-    );
-    debug!("\tpick_next(): peek_scheduled_action = {s:?}");
-
-    let i = peek_scheduled_internal_timer(
-        &client.scheduled_internal_timer,
-        &server.scheduled_internal_timer,
-        current_time,
-    );
-    debug!("\tpick_next(): peek_scheduled_internal_timer = {i:?}");
-
-    let (b, b_is_client) = peek_blocked_exp(client.delay_until, server.delay_until, current_time);
-    debug!("\tpick_next(): peek_blocked_exp = {b:?}");
-
-    let n = network.peek_aggregate_delay(current_time);
-    debug!("\tpick_next(): peek_aggregate_delay = {n:?}");
-
-    let (q, qid, q_is_client) = peek_queue(
-        sq,
-        client,
-        server,
-        network.client_aggregate_base_delay,
-        network.server_aggregate_base_delay,
-        s.min(i).min(b).min(n),
-        current_time,
-    );
-    debug!("\tpick_next(): peek_queue = {q:?}");
-
-    // no next?
-    if s == Duration::MAX
-        && i == Duration::MAX
-        && b == Duration::MAX
-        && n == Duration::MAX
-        && q == Duration::MAX
-    {
-        return None;
+    if topology.has_mb {
+        // Complex Maybenot scheduling: must consider queue, timers, and actions
+        pick_next_maybenot(si, sq, topology, current_time)
+    } else {
+        // Simple case: just process queue events in timestamp order
+        sq.pop()
     }
-
-    // We prioritize the aggregate delay first: it is fundamental and may lead
-    // to further delays for picked_queue
-    if n <= s && n <= i && n <= b && n <= q {
-        debug!("\tpick_next(): picked aggregate delay");
-        network.pop_aggregate_delay();
-        return pick_next(sq, client, server, network, current_time);
-    }
-
-    // next is delay expiry, fundamental due to how we aggregate delay
-    if b <= s && b <= i && b <= q {
-        debug!("\tpick_next(): picked delay");
-        // create SimEvent and turn off delay, ASSUMPTION: block outgoing is
-        // reported from integration
-        let delay: Duration;
-        if b_is_client {
-            delay = client.reporting_delay();
-            client.delay_until = None;
-        } else {
-            delay = server.reporting_delay();
-            server.delay_until = None;
-        }
-
-        // determine if we have any aggregate delay to schedule (are we delay
-        // anything?)
-        let (action_delay, _) = sq.peek_delay(false, b_is_client);
-        if let Some(event) = action_delay {
-            // if the first delay event is in the past, it was delayed by the
-            // delay: note that the delay ends at current_time + b
-            if event.time < current_time + b {
-                //let blocked_duration = current_time + b - event.time;
-                let time_of_expiry = current_time + b;
-                if let Some(blocked_duration) = agg_delay_on_delay_expire(
-                    sq,
-                    b_is_client,
-                    time_of_expiry,
-                    event,
-                    match b_is_client {
-                        true => network.client_aggregate_base_delay,
-                        false => network.server_aggregate_base_delay,
-                    },
-                ) {
-                    network.push_aggregate_delay(blocked_duration, &time_of_expiry, b_is_client);
-                }
-            }
-        }
-
-        let e = SimEvent {
-            client: b_is_client,
-            event: TriggerEvent::DelayEnd,
-            time: current_time + b + delay,
-            integration_delay: delay,
-            bypass: false,
-            replace: false,
-            contains_decoy: false,
-            debug_note: None,
-        };
-        if delay > Duration::default() {
-            // if any delay, there might be events before the BlockingEnd event,
-            // so queue up and pick again
-            sq.push_sim(e);
-            return pick_next(sq, client, server, network, current_time);
-        }
-        return Some(e);
-    }
-
-    // We prioritize the queue next: in general, stuff happens faster outside
-    // the framework than inside it. On overload, the user of the framework will
-    // bulk trigger events in the framework.
-    if q <= s && q <= i {
-        debug!("\tpick_next(): picked queue, is_client {q_is_client}, queue {qid:?}");
-        let mut tmp = sq
-            .pop(
-                qid,
-                q_is_client,
-                if q_is_client {
-                    network.client_aggregate_base_delay
-                } else {
-                    network.server_aggregate_base_delay
-                },
-            )
-            .unwrap();
-        debug!("\tpick_next(): popped from queue {tmp:?}");
-        // check if delay moves the event forward in time
-        if current_time + q > tmp.time {
-            // move the event forward in time
-            tmp.time = current_time + q;
-        }
-
-        return Some(tmp);
-    }
-
-    // next we pick internal events, which should be faster than scheduled
-    // actions due to less work
-    if i <= s {
-        debug!("\tpick_next(): picked internal timer");
-        let target = current_time + i;
-        let act = do_internal_timer(client, server, target);
-        if let Some(a) = act {
-            sq.push_sim(a.clone());
-        }
-        return pick_next(sq, client, server, network, current_time);
-    }
-
-    // what's left is scheduled actions: find the action act on the action,
-    // putting the event into the sim queue, and then recurse
-    debug!("\tpick_next(): picked scheduled action");
-    let target = current_time + s;
-    let act = do_scheduled_action(client, server, target);
-    if let Some(a) = act {
-        for event in a {
-            sq.push_sim(event);
-        }
-    }
-    pick_next(sq, client, server, network, current_time)
-}
-
-fn do_internal_timer<M: AsRef<[Machine]>>(
-    client: &mut SimState<M, RngSource>,
-    server: &mut SimState<M, RngSource>,
-    target: Instant,
-) -> Option<SimEvent> {
-    let mut machine: Option<MachineId> = None;
-    let mut is_client = false;
-
-    for (id, opt) in client.scheduled_internal_timer.iter_mut().enumerate() {
-        if let Some(a) = opt {
-            if *a == target {
-                machine = Some(MachineId::from_raw(id));
-                is_client = true;
-                *opt = None;
-                break;
-            }
-        }
-    }
-
-    if machine.is_none() {
-        for (id, opt) in server.scheduled_internal_timer.iter_mut().enumerate() {
-            if let Some(a) = opt {
-                if *a == target {
-                    machine = Some(MachineId::from_raw(id));
-                    is_client = false;
-                    *opt = None;
-                    break;
-                }
-            }
-        }
-    }
-
-    assert!(machine.is_some(), "bug: no internal action found");
-
-    // create SimEvent with TimerEnd
-    Some(SimEvent {
-        client: is_client,
-        event: TriggerEvent::TimerEnd {
-            machine: machine.unwrap(),
-        },
-        time: target,
-        integration_delay: Duration::from_micros(0), // TODO: is this correct?
-        bypass: false,
-        replace: false,
-        contains_decoy: false,
-        debug_note: None,
-    })
-}
-
-fn do_scheduled_action<M: AsRef<[Machine]>>(
-    client: &mut SimState<M, RngSource>,
-    server: &mut SimState<M, RngSource>,
-    target: Instant,
-) -> Option<Vec<SimEvent>> {
-    // find the action
-    let mut a: Option<ScheduledAction> = None;
-    let mut is_client = false;
-
-    for opt in client.scheduled_action.iter_mut() {
-        if let Some(sa) = opt {
-            if sa.time == target {
-                a = Some(sa.clone());
-                is_client = true;
-                *opt = None;
-                break;
-            }
-        }
-    }
-
-    // cannot schedule a None action, so if we found one, done
-    if a.is_none() {
-        for opt in server.scheduled_action.iter_mut() {
-            if let Some(sa) = opt {
-                if sa.time == target {
-                    a = Some(sa.clone());
-                    is_client = false;
-                    *opt = None;
-                    break;
-                }
-            }
-        }
-    }
-
-    // no action found
-    assert!(a.is_some(), "bug: no action found");
-    let a = a.unwrap();
-
-    // do the action
-    match a.action {
-        TriggerAction::Cancel { .. } => {
-            // this should never happen, bug
-            panic!("bug: cancel action in scheduled action");
-        }
-        TriggerAction::UpdateTimer { .. } => {
-            // this should never happen, bug
-            panic!("bug: update timer action in scheduled action");
-        }
-        TriggerAction::DecoyTraffic {
-            timeout: _,
-            n: amount,
-            bypass,
-            replace,
-            machine,
-        } => {
-            let mut r = Vec::with_capacity(amount);
-
-            for _ in 0..amount {
-                let action_delay = if is_client {
-                    client.action_delay()
-                } else {
-                    server.action_delay()
-                };
-
-                r.push(SimEvent {
-                    event: TriggerEvent::DecoyQueued { machine },
-                    time: a.time,
-                    integration_delay: action_delay,
-                    client: is_client,
-                    bypass,
-                    replace,
-                    contains_decoy: true,
-                    debug_note: None,
-                });
-            }
-            Some(r)
-        }
-        TriggerAction::DelayTraffic {
-            timeout: _,
-            n: _, // FIXME/TODO: leaving broken since we've got a simulator v3 rework on the way
-            duration,
-            bypass,
-            replace,
-            machine,
-        } => {
-            let block = a.time + duration;
-            let event_bypass;
-            // ASSUMPTION: block outgoing reported from integration
-            let total_delay = if is_client {
-                client.action_delay() + client.reporting_delay()
-            } else {
-                server.action_delay() + server.reporting_delay()
-            };
-            let reported = a.time + total_delay;
-
-            // should we update client/server delay?
-            if is_client {
-                if replace || block > client.delay_until.unwrap_or(a.time) {
-                    client.delay_until = Some(block);
-                    client.delay_bypassable = bypass;
-                }
-                event_bypass = client.delay_bypassable;
-            } else {
-                if replace || block > server.delay_until.unwrap_or(a.time) {
-                    server.delay_until = Some(block);
-                    server.delay_bypassable = bypass;
-                }
-                event_bypass = server.delay_bypassable;
-            }
-
-            // event triggered regardless
-            Some(vec![SimEvent {
-                event: TriggerEvent::DelayBegin { machine },
-                time: reported,
-                integration_delay: total_delay,
-                client: is_client,
-                bypass: event_bypass,
-                replace: false,
-                contains_decoy: false,
-                debug_note: None,
-            }])
-        }
-    }
-}
-
-fn trigger_update<M: AsRef<[Machine]>>(
-    state: &mut SimState<M, RngSource>,
-    next: &SimEvent,
-    current_time: &Instant,
-    sq: &mut SimQueue,
-    is_client: bool,
-) {
-    let trigger_delay = state.trigger_delay();
-
-    // parse actions and update
-    for action in state
-        .framework
-        .trigger_events(slice::from_ref(&next.event), *current_time)
-    {
-        match action {
-            TriggerAction::Cancel { machine, timer } => {
-                debug!("\ttrigger_update(): cancel action {machine:?} {timer:?}");
-                // here we make a simplifying assumption of no trigger delay for
-                // cancel actions
-                match timer {
-                    Timer::Action => {
-                        state.scheduled_action[machine.into_raw()] = None;
-                    }
-                    Timer::Internal => {
-                        state.scheduled_internal_timer[machine.into_raw()] = None;
-                    }
-                    Timer::All => {
-                        state.scheduled_action[machine.into_raw()] = None;
-                        state.scheduled_internal_timer[machine.into_raw()] = None;
-                    }
-                }
-            }
-            TriggerAction::DecoyTraffic {
-                timeout,
-                n,
-                bypass: _,
-                replace: _,
-                machine,
-            } => {
-                debug!(
-                    "\ttrigger_update(): send decoy traffic action {n:?} {timeout:?} {machine:?}"
-                );
-                state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
-                    action: action.clone(),
-                    time: *current_time + *timeout + trigger_delay,
-                });
-            }
-            TriggerAction::DelayTraffic {
-                timeout,
-                n: _, // TODO/FIXME: to fix in simulator v3
-                duration: _,
-                bypass: _,
-                replace: _,
-                machine,
-            } => {
-                debug!("\ttrigger_update(): block outgoing action {timeout:?} {machine:?}");
-                state.scheduled_action[machine.into_raw()] = Some(ScheduledAction {
-                    action: action.clone(),
-                    time: *current_time + *timeout + trigger_delay,
-                });
-            }
-            TriggerAction::UpdateTimer {
-                duration,
-                replace,
-                machine,
-            } => {
-                debug!("\ttrigger_update(): update timer action {duration:?} {machine:?}");
-                // get current internal timer duration, if any
-                let current =
-                    state.scheduled_internal_timer[machine.into_raw()].unwrap_or(*current_time);
-
-                // update the timer
-                if *replace || current < *current_time + *duration {
-                    state.scheduled_internal_timer[machine.into_raw()] =
-                        Some(*current_time + *duration);
-                    // TimerBegin event
-                    sq.push_sim(SimEvent {
-                        client: is_client,
-                        event: TriggerEvent::TimerBegin { machine: *machine },
-                        time: *current_time,
-                        integration_delay: Duration::from_micros(0), // TODO: is this correct?
-                        bypass: false,
-                        replace: false,
-                        contains_decoy: false,
-                        debug_note: None,
-                    });
-                }
-            }
-        }
-    }
-}
-
-/// Parse a trace into a [`SimQueue`] for use with [`sim`].
-///
-/// The trace should contain one or more lines of the form
-/// "time,direction,size\n", where time is in nanoseconds relative to the first
-/// line, direction is either "s" for sent or "r" for received, and size is the
-/// number of bytes sent or received. The delay is used to model the network
-/// delay between the client and server. Returns a SimQueue with the events in
-/// the trace for use with [`sim`].
-pub fn parse_trace(trace: &str, network: Network) -> SimQueue {
-    parse_trace_advanced(trace, network, None, None)
-}
-
-pub fn parse_trace_advanced(
-    trace: &str,
-    network: Network,
-    client: Option<&Integration>,
-    server: Option<&Integration>,
-) -> SimQueue {
-    let mut sq = SimQueue::new();
-    // compute max observed packets per second by checking the max number of
-    // packets in a 100ms window
-    let mut sent_window = WindowCount::new(Duration::from_millis(100));
-    let mut recv_window = WindowCount::new(Duration::from_millis(100));
-    let mut sent_max_pps = 0;
-    let mut recv_max_pps = 0;
-
-    // we just need a random starting time to make sure that we don't start from
-    // absolute 0
-    let starting_time = Instant::now();
-
-    for l in trace.lines() {
-        let parts: Vec<&str> = l.split(',').collect();
-        if parts.len() >= 2 {
-            let timestamp =
-                starting_time + Duration::from_nanos(parts[0].trim().parse::<u64>().unwrap());
-            // let size = parts[2].trim().parse::<u64>().unwrap();
-
-            // NOTE: for supporting deterministic simulation with a seed, note
-            // that once network is randomized and integration delays are used,
-            // both need to be updated below. Unfortunately, users of the
-            // simulator would have to take this parsing into account as well.
-            match parts[1] {
-                // "send", "send normal", "queue normal"
-                "s" | "sn" | "nq" => {
-                    // client sent at the given time
-                    let reporting_delay = client
-                        .map(Integration::reporting_delay)
-                        .unwrap_or(Duration::from_micros(0));
-                    let reported = timestamp + reporting_delay;
-                    sq.push(
-                        TriggerEvent::NormalQueued,
-                        true,
-                        false,
-                        reported,
-                        reporting_delay,
-                    );
-
-                    let m = sent_window.add(&timestamp);
-                    if m > sent_max_pps {
-                        sent_max_pps = m;
-                    }
-                }
-                // "receive", "receive normal", "normal receive"
-                "r" | "rn" | "nr" => {
-                    // sent by server delay time ago
-                    let sent = timestamp - network.delay;
-                    // but reported to the Maybenot framework at the server with delay
-                    let reporting_delay = server
-                        .map(Integration::reporting_delay)
-                        .unwrap_or(Duration::from_micros(0));
-                    let reported = sent + reporting_delay;
-                    sq.push(
-                        TriggerEvent::NormalQueued,
-                        false,
-                        false,
-                        reported,
-                        reporting_delay,
-                    );
-
-                    let m = recv_window.add(&timestamp);
-                    if m > recv_max_pps {
-                        recv_max_pps = m;
-                    }
-                }
-                "sp" | "rp" | "sd" | "rd" => {
-                    // TODO: figure out of ignoring is the right thing to do
-                }
-                _ => {
-                    panic!("invalid direction")
-                }
-            }
-        }
-    }
-
-    sq.max_pps = Some(sent_max_pps.max(recv_max_pps) * 10);
-
-    sq
 }

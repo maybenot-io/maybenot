@@ -26,8 +26,8 @@ fn test_derive_seed_42() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stdout.contains("successfully derived defense in 3 attempts"),
-        "Expected 'successfully derived defense in 3 attempts' in output.\nStdout: {stdout}\nStderr: {stderr}"
+        stdout.contains("successfully derived defense in 4 attempts"),
+        "Expected 'successfully derived defense in 4 attempts' in output.\nStdout: {stdout}\nStderr: {stderr}"
     );
 }
 
@@ -67,8 +67,8 @@ fn test_search_seed_42() {
 
     let file_contents = fs::read_to_string(&output_file).unwrap();
     assert!(
-        file_contents.contains("attempts 9"),
-        "Expected 'attempts 9' in output file.\nFile contents: {file_contents}"
+        file_contents.contains("attempts 23"),
+        "Expected 'attempts 23' in output file.\nFile contents: {file_contents}"
     );
 }
 

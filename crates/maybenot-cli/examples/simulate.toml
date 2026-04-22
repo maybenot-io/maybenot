@@ -3,4 +3,5 @@ base_dataset = "examples/data-gong-surakav/"
 trace_length = 5_000
 events_multiplier = 100
 network.rtt_in_ms = [10, 100]
+network.mbps = [100, 1000]
 seed = "0"

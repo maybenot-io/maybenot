@@ -1,4 +1,4 @@
-# The Maybenot Simulator
+# The Maybenot Simulator v3
 
 A simulator for the [Maybenot
 framework](https://github.com/maybenot-io/maybenot/).
@@ -47,10 +47,10 @@ let network = Network::new(Duration::from_millis(10), None);
 // the delay to generate a queue of events at the client and server in such
 // a way that the client is ensured to get the packets in the same order and
 // at the same time as in the raw trace.
-let mut input_trace = parse_trace(raw_trace, network);
-// A simple machine that sends one decoy packet 20 milliseconds after the
+let mut input_trace = parse_trace(raw_trace, &network);
+// A simple machine that sends one padding packet 20 milliseconds after the
 // first normal packet is sent.
-let m = "02eNp9ycEJACAMQ9EfF6ujeXQ/F3EEEcFDafsuIQl47YUkGPbnW2NzdWrbsucAyNsDkQ==";
+let m = "02eNp1ibEJAEAIA5Nf7B3N0v1cSESwEL0m5A6YvBqSgP7WeXfM5UoBW7ICYg==";
 let m = Machine::from_str(m).unwrap();
 // Run the simulator with the machine at the client. Run the simulation up
 // until 100 packets have been recorded (total, client and server).
@@ -61,10 +61,10 @@ trace
     .into_iter()
     .filter(|p| p.client)
     .for_each(|p| match p.event {
-        TriggerEvent::PacketSent => {
-            if p.contains_decoy {
+        TriggerEvent::TunnelSent => {
+            if p.contains_padding {
                 println!(
-                    "sent a decoy packet at {} ms",
+                    "sent a padding packet at {} ms",
                     (p.time - starting_time).as_millis()
                 );
             } else {
@@ -74,10 +74,10 @@ trace
                 );
             }
         }
-        TriggerEvent::PacketRecv => {
-            if p.contains_decoy {
+        TriggerEvent::TunnelRecv => {
+            if p.contains_padding {
                 println!(
-                    "received a decoy packet at {} ms",
+                    "received a padding packet at {} ms",
                     (p.time - starting_time).as_millis()
                 );
             } else {
@@ -89,19 +89,22 @@ trace
         }
         _ => {}
     });
+```
 
-// Output:
-// sent a normal packet at 0 ms
-// received a normal packet at 19 ms
-// sent a decoy packet at 20 ms
-// sent a normal packet at 183 ms
-// received a normal packet at 243 ms
-// sent a normal packet at 1696 ms
-// sent a normal packet at 2047 ms
-// received a normal packet at 2055 ms
-// sent a normal packet at 9401 ms
-// sent a normal packet at 9401 ms
-// received a normal packet at 9420 ms
+Produces the following output:
+
+```bash
+sent a normal packet at 0 ms
+received a normal packet at 19 ms
+sent a padding packet at 20 ms
+sent a normal packet at 183 ms
+received a normal packet at 243 ms
+sent a normal packet at 1696 ms
+sent a normal packet at 2047 ms
+received a normal packet at 2055 ms
+sent a normal packet at 9401 ms
+sent a normal packet at 9401 ms
+received a normal packet at 9420 ms
 ```
 
 ## Key Limitations
@@ -117,10 +120,10 @@ improved and evaluated against real-world network experiments. The goal of the
 simulator is not necessarily to be a perfect simulator, but a useful simulator
 for making different kinds of traffic analysis defenses.
 
-There are also fundamental issues with simulating delay actions of machines.
+There are also fundamental issues with simulating delaying actions of machines.
 Because the simulator takes as input a base network trace of encrypted network
 traffic, we do not know any semantics or inter-dependencies between the packets
-in the encrypted trace. As a result, we cannot properly simulate delay
+in the encrypted trace. As a result, we cannot properly simulate delaying
 actions. For example, if a machine blocks a packet, we cannot know if the
 blocked packet contains a request for a resource that leads to a response
 contained in the following received packets. The simulator will happily still
@@ -135,6 +138,31 @@ get rich debug output. For example, to run the integration test
 ```bash
 RUST_LOG=debug cargo test test_bypass_machine
 ```
+
+## Testing
+
+The test suite includes both fast unit tests and slower integration tests that require
+large generated trace files (up to 106MB compressed).
+
+### Running Tests
+
+```bash
+# Run fast tests only (default, excludes trace-dependent tests)
+cargo test
+
+# Run all tests including trace-dependent ones
+cargo test-all
+# or equivalently: cargo test --features trace-tests
+
+# Run only trace-dependent tests
+cargo test-traces
+```
+
+### Generating Test Traces
+
+Tests requiring trace files are gated behind the `trace-tests` feature flag. When you
+first run these tests, the required trace files will be automatically generated using
+the `xtask-linktrace` tool.
 
 ## Contributing
 

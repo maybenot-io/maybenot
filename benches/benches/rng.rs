@@ -1,14 +1,14 @@
-use std::time::Duration;
-
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use enum_map::enum_map;
 use maybenot::Machine;
 use maybenot::dist::{Dist, DistType};
 use maybenot::event::Event;
 use maybenot::state::{State, Trans};
-use maybenot_simulator::network::Network;
-use maybenot_simulator::queue::SimQueue;
-use maybenot_simulator::{SimulatorArgs, parse_trace, sim_advanced};
+use maybenot_simulator::topology::{NetworkLinkState, NetworkTopology};
+use maybenot_simulator::{
+    PARSE_ONE_WAY_DELAY_HTTPS, SimInfo, SimQueue, SimulatorArgs, parse_trace, settings::Setting,
+    sim_advanced,
+};
 use rand::SeedableRng;
 use rand_core::Rng;
 use rand_xoshiro::Xoshiro256StarStar;
@@ -87,9 +87,11 @@ pub fn complete_trace_rng_source_benchmarks(c: &mut Criterion) {
     let n = 1;
     const EARLY_TRACE: &str =
         include_str!("../../crates/maybenot-simulator/tests/EARLY_TEST_TRACE.log");
-    let network = Network::new(Duration::from_millis(10), None);
-    let input = parse_trace(EARLY_TRACE, network);
-    let mut args = SimulatorArgs::new(network, 1000, true);
+    // No user-configured RTT here — fall back to the reasonable HTTPS constant.
+    let (topology, link_state) = Setting::Vpn.create().expect("build Vpn topology");
+    let (si, sq) =
+        parse_trace(EARLY_TRACE, &topology, PARSE_ONE_WAY_DELAY_HTTPS).expect("parse EARLY_TRACE");
+    let mut args = SimulatorArgs::new(1000, true);
 
     let client: Vec<Machine> = vec![];
     let server: Vec<Machine> = vec![];
@@ -97,7 +99,16 @@ pub fn complete_trace_rng_source_benchmarks(c: &mut Criterion) {
     args.insecure_rng_seed = None;
     c.bench_function("1k trace simulation, no machines, thread_rng()", |b| {
         b.iter(|| {
-            run_sim(&client, &server, &input, &args, black_box(n));
+            run_sim(
+                &client,
+                &server,
+                &topology,
+                &link_state,
+                &si,
+                &sq,
+                &args,
+                black_box(n),
+            );
         })
     });
     // setting the seed enables deterministic simulation using the Xoshiro256StarStar RNG
@@ -106,7 +117,16 @@ pub fn complete_trace_rng_source_benchmarks(c: &mut Criterion) {
         "1k trace simulation, no machines, Xoshiro256StarStar",
         |b| {
             b.iter(|| {
-                run_sim(&client, &server, &input, &args, black_box(n));
+                run_sim(
+                    &client,
+                    &server,
+                    &topology,
+                    &link_state,
+                    &si,
+                    &sq,
+                    &args,
+                    black_box(n),
+                );
             })
         },
     );
@@ -122,15 +142,21 @@ criterion_group!(
 );
 criterion_main!(rng);
 
+#[allow(clippy::too_many_arguments)]
 fn run_sim(
     client: &[Machine],
     server: &[Machine],
-    input: &SimQueue,
+    topology: &NetworkTopology,
+    link_state: &NetworkLinkState,
+    si: &SimInfo,
+    sq: &SimQueue,
     args: &SimulatorArgs,
     n: usize,
 ) {
     for _ in 0..n {
-        sim_advanced(client, server, &mut input.clone(), args);
+        let mut link_state = link_state.clone();
+        let mut sq = sq.clone();
+        sim_advanced(client, server, topology, &mut link_state, si, &mut sq, args);
     }
 }
 

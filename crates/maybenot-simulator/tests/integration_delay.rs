@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use enum_map::enum_map;
 use maybenot::{
     Machine,
     action::Action,
@@ -10,14 +11,49 @@ use maybenot::{
 use maybenot_simulator::{
     SimEvent, SimulatorArgs,
     integration::{BinDist, Integration},
-    network::Network,
-    parse_trace_advanced, sim_advanced,
+    parse_trace, sim_advanced,
+    topology::load_topology_from_str,
 };
 
-use enum_map::enum_map;
+// Modifies the prop_us parameter for Link instances that use fixed propagation
+// in a TOML string. Links with prop_us_file (time-dependent propagation) are
+// left unchanged.
+fn set_toml_propagation_us(toml_in: &str, delay_us: u64) -> String {
+    // Parse input TOML into a mutable value
+    let mut toml_value: toml::Value =
+        toml::from_str(toml_in).unwrap_or_else(|e| panic!("Failed to parse input TOML: {}", e));
+
+    // Get the root table
+    let root_table = toml_value
+        .as_table_mut()
+        .unwrap_or_else(|| panic!("TOML root is not a table"));
+
+    // Find the Link section array
+    let link_array = root_table
+        .get_mut("Link")
+        .and_then(|v| v.as_array_mut())
+        .unwrap_or_else(|| panic!("Link section is not an array or doesn't exist"));
+
+    // Update prop_us for Link instances that use fixed propagation
+    for link_entry in link_array.iter_mut() {
+        let link_table = link_entry
+            .as_table_mut()
+            .unwrap_or_else(|| panic!("Link entry is not a table"));
+
+        // Only modify links that have prop_us (fixed propagation) Skip links
+        // that have prop_us_file (time-dependent propagation)
+        if link_table.contains_key("prop_us") && !link_table.contains_key("prop_us_file") {
+            link_table.insert("prop_us".to_string(), toml::Value::Integer(delay_us as i64));
+        }
+    }
+
+    // Serialize back to TOML string
+    toml::to_string_pretty(&toml_value)
+        .unwrap_or_else(|e| panic!("Failed to serialize TOML: {}", e))
+}
 
 fn get_test_machine() -> Machine {
-    // a simple machine that pads once after 5ms
+    // a simple machine that sends a decoy once after 5ms
     let s0 = State::new(enum_map! {
         Event::NormalQueued => vec![Trans(1, 1.0)],
         _ => vec![],
@@ -39,10 +75,10 @@ fn get_test_machine() -> Machine {
         },
         n: Dist {
             dist: DistType::Uniform {
-                low: 0.0,
-                high: 0.0,
+                low: 1.0,
+                high: 1.0,
             },
-            start: 1.0,
+            start: 0.0,
             max: 0.0,
         },
         limit: None,
@@ -56,7 +92,7 @@ fn run_sim(
     server: Option<&Integration>,
     only_client: bool,
 ) -> Vec<SimEvent> {
-    // a simple machine that pads once after 5ms
+    // a simple machine that sends a decoy once after 5ms
     let m = get_test_machine();
 
     let raw_trace = "0,s,100
@@ -65,20 +101,38 @@ fn run_sim(
         32000000,r,100
         56000000,s,100
         100000000,s,100";
-    let network = Network::new(Duration::from_millis(5), None);
 
-    let mut input_trace = parse_trace_advanced(raw_trace, network, client, server);
+    let config_file = "tests/cfg/maybenot_baseline_test.toml";
+    let delay = Duration::from_millis(5);
 
-    let mut args = SimulatorArgs::new(network, 100, true);
+    //Read in config path to toml_str
+    let mut toml_str =
+        std::fs::read_to_string(config_file).expect("Failed to read TOML configuration file");
+
+    toml_str = set_toml_propagation_us(&toml_str, delay.as_micros() as u64);
+
+    // Create Topology and link-state from the TOML string
+    let (topology, mut link_state) = load_topology_from_str(&toml_str)
+        .expect("Failed to parse the network configuration from TOML string");
+
+    // Parse trace into simulation queue
+    let (si, mut sq) = parse_trace(raw_trace, &topology, 2 * delay).unwrap();
+
+    let mut args = SimulatorArgs::new(100, true);
     args.client_integration = client.cloned();
     args.server_integration = server.cloned();
-    let trace = sim_advanced(&[m], &[], &mut input_trace, &args);
+    args.only_client_events = only_client;
 
-    let trace: Vec<_> = trace
-        .into_iter()
-        .filter(|e| e.client == only_client)
-        .collect();
-    println!("trace: {trace:?}");
+    let mut trace = sim_advanced(&[m], &[], &topology, &mut link_state, &si, &mut sq, &args);
+
+    if !only_client {
+        trace.retain(|e| e.node_id == topology.get_maybenot_relay().node_id());
+    }
+
+    for event in &trace {
+        println!("{}", event.display_full(&si, &topology, &link_state));
+    }
+
     trace
 }
 
@@ -120,7 +174,10 @@ fn test_action_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::PacketSent));
+    assert!(matches!(
+        base_trace[1].event,
+        maybenot::TriggerEvent::PacketSent
+    ));
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -129,7 +186,10 @@ fn test_action_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(delayed_trace_server[2].event.is_event(Event::PacketRecv));
+    assert!(matches!(
+        delayed_trace_server[2].event,
+        maybenot::TriggerEvent::PacketRecv
+    ));
     assert!(delayed_trace_server[2].contains_decoy);
     // note below that first recv is 5ms in
     assert_eq!(
@@ -155,8 +215,8 @@ fn test_action_delay() {
 fn test_reporting_delay() {
     // reporting delay should be indirectly visible in the network trace we get
     // from the simulator, because events reported by the simulator will have a
-    // delay, resulting actions will be delayed, and the resulting decoy
-    // packets will therefore be delayed in the network trace
+    // delay, resulting actions will be delayed, and the resulting decoy packets
+    // will therefore be delayed in the network trace
 
     let integration = Integration {
         action_delay: get_0ms_delay_dist(),
@@ -172,7 +232,10 @@ fn test_reporting_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::PacketSent));
+    assert!(matches!(
+        base_trace[1].event,
+        maybenot::TriggerEvent::PacketSent
+    ));
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -181,7 +244,10 @@ fn test_reporting_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(delayed_trace_server[2].event.is_event(Event::PacketRecv));
+    assert!(matches!(
+        delayed_trace_server[2].event,
+        maybenot::TriggerEvent::PacketRecv
+    ));
     assert!(delayed_trace_server[2].contains_decoy);
     // note below that first recv is 5ms in
     assert_eq!(
@@ -224,7 +290,10 @@ fn test_trigger_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::PacketSent));
+    assert!(matches!(
+        base_trace[1].event,
+        maybenot::TriggerEvent::PacketSent
+    ));
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -233,7 +302,10 @@ fn test_trigger_delay() {
 
     let delayed_trace_server = run_sim(Some(&integration), None, false);
     assert_eq!(base_trace.len(), delayed_trace_server.len());
-    assert!(delayed_trace_server[2].event.is_event(Event::PacketRecv));
+    assert!(matches!(
+        delayed_trace_server[2].event,
+        maybenot::TriggerEvent::PacketRecv
+    ));
     assert!(delayed_trace_server[2].contains_decoy);
     // note below that first recv is 5ms in
     assert_eq!(
@@ -272,7 +344,10 @@ fn test_action_and_reporting_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::PacketSent));
+    assert!(matches!(
+        base_trace[1].event,
+        maybenot::TriggerEvent::PacketSent
+    ));
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),
@@ -319,7 +394,10 @@ fn test_action_reporting_and_delay() {
 
     assert_eq!(base_trace.len(), delayed_trace.len());
     assert_eq!(base_trace[1].event, delayed_trace[1].event);
-    assert!(base_trace[1].event.is_event(Event::PacketSent));
+    assert!(matches!(
+        base_trace[1].event,
+        maybenot::TriggerEvent::PacketSent
+    ));
     assert!(base_trace[1].contains_decoy);
     assert_eq!(
         (delayed_trace[1].time - delayed_trace[0].time) - (base_trace[1].time - base_trace[0].time),

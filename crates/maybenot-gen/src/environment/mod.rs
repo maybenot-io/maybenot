@@ -1,15 +1,15 @@
 pub mod traces;
-use anyhow::{Result, bail};
+use anyhow::Result;
 use maybenot::TriggerEvent;
-use std::{fmt, ops::RangeInclusive, time::Duration};
+use std::{fmt, num::NonZeroUsize, ops::RangeInclusive, time::Duration};
 use traces::load_traces;
 
 use maybenot_simulator::{
-    DecoyLimitConfig, DelayLimitConfig, SimulatorArgs,
+    DecoyLimitConfig, DelayLimitConfig, SimInfo, SimQueue, SimulatorArgs,
     integration::{BinDist, Integration},
-    network::Network,
-    queue::SimQueue,
+    settings::Setting,
     sim_advanced,
+    topology::{NetworkLinkState, NetworkTopology},
 };
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
@@ -135,26 +135,34 @@ pub struct EnvironmentConfig {
     pub server_delay_limit: Option<DelayLimitRange>,
 }
 
-/// Configuration for the network used in the simulation environment.
+/// Configuration for the network used in the simulation environment. Maps onto
+/// the `VpnCustom` topology in the simulator: a client-to-relay link whose
+/// propagation is set from `rtt_in_ms / 2` and whose throughput is set from
+/// `mbps`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NetworkConfig {
     /// Round-trip time in milliseconds.
     pub rtt_in_ms: RangeInclusive<usize>,
-    /// Packets per second bottleneck between client and server.
-    pub packets_per_sec: Option<RangeInclusive<usize>>,
+    /// Throughput in megabits per second for the client ↔ relay link.
+    pub mbps: RangeInclusive<u64>,
 }
 
 /// An instance of an environment represents the concrete conditions a single
 /// client-server pair is operating under. Under these conditions, we later
 /// search for defenses that fulfill constraints.
-#[derive(Debug, Clone)]
 pub struct Environment {
     /// describes the selected traces
     pub description: String,
-    /// the network
-    pub network: Network,
-    /// the parsed traces, prepared for simulation
-    pub traces: Vec<SimQueue>,
+    /// the sampled round-trip time for this environment
+    pub rtt: Duration,
+    /// the sampled throughput in Mbps for this environment
+    pub mbps: u64,
+    /// the network topology, built via `Setting::VpnCustom`
+    pub topology: NetworkTopology,
+    /// the per-run link state (cloned per sim call to avoid cross-trace mutation)
+    pub link_state: NetworkLinkState,
+    /// the parsed traces, prepared for simulation (SimInfo + SimQueue per trace)
+    pub traces: Vec<(SimInfo, SimQueue)>,
     /// the durations of each packet in each trace, for calculating constraints
     pub trace_durations: Vec<Vec<Duration>>,
     /// the integration type to use
@@ -174,27 +182,31 @@ impl Environment {
             None => (None, None),
         };
 
-        let network = Network::new(
-            Duration::from_millis((rng_range!(rng, cfg.network.rtt_in_ms) / 2) as u64),
-            cfg.network
-                .packets_per_sec
-                .as_ref()
-                .map(|pps| rng_range!(rng, pps)),
-        );
+        // sample mbps and RTT for this environment, then build the VpnCustom
+        // topology from them
+        let mbps: u64 = rng_range!(rng, cfg.network.mbps);
+        let rtt_ms: usize = rng_range!(rng, cfg.network.rtt_in_ms);
+        let rtt = Duration::from_millis(rtt_ms as u64);
+        let (topology, link_state) = Setting::VpnCustom { mbps, rtt }
+            .create()
+            .map_err(|e| anyhow::anyhow!("failed to build VpnCustom topology: {e}"))?;
+
+        // one-way propagation delay for parse_trace uses the same RTT — this is
+        // our single source of truth for timing in this environment
+        let one_way_delay = rtt / 2;
 
         let traces = load_traces(
             &cfg.traces,
             rng_range!(rng, cfg.num_traces),
-            network,
-            &client_integration,
-            &server_integration,
+            &topology,
+            one_way_delay,
             rng,
         )?;
 
         // one instance of simulator arguments for this environment
         let max_sim_steps = rng_range!(rng, cfg.sim_steps);
-        let mut args = SimulatorArgs::new(network, max_sim_steps, false);
-        args.max_sim_iterations = max_sim_steps;
+        let mut args = SimulatorArgs::new(max_sim_steps, false);
+        args.max_sim_steps = NonZeroUsize::new(max_sim_steps);
         args.client_integration = client_integration;
         args.server_integration = server_integration;
 
@@ -207,12 +219,16 @@ impl Environment {
         args.insecure_rng_seed = Some(rng.next_u64());
         let trace_durations = traces
             .iter()
-            .map(|trace| {
-                let trace = sim_advanced(&[], &[], &mut trace.clone(), &args);
+            .map(|(si, sq)| {
+                let mut ls = link_state.clone();
+                let mut sq = sq.clone();
+                let trace = sim_advanced(&[], &[], &topology, &mut ls, si, &mut sq, &args);
                 let starting_time = trace[0].time;
                 trace
                     .iter()
-                    .filter(|event| matches!(event.event, TriggerEvent::PacketSent) && event.client)
+                    .filter(|event| {
+                        matches!(event.event, TriggerEvent::PacketSent) && event.is_client
+                    })
                     .map(|event| event.time - starting_time)
                     .collect()
             })
@@ -235,11 +251,14 @@ impl Environment {
         }
 
         Ok(Self {
-            network,
+            description: format!("{:?}", cfg.traces),
+            rtt,
+            mbps,
+            topology,
+            link_state,
             traces,
             trace_durations,
             integration_type: cfg.integration.clone(),
-            description: format!("{:?}", cfg.traces),
             sim_args: args,
         })
     }
@@ -251,13 +270,20 @@ impl fmt::Display for Environment {
         {
             write!(
                 f,
-                "Environment {{{}, {}, {:?} }}",
+                "Environment {{{}, {} Mbps, {} ms RTT, {:?} }}",
                 self.description,
-                self.network,
+                self.mbps,
+                self.rtt.as_millis(),
                 self.integration_type.clone().unwrap()
             )
         } else {
-            write!(f, "Environment {{{}, {} }}", self.description, self.network,)
+            write!(
+                f,
+                "Environment {{{}, {} Mbps, {} ms RTT }}",
+                self.description,
+                self.mbps,
+                self.rtt.as_millis(),
+            )
         }
     }
 }
@@ -293,32 +319,32 @@ pub fn integration_from_file(fname: &str) -> Result<(Integration, Integration)> 
     // check that it contains at least six lines
     let lines: Vec<&str> = contents.lines().collect();
     if lines.len() < 6 {
-        bail!("integration file must contain at least six lines");
+        anyhow::bail!("integration file must contain at least six lines");
     }
     let client_action_delay = match BinDist::new(lines[0]) {
         Ok(dist) => dist,
-        Err(e) => bail!("error parsing client action delay: {}", e),
+        Err(e) => anyhow::bail!("error parsing client action delay: {}", e),
     };
     let client_reporting_delay = match BinDist::new(lines[1]) {
         Ok(dist) => dist,
-        Err(e) => bail!("error parsing client reporting delay: {}", e),
+        Err(e) => anyhow::bail!("error parsing client reporting delay: {}", e),
     };
     let client_trigger_delay = match BinDist::new(lines[2]) {
         Ok(dist) => dist,
-        Err(e) => bail!("error parsing client trigger delay: {}", e),
+        Err(e) => anyhow::bail!("error parsing client trigger delay: {}", e),
     };
 
     let server_action_delay = match BinDist::new(lines[3]) {
         Ok(dist) => dist,
-        Err(e) => bail!("error parsing server action delay: {}", e),
+        Err(e) => anyhow::bail!("error parsing server action delay: {}", e),
     };
     let server_reporting_delay = match BinDist::new(lines[4]) {
         Ok(dist) => dist,
-        Err(e) => bail!("error parsing server reporting delay: {}", e),
+        Err(e) => anyhow::bail!("error parsing server reporting delay: {}", e),
     };
     let server_trigger_delay = match BinDist::new(lines[5]) {
         Ok(dist) => dist,
-        Err(e) => bail!("error parsing server trigger delay: {}", e),
+        Err(e) => anyhow::bail!("error parsing server trigger delay: {}", e),
     };
 
     Ok((
