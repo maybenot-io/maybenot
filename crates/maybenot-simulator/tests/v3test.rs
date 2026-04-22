@@ -1,5 +1,5 @@
 use maybenot::{Machine, TriggerEvent};
-use maybenot_simulator::{parse_trace, sim, topology::load_topology_from_file};
+use maybenot_simulator::{parse_trace, settings::Setting, sim, topology::load_topology_from_file};
 use std::{str::FromStr, time::Duration};
 
 #[cfg(feature = "trace-tests")]
@@ -222,10 +222,9 @@ fn full_trace_compare() {
 
 #[test_log::test]
 fn simulator_example_use() {
-    // The first ten packets of a network trace from the client's perspective
-    // when visiting google.com. The format is: "time,direction\n". The
-    // direction is either "s" (sent) or "r" (received). The time is in
-    // nanoseconds since the start of the trace.
+    // Example trace: first ten packets from the client's perspective when
+    // visiting google.com. Format is "time_ns,direction\n" where direction is
+    // "s" (sent) or "r" (received).
     let raw_trace = "0,s
     19714282,r
     183976147,s
@@ -237,27 +236,28 @@ fn simulator_example_use() {
     9401094589,s
     9420892765,r";
 
-    // The network model for simulating the network between the client and the
-    // server. Currently just a delay.
-    let (topology, mut link_state) =
-        load_topology_from_file("tests/cfg/maybenot_test.toml").unwrap();
+    // Network topology the simulator runs on: a VPN (client ↔ relay ↔
+    // endpoint) with a custom 100 Mbps / 30 ms RTT client↔relay link.
+    let (topology, mut link_state) = Setting::VpnCustom {
+        mbps: 100,
+        rtt: Duration::from_millis(30),
+    }
+    .create()
+    .unwrap();
 
-    //let network = Network::new(Duration::from_millis(10), None);
+    // Parse the raw trace into a queue of simulator events. `one_way_delay` is
+    // used to back out when endpoint-side sends must have happened so the
+    // client observes packets at the same times as in the raw trace.
+    let one_way_delay = Duration::from_millis(20);
+    let (si, mut sq) = parse_trace(raw_trace, &topology, one_way_delay).unwrap();
 
-    // Parse the raw trace into a queue of events for the simulator. This uses
-    // the delay to generate a queue of events at the client and server in such
-    // a way that the client is ensured to get the packets in the same order and
-    // at the same time as in the raw trace.
-    let trafserv_to_client_delay = Duration::from_millis(20);
-    let (si, mut sq) = parse_trace(raw_trace, &topology, trafserv_to_client_delay).unwrap();
-
-    // A simple machine that sends one decoy packet 20 milliseconds after the
-    // first normal packet is sent.
+    // A simple machine that sends one decoy packet 20 ms after the first
+    // normal packet is sent.
     let m = "03eNp9ybERACAIxdB8F8PRLN3PRRzBk4IKeF0uMHCSYBnhd26fSe9auR7NIQOR";
     let m = Machine::from_str(m).unwrap();
 
-    // Run the simulator with the machine at the client. Run the simulation up
-    // until 100 packets have been recorded (total, client and server).
+    // Run the simulator with the machine at the client, stopping after 100
+    // recorded packets (across both client and server).
     let trace = sim(
         &[m],
         &[],
@@ -269,26 +269,41 @@ fn simulator_example_use() {
         true,
     );
 
-    // print packets from the client's perspective
-    for event in trace.iter().filter(|p| p.node_id == 0) {
-        println!("{}", event.display_full(&si, &topology, &link_state));
+    // Print client-side packet events in trace-relative milliseconds.
+    let t0 = si.time_zero();
+    for event in trace.iter().filter(|e| e.node_id == 0) {
+        let ms = (event.time - t0).as_millis();
+        match event.event {
+            TriggerEvent::PacketSent => {
+                if event.contains_decoy {
+                    println!("sent a decoy packet at {} ms", ms);
+                } else {
+                    println!("sent a normal packet at {} ms", ms);
+                }
+            }
+            TriggerEvent::PacketRecv => {
+                if event.contains_decoy {
+                    println!("received a decoy packet at {} ms", ms);
+                } else {
+                    println!("received a normal packet at {} ms", ms);
+                }
+            }
+            _ => {}
+        }
     }
-
-    //Force error to be able to get debug output
-    //assert_eq!(10, 1000);
 
     // Output:
     // sent a normal packet at 0 ms
     // received a normal packet at 19 ms
     // sent a decoy packet at 20 ms
-    // sent a normal packet at 183 ms
-    // received a normal packet at 243 ms
+    // sent a normal packet at 184 ms
+    // received a normal packet at 244 ms
     // sent a normal packet at 1696 ms
-    // sent a normal packet at 2047 ms
-    // received a normal packet at 2055 ms
+    // sent a normal packet at 2048 ms
+    // received a normal packet at 2056 ms
     // sent a normal packet at 9401 ms
     // sent a normal packet at 9401 ms
-    // received a normal packet at 9420 ms
+    // received a normal packet at 9421 ms
 }
 
 #[cfg(feature = "trace-tests")]
