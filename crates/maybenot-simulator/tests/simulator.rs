@@ -1675,3 +1675,105 @@ fn test_delay_n_cap_bypass_does_not_count() {
         false,
     );
 }
+
+#[test_log::test]
+fn test_multi_decoy_single_action() {
+    // A DecoyTraffic action with n=3 should emit exactly three DecoyQueued
+    // events in a single firing, all sharing the same action-delay timestamp.
+    let s0 = State::new(enum_map! {
+        Event::NormalQueued => vec![Trans(1, 1.0)],
+        _ => vec![],
+    });
+    let mut s1 = State::new(enum_map! {
+        _ => vec![],
+    });
+    s1.action = Some(Action::DecoyTraffic {
+        bypass: false,
+        replace: false,
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 3.0,
+                high: 3.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        },
+        timeout: Dist {
+            dist: DistType::Uniform {
+                low: 10.0,
+                high: 10.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        },
+        limit: None,
+    });
+    let m = Machine::new(0, 0, vec![s0, s1]).unwrap();
+    run_test_sim(
+        "0,nq 30,nq",
+        "0,nq 0,ps 10,dq 10,ps 10,dq 10,ps 10,dq 10,ps 30,nq 30,ps",
+        Duration::from_micros(5),
+        slice::from_ref(&m),
+        &[],
+        true,
+        20,
+        false,
+        false,
+    );
+}
+
+#[test_log::test]
+fn test_multi_decoy_repeating_action() {
+    // A DecoyTraffic action with n=2 that re-fires on DecoyQueued, capped by
+    // limit=2 firings. Verifies multi-decoy bursts compose with state-machine
+    // re-entry and that `limit` counts firings, not individual packets:
+    // two firings of n=2 produce four decoy packets in total.
+    let s0 = State::new(enum_map! {
+        Event::NormalQueued => vec![Trans(1, 1.0)],
+        _ => vec![],
+    });
+    let mut s1 = State::new(enum_map! {
+        Event::DecoyQueued => vec![Trans(1, 1.0)],
+        _ => vec![],
+    });
+    s1.action = Some(Action::DecoyTraffic {
+        bypass: false,
+        replace: false,
+        n: Dist {
+            dist: DistType::Uniform {
+                low: 2.0,
+                high: 2.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        },
+        timeout: Dist {
+            dist: DistType::Uniform {
+                low: 5.0,
+                high: 5.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        },
+        limit: Some(Dist {
+            dist: DistType::Uniform {
+                low: 2.0,
+                high: 2.0,
+            },
+            start: 0.0,
+            max: 0.0,
+        }),
+    });
+    let m = Machine::new(0, 0, vec![s0, s1]).unwrap();
+    run_test_sim(
+        "0,nq 30,nq",
+        "0,nq 0,ps 5,dq 5,ps 5,dq 5,ps 10,dq 10,ps 10,dq 10,ps 30,nq 30,ps",
+        Duration::from_micros(5),
+        slice::from_ref(&m),
+        &[],
+        true,
+        20,
+        false,
+        false,
+    );
+}
