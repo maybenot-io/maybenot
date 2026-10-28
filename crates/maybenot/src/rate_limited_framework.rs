@@ -10,7 +10,7 @@
 
 use crate::time::{Duration, Instant};
 use crate::{Framework, Machine, TriggerAction, TriggerEvent};
-use rand_core::RngCore;
+use rand_core::Rng;
 use std::ops::Sub;
 use std::time::Instant as StdInstant;
 
@@ -46,7 +46,7 @@ use std::time::Instant as StdInstant;
 pub struct RateLimitedFramework<M, R, T = StdInstant>
 where
     M: AsRef<[Machine]>,
-    R: RngCore,
+    R: Rng,
     T: Instant,
     T::Duration: Sub<Output = T::Duration>,
 {
@@ -62,7 +62,7 @@ where
 impl<M, R, T> RateLimitedFramework<M, R, T>
 where
     M: AsRef<[Machine]>,
-    R: RngCore,
+    R: Rng,
     T: Instant,
     T::Duration: Sub<Output = T::Duration>,
 {

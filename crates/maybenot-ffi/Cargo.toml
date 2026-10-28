@@ -14,5 +14,4 @@ crate-type = ["lib", "staticlib", "cdylib"]
 
 [dependencies]
 maybenot = { version = "2.2.2", path = "../maybenot" }
-rand = "0.9"
-rand_chacha = "0.9"
+rand = { version = "0.10", features = ["chacha"] }

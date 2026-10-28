@@ -17,12 +17,12 @@ workspace = true
 # defaults to relative path in workspace
 maybenot = { version = "2.2.2", path = "../maybenot/" }
 log = "0.4"
-rand = "0.9"
+rand = "0.10"
 serde_json = "1.0"
-rand_xoshiro = "0.7"
+rand_xoshiro = "0.8"
 
 [dev-dependencies]
 enum-map = "2.7"
 test-log = "0.2.18"
-rand_core = "0.9"
+rand_core = "0.10"
 env_logger = "0.11"

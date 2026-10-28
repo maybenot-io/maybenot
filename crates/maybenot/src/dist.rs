@@ -1,6 +1,6 @@
 //! Distributions sampled as part of a [`State`](crate::state).
 
-use rand_core::RngCore;
+use rand_core::Rng;
 use rand_distr::{
     Beta, Binomial, Distribution, Gamma, Geometric, LogNormal, Normal, Pareto, Poisson, SkewNormal,
     Weibull,
@@ -249,7 +249,7 @@ impl Dist {
     }
 
     /// Sample the distribution. May panic if not valid (see [`Self::validate()`]).
-    pub fn sample<R: RngCore>(self, rng: &mut R) -> f64 {
+    pub fn sample<R: Rng>(self, rng: &mut R) -> f64 {
         let sampled = self.dist_sample(rng);
         let mut r: f64 = 0.0;
         let adjusted = sampled + self.start;
@@ -268,8 +268,8 @@ impl Dist {
         r
     }
 
-    fn dist_sample<R: RngCore>(self, rng: &mut R) -> f64 {
-        use rand::Rng;
+    fn dist_sample<R: Rng>(self, rng: &mut R) -> f64 {
+        use rand::RngExt;
         match self.dist {
             DistType::Uniform { low, high } => {
                 // special common case for handcrafted machines, also not

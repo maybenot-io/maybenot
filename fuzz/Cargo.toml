@@ -18,9 +18,9 @@ fuzzing = []
 
 [dependencies]
 afl = "0.15.13"
-rand = "0.9"
-rand_xoshiro = "0.7"
-rand_core = "0.9"
+rand = "0.10"
+rand_xoshiro = "0.8"
+rand_core = "0.10"
 maybenot = { path = "../crates/maybenot/" }
 
 [[bin]]

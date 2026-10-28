@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use anyhow::{Result, bail};
 use maybenot::Machine;
 use rand::{
-    Rng, RngCore,
+    Rng, RngExt,
     seq::{IndexedMutRandom, SliceRandom},
 };
 use serde::{Deserialize, Serialize};
@@ -30,9 +30,9 @@ pub struct Params {
 /// useful for creating defense-overhead trade-offs.
 pub trait Dealer {
     /// draw a setup for the client and server
-    fn draw<R: RngCore>(&mut self, scale: f64, rng: &mut R) -> Result<Setup>;
+    fn draw<R: Rng>(&mut self, scale: f64, rng: &mut R) -> Result<Setup>;
     /// draw n setups for the client and server
-    fn draw_n<R: RngCore>(&mut self, n: usize, scale: f64, rng: &mut R) -> Result<Vec<Setup>>;
+    fn draw_n<R: Rng>(&mut self, n: usize, scale: f64, rng: &mut R) -> Result<Vec<Setup>>;
     /// the number of defenses left in the dealer
     fn len(&self) -> usize;
     /// whether the dealer is empty
@@ -66,7 +66,7 @@ pub struct DealerFixed {
 }
 
 impl DealerFixed {
-    pub fn new<R: RngCore>(
+    pub fn new<R: Rng>(
         mut defenses: Vec<Defense>,
         client_limits: Option<Limits>,
         server_limits: Option<Limits>,
@@ -89,7 +89,7 @@ impl DealerFixed {
 }
 
 impl Dealer for DealerFixed {
-    fn draw<R: RngCore>(&mut self, scale: f64, rng: &mut R) -> Result<Setup> {
+    fn draw<R: Rng>(&mut self, scale: f64, rng: &mut R) -> Result<Setup> {
         if !(0.0..=1.0).contains(&scale) {
             bail!("invalid scale");
         }
@@ -136,7 +136,7 @@ impl Dealer for DealerFixed {
         })
     }
 
-    fn draw_n<R: RngCore>(&mut self, n: usize, scale: f64, rng: &mut R) -> Result<Vec<Setup>> {
+    fn draw_n<R: Rng>(&mut self, n: usize, scale: f64, rng: &mut R) -> Result<Vec<Setup>> {
         if !(0.0..=1.0).contains(&scale) {
             bail!("invalid scale");
         }
@@ -163,7 +163,7 @@ impl Dealer for DealerFixed {
     }
 }
 
-fn sample_range_option_scaled<R: RngCore>(
+fn sample_range_option_scaled<R: Rng>(
     range: &Option<RangeInclusive<f64>>,
     scale: f64,
     rng: &mut R,
@@ -171,12 +171,7 @@ fn sample_range_option_scaled<R: RngCore>(
     range.as_ref().map_or(0.0, |r| rng_range!(rng, r) * scale)
 }
 
-fn set_machine_limits<R: RngCore>(
-    machines: &mut [Machine],
-    limits: &Limits,
-    scale: f64,
-    rng: &mut R,
-) {
+fn set_machine_limits<R: Rng>(machines: &mut [Machine], limits: &Limits, scale: f64, rng: &mut R) {
     let padding_budget = sample_range_option_scaled(&limits.padding_budget, scale, rng);
     let blocking_budget = sample_range_option_scaled(&limits.blocking_budget, scale, rng);
 

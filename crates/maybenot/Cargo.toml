@@ -17,12 +17,13 @@ workspace = true
 default = []
 
 [dependencies]
-rand="0.9"
-rand_distr = "0.5"
+rand="0.10"
+rand_distr = "0.6"
 serde = {version = "1.0", features = ["derive"]}
 bincode = "1.3"
 base64 = "0.22"
 flate2 = "1.1.2"
 enum-map = "2.7"
-sha256 = {version = "1.5", default-features = false}
-rand_core = "0.9"
+# TODO: Replace with official crates.io release
+sha256 = { git = "https://github.com/baoyachi/sha256-rs", rev = "3aeea01ab752646bc17ee3fb0dff4781020adb1f", default-features = false }
+rand_core = "0.10"

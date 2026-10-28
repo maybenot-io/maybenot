@@ -4,8 +4,7 @@
 // https://github.com/moschramm/maybenot-defenses
 
 use enum_map::enum_map;
-use rand::Rng;
-use rand::RngCore;
+use rand::{Rng, RngExt};
 use std::f64::consts::E;
 use std::f64::consts::PI;
 
@@ -19,7 +18,7 @@ use maybenot::{
     state::Trans,
 };
 
-pub fn front<R: RngCore>(
+pub fn front<R: Rng>(
     padding_budget_max: u32,
     window_min: f64,
     window_max: f64,

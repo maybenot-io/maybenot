@@ -3,8 +3,7 @@ use std::{fs::metadata, ops::RangeInclusive, path::PathBuf};
 use anyhow::{Result, anyhow, bail};
 use log::info;
 use maybenot::Machine;
-use rand::Rng;
-use rand::RngCore;
+use rand::{Rng, RngExt};
 use rand_seeder::Seeder;
 use rand_xoshiro::Xoshiro256StarStar;
 
@@ -38,7 +37,7 @@ pub fn budget(
         .into_iter()
         .map(|s| parse_budget_item(&s))
         .collect::<Result<Vec<_>, _>>()?;
-    let mut rng: Box<dyn rand::RngCore> = match seed {
+    let mut rng: Box<dyn rand::Rng> = match seed {
         Some(seed) => {
             info!("deterministic, using seed {seed}");
             Box::new(Seeder::from(seed).into_rng::<Xoshiro256StarStar>())
@@ -93,7 +92,7 @@ pub fn budget(
     )
 }
 
-fn update_budgets<R: RngCore>(
+fn update_budgets<R: Rng>(
     machine: &mut Machine,
     budgets: Vec<(String, RangeInclusive<f64>)>,
     soft: bool,
