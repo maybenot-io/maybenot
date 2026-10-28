@@ -11,7 +11,7 @@ use maybenot_simulator::{
     queue::SimQueue,
     sim_advanced,
 };
-use rand::Rng;
+use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
 use crate::{constraints::ConstraintsConfig, rng_range};

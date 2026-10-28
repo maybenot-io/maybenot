@@ -1,4 +1,4 @@
-use rand::{Rng, RngCore};
+use rand::{Rng, RngExt};
 use std::{collections::HashMap, error::Error, time::Duration};
 
 /// Represents a Maybenot integration and its associated delays. This can happen
@@ -97,7 +97,7 @@ impl BinDist {
         })
     }
 
-    pub fn sample<R: RngCore>(&self, rng: &mut R) -> Duration {
+    pub fn sample<R: Rng>(&self, rng: &mut R) -> Duration {
         let sample_prob = rng.random::<f64>();
         let bin_index = match self
             .cumulative_probabilities

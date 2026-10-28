@@ -101,7 +101,7 @@ fn get_id(client: &[Machine], server: &[Machine]) -> String {
     if client.is_empty() && server.is_empty() {
         // optimize for empty defense case
         let s = Sha256::digest(b"");
-        return format!("{s:x}");
+        return format!("{}", hex::encode(&s));
     }
 
     // allocate id with capacity for machine names (32 chars each)
@@ -114,7 +114,7 @@ fn get_id(client: &[Machine], server: &[Machine]) -> String {
         id.push_str(&m.name());
     }
     let s = Sha256::digest(id.as_bytes());
-    format!("{s:x}")
+    format!("{}", hex::encode(&s))
 }
 
 impl fmt::Display for Defense {

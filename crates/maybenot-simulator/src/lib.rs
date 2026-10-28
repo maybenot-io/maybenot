@@ -111,6 +111,7 @@ pub mod queue_peek;
 
 use std::{
     cmp::Ordering,
+    convert::Infallible,
     slice,
     time::{Duration, Instant},
 };
@@ -122,7 +123,7 @@ use network::{Network, NetworkBottleneck, WindowCount};
 use queue::SimQueue;
 
 use maybenot::{Framework, Machine, MachineId, Timer, TriggerAction, TriggerEvent};
-use rand::{RngCore, rngs::ThreadRng};
+use rand::{Rng, TryRng, rngs::ThreadRng};
 use rand_xoshiro::Xoshiro256StarStar;
 use rand_xoshiro::rand_core::SeedableRng;
 
@@ -133,7 +134,7 @@ use crate::{
     },
 };
 
-// Enum to encapsulate different RngCore sources: in the Maybenot Framework, the
+// Enum to encapsulate different Rng sources: in the Maybenot Framework, the
 // RngCore trait is not ?Sized (unnecessary overhead for the framework), so we
 // have to work around this by using an enum to support selecting rng source as
 // a simulation option.
@@ -143,26 +144,28 @@ enum RngSource {
     Xoshiro(Xoshiro256StarStar),
 }
 
-impl RngCore for RngSource {
-    fn next_u32(&mut self) -> u32 {
-        match self {
+impl TryRng for RngSource {
+    type Error = Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        Ok(match self {
             RngSource::Thread(rng) => rng.next_u32(),
             RngSource::Xoshiro(rng) => rng.next_u32(),
-        }
+        })
     }
 
-    fn next_u64(&mut self) -> u64 {
-        match self {
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        Ok(match self {
             RngSource::Thread(rng) => rng.next_u64(),
             RngSource::Xoshiro(rng) => rng.next_u64(),
-        }
+        })
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
-        match self {
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Self::Error> {
+        Ok(match self {
             RngSource::Thread(rng) => rng.fill_bytes(dest),
             RngSource::Xoshiro(rng) => rng.fill_bytes(dest),
-        }
+        })
     }
 }
 

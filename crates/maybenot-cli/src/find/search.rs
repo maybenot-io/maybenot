@@ -13,7 +13,7 @@ use anyhow::{Result, bail};
 use indicatif::ProgressBar;
 use log::info;
 use maybenot_gen::{defense::Defense, derive::DeriveConfig};
-use rand::Rng;
+use rand::RngExt;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 

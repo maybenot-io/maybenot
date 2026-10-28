@@ -8,7 +8,10 @@ pub use error::MaybenotResult;
 
 mod ffi;
 pub use ffi::*;
-use rand::rngs::{OsRng, ReseedingRng};
+use rand::{
+    SeedableRng,
+    rngs::{ChaCha12Rng, SysRng},
+};
 
 /// A running Maybenot instance.
 ///
@@ -24,13 +27,9 @@ pub struct MaybenotFramework {
 
 /// The randomness generator used for the framework.
 ///
-/// This setup uses [OsRng] as the source of entropy, but extrapolates each call to [OsRng] into
-/// at least [RNG_RESEED_THRESHOLD] bytes of randomness using [rand_chacha::ChaCha12Core].
-///
-/// This is the same Rng that [rand::thread_rng] uses internally,
-/// but unlike thread_rng, this is Sync.
-type Rng = ReseedingRng<rand_chacha::ChaCha12Core, OsRng>;
-const RNG_RESEED_THRESHOLD: u64 = 1024 * 64; // 64 KiB
+/// This setup uses [ChaCha12Rng] with [SysRng] as the source of entropy.
+/// This is the same Rng that [rand::rng] uses internally, but unlike [rand::rngs::ThreadRng], this is Sync.
+type Rng = ChaCha12Rng;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
@@ -148,7 +147,7 @@ impl MaybenotFramework {
 
         let machines_count = machines.len();
 
-        let rng = Rng::new(RNG_RESEED_THRESHOLD, OsRng).unwrap();
+        let rng = Rng::try_from_rng(&mut SysRng).unwrap();
 
         let framework = Framework::new(
             machines,

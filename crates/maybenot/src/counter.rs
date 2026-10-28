@@ -1,6 +1,6 @@
 //! Counters as part of a [`Machine`](crate::Machine).
 
-use rand_core::RngCore;
+use rand_core::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::{Error, dist};
@@ -80,7 +80,7 @@ impl Counter {
     }
 
     /// Sample a value to update the counter with.
-    pub fn sample_value<R: RngCore>(&self, rng: &mut R) -> u64 {
+    pub fn sample_value<R: Rng>(&self, rng: &mut R) -> u64 {
         // Maximum safe f64 value that can be converted to u64 without overflow
         const MAX_SAFE_F64_TO_U64: f64 = u64::MAX as f64;
 
